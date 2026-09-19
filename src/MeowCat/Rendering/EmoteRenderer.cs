@@ -66,6 +66,101 @@ public static class EmoteRenderer
         dc.Pop();
     }
 
+    /// <summary>
+    /// Reminder / notification speech bubble above the cat: soft white card, wrapped
+    /// message, a small tail pointing at the head and a gentle pop-in/out animation.
+    /// </summary>
+    public static void RenderSpeechBubble(DrawingContext dc, string title, string message,
+        double elapsed, double canvasW, double headY, double scale)
+    {
+        // pop in over 250 ms, hold, then pop out over the last 500 ms
+        var life = 7.0;
+        var appear = Math.Clamp(elapsed / 0.25, 0, 1);
+        var disappear = elapsed > life - 0.5 ? Math.Clamp((life - elapsed) / 0.5, 0, 1) : 1;
+        var pop = EaseOutBack(appear) * disappear;
+        if (pop <= 0.01) return;
+
+        var maxW = Math.Min(320 * scale, canvasW * 1.6);
+        var body = string.IsNullOrWhiteSpace(message) ? title : message;
+
+        var typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal,
+            FontWeights.Medium, FontStretches.Normal);
+        var bodyW = 0.0;
+        double WrapHeight(string s, double size, out double w)
+        {
+            var ft = new FormattedText(s, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                typeface, size, CatPalette.Frozen("#FF2E3440"), 1.0) { MaxTextWidth = maxW - 28 };
+            w = Math.Min(ft.WidthIncludingTrailingWhitespace + 28, maxW);
+            return ft.Height;
+        }
+        var titleH = WrapHeight(title, 14.5 * scale, out var titleW);
+        var bodyH = string.IsNullOrWhiteSpace(message) ? 0 : WrapHeight(message, 12.5 * scale, out bodyW);
+        var w = Math.Max(titleW, bodyW) + 24 * scale;
+        var h = titleH + bodyH + (bodyH > 0 ? 4 : 0) + 18 * scale;
+
+        var cx = canvasW / 2;
+        var bottom = headY + 10 * scale;
+        var x = cx - w / 2;
+        var y = bottom - h - 16 * scale - 6 * scale;
+
+        dc.PushOpacity(Math.Clamp(pop, 0, 1));
+        try
+        {
+            var ys = y + (1 - EaseOutBack(appear)) * 14;      // little rise-in
+
+            // tail
+            var tail = new StreamGeometry();
+            using (var ctx = tail.Open())
+            {
+                ctx.BeginFigure(new Point(cx - 8 * scale, ys + h - 1), true, true);
+                ctx.LineTo(new Point(cx, ys + h + 14 * scale), true, true);
+                ctx.LineTo(new Point(cx + 9 * scale, ys + h - 1), true, true);
+            }
+            dc.DrawGeometry(CatPalette.Frozen("#F2FFFFFF"), new Pen(CatPalette.Frozen("#33000000"), 1), tail);
+
+            var card = new Rect(x, ys, w, h);
+            dc.DrawRoundedRectangle(CatPalette.Frozen("#F2FFFFFF"),
+                new Pen(CatPalette.Frozen("#33000000"), 1), card, 14 * scale, 14 * scale);
+
+            var ty = ys + 9 * scale;
+            DrawWrapped(dc, title, typeface, 14.5 * scale, FontWeights.Bold,
+                CatPalette.Frozen("#FF2E3440"), new Rect(x + 12 * scale, ty, w - 24 * scale, titleH + 4));
+            ty += titleH + 4;
+            if (bodyH > 0)
+                DrawWrapped(dc, message, typeface, 12.5 * scale, FontWeights.Normal,
+                    CatPalette.Frozen("#FF5A6072"), new Rect(x + 12 * scale, ty, w - 24 * scale, bodyH + 4));
+
+            // clock icon dot
+            dc.DrawEllipse(CatPalette.Frozen("#FFE8B23A"), null,
+                new Point(x + w - 14 * scale, ys + 14 * scale), 5 * scale, 5 * scale);
+        }
+        finally
+        {
+            dc.Pop();
+        }
+    }
+
+    private static double EaseOutBack(double t)
+    {
+        const double c1 = 1.70158, c3 = c1 + 1;
+        var x = Math.Clamp(t, 0, 1);
+        return 1 + c3 * Math.Pow(x - 1, 3) + c1 * Math.Pow(x - 1, 2);
+    }
+
+    private static void DrawWrapped(DrawingContext dc, string text, Typeface face,
+        double size, FontWeight weight, Brush brush, Rect box)
+    {
+        var ft = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+            new Typeface(face.FontFamily, face.Style, weight, face.Stretch),
+            size, brush, 1.0)
+        {
+            MaxTextWidth = box.Width,
+            MaxTextHeight = box.Height + 10,
+            Trimming = TextTrimming.WordEllipsis,
+        };
+        dc.DrawText(ft, box.TopLeft);
+    }
+
     // ------------------------------------------------------------ internals
 
     private static void DrawSymbol(DrawingContext dc, Symbol s, double x, double y, double scale, double alpha, int variant)

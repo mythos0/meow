@@ -105,7 +105,7 @@ public class SettingsStoreTests : IDisposable
         var s = store.Load();
         Assert.Equal("Mochi", s.CatName);
         Assert.True(s.SoundEnabled);
-        Assert.Contains("orange_tabby", s.OwnedItems);
+        Assert.Contains("grey_tabby", s.OwnedItems);
     }
 
     [Fact]

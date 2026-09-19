@@ -12,11 +12,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MeowCat</RootNamespace>
     <AssemblyName>MeowCat</AssemblyName>
-    <Version>1.0.0</Version>
-    <FileVersion>1.0.0.0</FileVersion>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Version>2.0.0</Version>
+    <FileVersion>2.0.0.0</FileVersion>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
     <Product>MeowCat</Product>
-    <Description>A realistic 3D-shaded desktop cat for Windows 11</Description>
+    <Description>A realistic frame-animated desktop cat for Windows 11</Description>
     <Company>mythos0</Company>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -26,6 +26,7 @@
   <ItemGroup>
     <Content Include="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\sounds\*.wav" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\sprites\**\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -48,6 +49,11 @@
     <Using Alias="FlowDirection" Include="System.Windows.FlowDirection" />
     <Using Alias="FontFamily" Include="System.Windows.Media.FontFamily" />
     <Using Alias="Size" Include="System.Windows.Size" />
+    <Using Alias="ListBox" Include="System.Windows.Controls.ListBox" />
+    <Using Alias="TextBox" Include="System.Windows.Controls.TextBox" />
+    <Using Alias="ComboBox" Include="System.Windows.Controls.ComboBox" />
+    <Using Alias="CheckBox" Include="System.Windows.Controls.CheckBox" />
+    <Using Alias="Slider" Include="System.Windows.Controls.Slider" />
   </ItemGroup>
 
 </Project>

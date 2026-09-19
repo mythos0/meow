@@ -31,7 +31,13 @@ public static class SkinCatalog
 {
     public static readonly IReadOnlyList<BreedDef> Breeds = new[]
     {
-        new BreedDef("orange_tabby", "Orange Tabby", 0, new BreedColors
+        new BreedDef("grey_tabby", "Grey Tabby", 0, new BreedColors
+        {
+            BodyLight = "#FF9AA2AC", BodyDark = "#FF6A727E", Belly = "#FFF5F3F0", Stripe = "#FF3E434B",
+            EyeOuter = "#FFB07A1E", EyeInner = "#FFEFC25A", Nose = "#FFE08794",
+            Pattern = FurPattern.Tabby, Description = "The star of the show. Fluffy, golden-eyed, always up to something."
+        }),
+        new BreedDef("orange_tabby", "Orange Tabby", 120, new BreedColors
         {
             BodyLight = "#FFE0A868", BodyDark = "#FFB8793C", Belly = "#FFF6E7CE", Stripe = "#FF9C6431",
             EyeOuter = "#FF2E8B6E", EyeInner = "#FFA9EFC6", Nose = "#FFE88696",
@@ -54,12 +60,6 @@ public static class SkinCatalog
             BodyLight = "#FFF0E3D0", BodyDark = "#FFCDB493", Belly = "#FFF8EFE2", Stripe = "#FF6B5140",
             EyeOuter = "#FF2B6FB0", EyeInner = "#FF9CD0F5", Nose = "#FF6B5140",
             Pattern = FurPattern.Points, Description = "Vocal aristocrat with sapphire eyes and dark points."
-        }),
-        new BreedDef("british", "British Shorthair", 150, new BreedColors
-        {
-            BodyLight = "#FF8F9AAC", BodyDark = "#FF5D6980", Belly = "#FFC9D0DA", Stripe = "#FF4E5870",
-            EyeOuter = "#FFB3661F", EyeInner = "#FFE8A94F", Nose = "#FF8A5A5A",
-            Pattern = FurPattern.None, Description = "Plush grey teddy bear. Judges you, lovingly."
         }),
         new BreedDef("persian", "White Persian", 180, new BreedColors
         {
@@ -97,7 +97,7 @@ public static class SkinCatalog
         Breed(id)?.Price ?? Accessory(id)?.Price ?? EmotePack(id)?.Price ?? int.MaxValue;
 
     /// <summary>Default free items every cat owns from the start.</summary>
-    public static List<string> DefaultOwned() => new() { "orange_tabby", "hearts" };
+    public static List<string> DefaultOwned() => new() { "grey_tabby", "hearts" };
 
     /// <summary>Catalog integrity — every id must be unique across the whole store.</summary>
     public static bool AllIdsUnique()

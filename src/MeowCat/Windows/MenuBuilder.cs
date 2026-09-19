@@ -15,6 +15,9 @@ public interface ICatCommandHost
     void DoSleep();
     void DoPlay();
     void DoStore();
+    void DoReminders();
+    void DoSettings();
+    void DoMakeAngry();
     void ToggleSound();
     bool SoundOn { get; }
     void SetSize(double scale);
@@ -23,6 +26,8 @@ public interface ICatCommandHost
     IReadOnlyList<TargetWindow> GetJumpTargets();
     void JumpTo(TargetWindow target);
     string CatName { get; }
+    /// <summary>Whether the cat is currently in angry mode (drives the menu label).</summary>
+    bool IsAngryVisible { get; }
 }
 
 /// <summary>The right-click menu shared by the cat and the tray icon.</summary>
@@ -32,7 +37,7 @@ public static class MenuBuilder
     {
         var menu = new ContextMenu { PlacementTarget = null };
 
-        var nameItem = new MenuItem { Header = $"{host.CatName}  (v{Version})", IsEnabled = false };
+        var nameItem = new MenuItem { Header = $"{host.CatName}  (v{Version}){(host.IsAngryVisible ? "  😠" : "")}", IsEnabled = false };
         menu.Items.Add(nameItem);
         menu.Items.Add(new Separator());
 
@@ -40,6 +45,7 @@ public static class MenuBuilder
         menu.Items.Add(Item("Dance for me", () => host.DoDance()));
         menu.Items.Add(Item("Take a nap", () => host.DoSleep()));
         menu.Items.Add(Item("Play with yarn", () => host.DoPlay()));
+        menu.Items.Add(Item(host.IsAngryVisible ? "Calm down 😺" : "Make angry 😠", () => host.DoMakeAngry()));
 
         var jump = new MenuItem { Header = "Jump to window" };
         var targets = host.GetJumpTargets();
@@ -72,6 +78,8 @@ public static class MenuBuilder
 
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Cat Store…", () => host.DoStore()));
+        menu.Items.Add(Item("Reminders…", () => host.DoReminders()));
+        menu.Items.Add(Item("Settings…", () => host.DoSettings()));
         menu.Items.Add(Item("Exit", host.DoExit));
         return menu;
     }
@@ -83,8 +91,8 @@ public static class MenuBuilder
         return mi;
     }
 
-    private static string Truncate(string s, int n) => s.Length <= n ? s : s[..(n - 1)] + "…";
+    private static string Truncate(string s, int n) => s.Length <= n ? s[..(n - 1)] + "…" : s;
 
     private static string Version =>
-        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0";
+        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "2.0";
 }

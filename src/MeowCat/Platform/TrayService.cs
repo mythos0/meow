@@ -30,11 +30,14 @@ public sealed class TrayService : IDisposable
         var m = new ContextMenuStrip();
         m.Items.Add($"🐱 {_host.CatName} — MeowCat").Enabled = false;
         m.Items.Add(new ToolStripSeparator());
+        m.Items.Add($"{(_host.IsAngryVisible ? "😠 angry mode" : "😺 happy mode")}").Enabled = false;
+        m.Items.Add(new ToolStripSeparator());
 
         m.Items.Add(Item("Feed a treat", _host.DoFeed));
         m.Items.Add(Item("Dance for me", _host.DoDance));
         m.Items.Add(Item("Take a nap", _host.DoSleep));
         m.Items.Add(Item("Play with yarn", _host.DoPlay));
+        m.Items.Add(Item(_host.IsAngryVisible ? "Calm down 😺" : "Make angry 😠", _host.DoMakeAngry));
 
         var jump = (ToolStripMenuItem)m.Items.Add("Jump to window");
         var targets = _host.GetJumpTargets();
@@ -64,8 +67,22 @@ public sealed class TrayService : IDisposable
 
         m.Items.Add(new ToolStripSeparator());
         m.Items.Add(Item("Cat Store…", _host.DoStore));
+        m.Items.Add(Item("Reminders…", _host.DoReminders));
+        m.Items.Add(Item("Settings…", _host.DoSettings));
         m.Items.Add(Item("Exit", _host.DoExit));
         return m;
+    }
+
+    /// <summary>Shows a toast/balloon from the tray icon (backup notification for reminders).</summary>
+    public void ShowBalloon(string title, string message)
+    {
+        try
+        {
+            _icon.BalloonTipTitle = string.IsNullOrWhiteSpace(title) ? "MeowCat" : title;
+            _icon.BalloonTipText = string.IsNullOrWhiteSpace(message) ? "MeowCat reminder" : message;
+            _icon.ShowBalloonTip(5000);
+        }
+        catch (Exception) { /* balloon optional */ }
     }
 
     private void RefreshMenu()

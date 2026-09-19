@@ -52,7 +52,7 @@ def main(publish_dir: str, out_path: str, version: str):
     add(assets)
     add(sounds)
 
-    # shortcut component (keypath = registry value)
+    # shortcut components (keypath = registry value)
     sc_cid = "c_StartMenuShortcut"
     shortcut_comp = f'''            <Component Id="{sc_cid}" Guid="{guid_for('start-menu-shortcut')}">
               <Shortcut Id="s_MeowCatShortcut" Name="MeowCat"
@@ -65,6 +65,32 @@ def main(publish_dir: str, out_path: str, version: str):
                              Type="integer" Value="1" KeyPath="yes" />
             </Component>'''
     feature_refs.append(sc_cid)
+
+    # desktop shortcut - created BY DEFAULT on install (removed again on uninstall)
+    dsc_cid = "c_DesktopShortcut"
+    desktop_comp = f'''      <Component Id="{dsc_cid}" Guid="{guid_for('desktop-shortcut')}">
+        <Shortcut Id="s_MeowCatDesktop" Name="MeowCat"
+                  Description="Your realistic 3D-shaded desktop cat"
+                  Target="[INSTALLFOLDER]MeowCat.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.exe" />
+        <RegistryValue Root="HKCU" Key="Software\\MeowCat" Name="desktopShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>'''
+    feature_refs.append(dsc_cid)
+
+    # desktop shortcut — created BY DEFAULT on install (removed again on uninstall)
+    dsc_cid = "c_DesktopShortcut"
+    desktop_comp = f'''      <Component Id="{dsc_cid}" Guid="{guid_for('desktop-shortcut')}">
+        <Shortcut Id="s_MeowCatDesktop" Name="MeowCat"
+                  Description="Your realistic 3D-shaded desktop cat"
+                  Target="[INSTALLFOLDER]MeowCat.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.exe" />
+        <RegistryValue Root="HKCU" Key="Software\\MeowCat" Name="desktopShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>'''
+    feature_refs.append(dsc_cid)
 
     refs = "\n".join(f'        <ComponentRef Id="{r}" />' for r in feature_refs)
 
@@ -98,6 +124,9 @@ def main(publish_dir: str, out_path: str, version: str):
         <Directory Id="AppMenuDir" Name="MeowCat">
 {shortcut_comp}
         </Directory>
+      </Directory>
+      <Directory Id="DesktopFolder" Name="Desktop">
+{desktop_comp}
       </Directory>
     </Directory>
 
@@ -156,6 +185,9 @@ def main(publish_dir: str, out_path: str, version: str):
         <Directory Id="AppMenuDir" Name="MeowCat">
 {shortcut_comp}
         </Directory>
+      </Directory>
+      <Directory Id="DesktopFolder" Name="Desktop">
+{desktop_comp}
       </Directory>
     </Directory>
 

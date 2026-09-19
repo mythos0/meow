@@ -189,16 +189,20 @@ public sealed class StoreWindow : Window
         if (_hintTimer > 0) { _hintTimer -= dt; if (_hintTimer <= 0) _hint.Text = " "; }
 
         var state = _emoteShowcase > 0 ? CatState.Petted : CatState.Walking;
+        var scale = Math.Clamp(_size.Value * 0.92, 0.45, 1.9);
+        var padTop = 70 * scale;
         _preview.Spec = new RenderSpec
         {
             State = state,
             Time = _previewTime,
             Facing = 1,
-            Scale = Math.Clamp(_size.Value * 0.92, 0.45, 1.9),
+            Scale = scale,
             BreedId = _pendingBreed,
-            Breed = (SkinCatalog.Breed(_pendingBreed) ?? SkinCatalog.Breeds[0]).Colors,
             Accessories = _pendingAccs,
             EmotePack = _pendingEmote,
+            CanvasW = SpriteRenderer.Box * scale,
+            CanvasH = SpriteRenderer.Box * scale + padTop,
+            ArtTop = padTop,
         };
         _preview.InvalidateVisual();
     }
@@ -248,7 +252,7 @@ public sealed class StoreWindow : Window
             panel.Children.Add(MakeCard(
                 breed.Name, breed.Price, _settings.OwnedItems.Contains(breed.Id),
                 breed.Id == _pendingBreed,
-                breed.Colors, spec => { spec.BreedId = breed.Id; spec.Breed = breed.Colors; },
+                breed.Colors, spec => { spec.BreedId = breed.Id; },
                 () => SelectBreed(breed)));
         }
         return panel;
@@ -304,14 +308,18 @@ public sealed class StoreWindow : Window
 
         var stack = new StackPanel();
         var mini = new CatControl { Width = 128, Height = 118 };
+        var scale = 0.22;
+        var padTop = 70 * scale;
         var spec = new RenderSpec
         {
             State = CatState.Sitting, Time = 0.4, Facing = 1,
-            Scale = 0.55,
-            BreedId = breed is null ? _pendingBreed : name, // placeholder, replaced below
-            Breed = breed ?? (SkinCatalog.Breed(_pendingBreed) ?? SkinCatalog.Breeds[0]).Colors,
+            Scale = scale,
+            BreedId = _pendingBreed,
             Accessories = _pendingAccs,
             EmotePack = _pendingEmote,
+            CanvasW = SpriteRenderer.Box * scale,
+            CanvasH = SpriteRenderer.Box * scale + padTop,
+            ArtTop = padTop,
         };
         decorate(spec);
         mini.Spec = spec;

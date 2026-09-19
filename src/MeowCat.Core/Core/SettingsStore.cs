@@ -9,10 +9,10 @@ namespace MeowCat.Core;
 /// <summary>All persisted cat state (economy, wardrobe, mood, preferences).</summary>
 public sealed class MeowSettings
 {
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
     public string CatName { get; set; } = "Mochi";
     public int Coins { get; set; } = CoinWallet.StartBalance;
-    public string BreedId { get; set; } = "orange_tabby";
+    public string BreedId { get; set; } = "grey_tabby";
     public List<string> Accessories { get; set; } = new();
     public string EmotePackId { get; set; } = "hearts";
     public double SizeScale { get; set; } = 1.0;
@@ -21,9 +21,11 @@ public sealed class MeowSettings
     public double Happiness { get; set; } = 65;
     public double Energy { get; set; } = 80;
     public double Boredom { get; set; } = 20;
-    public List<string> OwnedItems { get; set; } = new() { "orange_tabby", "hearts" };
+    public List<string> OwnedItems { get; set; } = new() { "grey_tabby", "hearts" };
     public string? LastDailyBonusUtc { get; set; }
     public bool FirstRunDone { get; set; }
+    public bool AutoStartEnabled { get; set; }
+    public bool ReminderPopupsEnabled { get; set; } = true;
 }
 
 /// <summary>
@@ -89,11 +91,17 @@ public sealed class SettingsStore
         s.Happiness = Math.Clamp(s.Happiness, 0, 100);
         s.Energy = Math.Clamp(s.Energy, 0, 100);
         s.Boredom = Math.Clamp(s.Boredom, 0, 100);
-        s.OwnedItems ??= new List<string> { "orange_tabby", "hearts" };
+        s.OwnedItems ??= new List<string> { "grey_tabby", "hearts" };
         s.Accessories ??= new List<string>();
-        if (string.IsNullOrWhiteSpace(s.BreedId)) s.BreedId = "orange_tabby";
+        if (string.IsNullOrWhiteSpace(s.BreedId)) s.BreedId = "grey_tabby";
         if (string.IsNullOrWhiteSpace(s.EmotePackId)) s.EmotePackId = "hearts";
         if (string.IsNullOrWhiteSpace(s.CatName)) s.CatName = "Mochi";
+
+        // v1 → v2 migration: the British Shorthair grew into the Grey Tabby star breed
+        if (s.BreedId == "british") s.BreedId = "grey_tabby";
+        for (var i = 0; i < s.OwnedItems.Count; i++)
+            if (s.OwnedItems[i] == "british") s.OwnedItems[i] = "grey_tabby";
+        if (!s.OwnedItems.Contains(s.BreedId)) s.OwnedItems.Add(s.BreedId);
     }
 
     private static readonly JsonSerializerOptions JsonOpts = new()

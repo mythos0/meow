@@ -71,3 +71,80 @@ All synthesized (44.1 kHz 16-bit) by `scripts/gen_assets.py`: `meow` (750→460 
 `%APPDATA%\MeowCat\config.json` — coins, owned items, equipped breed/accessories/emote pack, size,
 sound, mood, daily-gift date, cat name. Corrupt files are backed up (`*.corrupt-*`) and replaced
 with defaults; all values sanitized on load.
+
+---
+
+# v2.0.0 — Frame-animated realism + major features
+
+## Frame animation system
+
+Every action now plays **AI-generated photographic frames** instead of the procedural vector cat:
+
+| Clip | Frames | FPS | Notes |
+|---|---|---|---|
+| walk / run / jump / dance / scratch | **8** | 9 / 13 / 11 / 7 / 9 | interleaved A+B sheets → one natural gait cycle per loop |
+| sit / sleep / idle / happy / angry / dangle / eat / pounce | **4** | 1.4–4.5 | subtle breathing/pose variations |
+
+* **Cross-fade interpolation** (`SpriteRenderer`): during the last 55 % of each frame slot the next
+  frame blends in (smoothstep, opacity-capped) — in-between poses without extra artwork, so motion
+  looks fluid at 60 FPS even from 8 frames.
+* **Asset pipeline** (`scripts/slice_assets_v3.py`): green *and* magenta screen keying
+  (auto-detected), adaptive distance thresholds for vignettes, sure-foreground protection so wispy
+  fur survives, hole filling, per-sheet **size normalization** (the kitten never changes scale
+  between interleaved sheets), grid-line trimming, union-bbox cropping into a 512×512 art box.
+* Breeds: grey_tabby has every clip at full frame counts; other breeds ship walk/sit/scratch and
+  reuse look-alike clips for the rest (`SpriteCatalog.Resolve`).
+
+## Angry mode (screen scratching)
+
+* Click the angry cat → `ScratchAttack` (1.7 s) with 2 scheduled swipes.
+* Each swipe stamps a decal batch (`DecalPlanner`): 1 spiderweb shatter + 2 claw gouges at the paw
+  point, clamped to the visible screen, capped at 18 decals.
+* `GlassOverlayWindow`: full-virtual-screen, transparent, **topmost + click-through**
+  (WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) — every window stays
+  visible and clickable underneath, cracks render above everything.
+* When the cat calms (time, treat, or happiness ≥ 55 after attacks) → all cracks fade out in 1.4 s
+  and the layer empties.
+
+## Topmost enforcement (the "cat under fullscreen tab" bug)
+
+WPF `Topmost` asserts HWND_TOPMOST **once**; fullscreen apps create their own topmost windows
+afterwards and bury the cat. `TopmostEnforcer` now calls `SetWindowPos(HWND_TOPMOST,
+SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE)` for the cat window (and the glass overlay when visible)
+every scan tick (1.2 s) — cheap, focus-steal-free, and it survives games/F11/slideshows.
+
+## Tab-top hopping & desktop strolls
+
+* `CatBrain` tracks the **platform** under the cat (`FindPlatform`): any window whose top edge is
+  within 10 DIU of the feet and whose span contains the cat.
+* On a platform the model bounds clamp to the window span (`+24/-24` margins) — the cat physically
+  cannot walk off a title bar; it *hops*.
+* **Auto-hop**: walking on the floor with a reachable window top ahead (≤ 560 DIU sideways,
+  ≤ 460 DIU up, 6 s cooldown) triggers a spontaneous jump onto it.
+* Landing on a platform → 55 % chance to hop to the *nearest other window* (continuing the
+  window-to-window stroll), 20 % walk along the current one, 25 % descend.
+* Jump reach is limited to ±620 DIU and the landing X is clamped **inside** the target window span.
+* **Desktop mode** (no visible windows): the host reads real desktop icon positions
+  (`DesktopIcons`: Progman → SHELLDLL_DefView → SysListView32 with cross-process
+  VirtualAllocEx/ReadProcessMemory; synthesized grid fallback), and the brain strolls between
+  icons, sits beside them, or walks to one and **scratches next to it**.
+
+## Reminders & timers
+
+* `Reminder` (Core): title, message, time, repeat (Once/Daily/Weekly/Every30Minutes/EveryHour),
+  movement, sound, enabled. `ReminderStore`: JSON next to config.json, corrupt-safe.
+* `ReminderService`: 1 Hz `Tick` — fires one-shots once (and disables them), rolls repeating
+  reminders forward (catch-up loop, bounded); first-run-after-launch ignores reminders > 5 min late.
+* Notification: **speech bubble** above the cat (`EmoteRenderer.RenderSpeechBubble` — rounded card,
+  wrapped text, tail, clock dot, pop-in/out easing) + tray balloon + real meow, and the cat
+  **performs the movement chosen for that reminder** (dance, jump, yarn, scratch, zoomies, …).
+* `ReminderWindow`: list + editor (title/message/time `HH:mm`/repeat/movement/sound/enabled),
+  delete, "preview movement" hint.
+
+## Settings & installer
+
+* `SettingsWindow`: **auto-start with Windows** (`AutoStart` — HKCU Run key), sound, volume,
+  reminder popups, cat size; every change persists immediately.
+* `MeowSettings` gained `AutoStartEnabled` + `ReminderPopupsEnabled` (backward-compatible JSON).
+* MSI v2.0.0: **desktop shortcut is created by default** (`DesktopFolder` component, registry
+  keypath, removed on uninstall), MajorUpgrade from 1.x, 155 components (all frames + sounds).

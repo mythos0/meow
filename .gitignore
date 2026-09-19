@@ -1,9 +1,5 @@
 bin/
 obj/
-.vs/
+publish/
 *.user
-*.suo
-artifacts/
-*.msi
-!installer/MeowCat-*.msi
- dotnet-*
+.vs/

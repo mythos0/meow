@@ -20,6 +20,10 @@ public sealed class BrainEnvironment
     public double MouseX { get; init; }
     public double MouseY { get; init; }
     public IReadOnlyList<TargetWindow> Windows { get; init; } = Array.Empty<TargetWindow>();
+
+    /// <summary>Desktop icon waypoints (DIU) for strolls across the wallpaper — used when
+    /// every other window is minimized/closed. Empty when the shell cannot be read.</summary>
+    public IReadOnlyList<(double X, double Y)> DesktopPoints { get; init; } = Array.Empty<(double, double)>();
 }
 
 /// <summary>
@@ -40,6 +44,22 @@ public sealed class CatBrain
 
     private const double ChaseEndDistance = 46;
 
+    // ---- platform / auto-jump tuning (public for tests/docs) ----
+    public const double PlatformTopTolerance = 10;     // |landY - windowTop| to count as landed
+    public const double AutoJumpReachY = 460;          // max height above the floor to hop onto a tab top
+    public const double AutoJumpReachX = 560;          // max horizontal distance to a nearby tab top
+    public const double AutoJumpCooldown = 6;          // min seconds between spontaneous tab hops
+    public const double DesktopStrollWeight = 2.2;     // walking weight bonus while the desktop shows
+
+    // ---- anger tuning (public for tests/docs) ----
+    public const double AngryMinSeconds = 55;
+    public const double AngryMaxSeconds = 110;
+    public const double AttackHappinessGain = 6;       // each screen-scratch soothes the cat a bit
+    public const double TreatCalmHappiness = 30;       // giving a treat while angry calms it fast
+    public const double CalmHappinessThreshold = 55;   // happiness level that ends the angry mood
+    public const double AutoAngerCooldown = 180;       // min seconds between automatic angers
+    public static readonly double[] SwipeMoments = { 0.45, 1.05 };   // inside the 1.7s attack
+
     private readonly Random _rng;
     private readonly CatModel _model;
     private readonly CoinWallet? _wallet;
@@ -49,6 +69,17 @@ public sealed class CatBrain
     private double _petCooldownLeft;
     private double _passiveCoinTimer;
     private CatState? _lastAction;
+    private bool _angry;
+    private double _angerLeft;
+    private double _autoAngryCooldown;
+    private int _swipePending;
+    private int _swipesDone;
+
+    // platform awareness (tab-top strolling)
+    private TargetWindow? _platform;
+    private double? _walkTargetX;
+    private bool _scratchWhenArrived;
+    private double _autoJumpCooldown;
 
     public CatState State { get; private set; } = CatState.Idle;
     public double StateTime => _stateTime;
@@ -58,10 +89,21 @@ public sealed class CatBrain
     public double Boredom { get; private set; } = 20;
     public CatModel Model => _model;
 
+    /// <summary>ANGRY MODE: the cat is grumpy; clicking it makes it claw the screen.</summary>
+    public bool IsAngry => _angry;
+    /// <summary>Seconds of grumpiness left before it naturally calms down.</summary>
+    public double AngerSecondsLeft => _angerLeft;
+    /// <summary>Window whose top edge the cat is standing on (null = desktop floor).</summary>
+    public TargetWindow? CurrentPlatform => _platform;
+
     /// <summary>Raised after every successful state change (old → new).</summary>
     public event Action<CatState, CatState>? StateChanged;
     /// <summary>Raised when a finite autonomous action ran to completion (before the next pick).</summary>
     public event Action<CatState>? ActionCompleted;
+    /// <summary>Raised when the cat enters angry mode (host plays growl, shows glass overlay).</summary>
+    public event Action? BecameAngry;
+    /// <summary>Raised when the cat calms down again — host fades all screen cracks away.</summary>
+    public event Action? CalmedDown;
 
     public CatBrain(CatModel model, CoinWallet? wallet = null, int seed = 202409)
     {
@@ -77,9 +119,26 @@ public sealed class CatBrain
         dt = Math.Clamp(dt, 0, 0.25); // tolerate debugger pauses / hiccups
         _currentEnv = env;
         _petCooldownLeft = Math.Max(0, _petCooldownLeft - dt);
+        _autoJumpCooldown = Math.Max(0, _autoJumpCooldown - dt);
 
+        UpdateBounds(env);
+
+        UpdateAnger(dt);
         UpdateMoods(dt);
         UpdatePassiveCoins(dt);
+
+        // schedule screen-slash moments inside the scratch attack
+        if (State == CatState.ScratchAttack)
+        {
+            var due = 0;
+            foreach (var m in SwipeMoments)
+                if (_stateTime >= m) due++;
+            if (due > _swipesDone)
+            {
+                _swipePending += due - _swipesDone;
+                _swipesDone = due;
+            }
+        }
 
         // chasing steers toward the mouse every frame
         if (State == CatState.ChasingCursor)
@@ -94,18 +153,104 @@ public sealed class CatBrain
             }
         }
 
+        // TAB-TOP AUTO HOP: strolling along the floor near a window's top border → hop on.
+        if (State == CatState.Walking && _platform is null && _walkTargetX is null
+            && _autoJumpCooldown <= 0 && !IsAngry && env.Windows.Count > 0)
+        {
+            var near = NearestReachableWindow(env, aheadOnly: true);
+            if (near is not null && _rng.NextDouble() < 0.45 * dt * 60)
+            {
+                _autoJumpCooldown = AutoJumpCooldown;
+                if (StartJumpTo(near)) return;
+            }
+        }
+
+        // purposeful walking: heading to a desktop icon / window spot → stop on arrival
+        if (State == CatState.Walking && _walkTargetX is { } tx)
+        {
+            var dx = tx - _model.X;
+            if (Math.Abs(dx) >= 14)
+            {
+                _model.Face(Math.Sign(dx));
+            }
+            else if (_scratchWhenArrived)
+            {
+                _walkTargetX = null;
+                _scratchWhenArrived = false;
+                SetState(CatState.Scratching, DurationFor(CatState.Scratching));
+                return;
+            }
+            else
+            {
+                _walkTargetX = null;
+                CompleteAction();
+                SetState(CatState.Sitting, 1.0 + _rng.NextDouble());
+                return;
+            }
+        }
+
         var jumpJustEnded = _model.Tick(dt, State);
         if (jumpJustEnded)
         {
             Reward(CoinWallet.ActionReward);
             AddMood(happiness: +3);
+            _platform = FindPlatform(env, _model.X, _model.Y);   // register the landing platform
             SetState(CatState.Sitting, 1.2);   // proud landing sit
             return;
         }
 
+        // keep the platform under the feet fresh (windows move/close, jumps move the cat)
+        _platform = FindPlatform(env, _model.X, _model.Y);
+
         _stateTime += dt;
         if (CatStateInfo.IsFinite(State) && State != CatState.Dragged && _stateTime >= _stateDuration)
             CompleteAction();
+    }
+
+    // ------------------------------------------------------ platform & bounds
+
+    /// <summary>
+    /// Stands the cat on the right surface: a window top edge is a narrow platform,
+    /// the desktop floor spans the whole work area.
+    /// </summary>
+    private void UpdateBounds(BrainEnvironment env)
+    {
+        if (_platform is { } p)
+            _model.SetBounds(p.X + 24, p.X + p.W - 24);
+        else
+            _model.SetBounds(0, Math.Max(1200, env.ScreenWidth));
+    }
+
+    private static TargetWindow? FindPlatform(BrainEnvironment env, double x, double y)
+    {
+        TargetWindow? best = null;
+        var bestDy = double.MaxValue;
+        foreach (var w in env.Windows)
+        {
+            var dy = Math.Abs(w.TopY - y);
+            if (dy > PlatformTopTolerance) continue;
+            if (x < w.X - 20 || x > w.X + w.W + 20) continue;
+            if (dy < bestDy) { bestDy = dy; best = w; }
+        }
+        return best;
+    }
+
+    /// <summary>The closest window whose top edge the cat could hop onto right now.</summary>
+    private TargetWindow? NearestReachableWindow(BrainEnvironment env, bool aheadOnly)
+    {
+        TargetWindow? best = null;
+        var bestDist = double.MaxValue;
+        foreach (var w in env.Windows)
+        {
+            var dy = _model.Y - w.TopY;                       // positive = top edge above the cat
+            if (dy < 20 || dy > AutoJumpReachY) continue;     // must be above, within reach
+            var dx = w.CenterX - _model.X;
+            if (aheadOnly && Math.Sign(dx) != _model.Facing && Math.Abs(dx) > 60) continue;
+            if (Math.Abs(dx) > AutoJumpReachX) continue;
+            var d = Math.Abs(dx) + dy * 0.6;
+            if (d < bestDist) { bestDist = d; best = w; }
+        }
+        return best;
     }
 
     private BrainEnvironment _currentEnv = new();
@@ -131,6 +276,75 @@ public sealed class CatBrain
 
         Happiness += (HappinessDriftTarget - Happiness) * 0.002 * dt * 60.0;
         Happiness = Math.Clamp(Happiness, 0, 100);
+    }
+
+    // ------------------------------------------------------------------ anger
+
+    private void UpdateAnger(double dt)
+    {
+        _autoAngryCooldown = Math.Max(0, _autoAngryCooldown - dt);
+        if (!_angry) return;
+
+        _angerLeft -= dt;
+        if (_angerLeft <= 0)
+        {
+            Calm();
+            return;
+        }
+
+        // extremely unhappy + bored cats can rage on their own (rare, throttled)
+        if (State != CatState.ScratchAttack && Happiness < 12 && Boredom > 75
+            && _autoAngryCooldown <= 0 && _rng.NextDouble() < 0.02 * dt * 60)
+        {
+            MakeAngry();
+        }
+    }
+
+    /// <summary>Enters ANGRY MODE (user command or rare auto-rage). Returns true on success.</summary>
+    public bool MakeAngry()
+    {
+        if (_angry) return false;
+        if (!CatStateInfo.CanTransition(State, CatState.Angry)) return false;
+        _angry = true;
+        _angerLeft = AngryMinSeconds + _rng.NextDouble() * (AngryMaxSeconds - AngryMinSeconds);
+        BecameAngry?.Invoke();
+        SetState(CatState.Angry, 4 + _rng.NextDouble() * 4);
+        return true;
+    }
+
+    /// <summary>Click while angry: the cat claws the screen → glass cracks (host consumes swipes).</summary>
+    public bool ScratchAttackAt()
+    {
+        if (!_angry) return false;
+        if (!CatStateInfo.CanTransition(State, CatState.ScratchAttack)) return false;
+        _swipePending = 0;
+        _swipesDone = 0;
+        SetState(CatState.ScratchAttack, 1.7);
+        return true;
+    }
+
+    /// <summary>Edge-triggered by the host each frame: true exactly once per claw swipe.</summary>
+    public bool ConsumeSwipe()
+    {
+        if (_swipePending <= 0) return false;
+        _swipePending--;
+        return true;
+    }
+
+    /// <summary>Leaves angry mode immediately (treat given, or anger timer expired).
+    /// The host listens to <see cref="CalmedDown"/> to fade the screen cracks away.</summary>
+    public void Calm()
+    {
+        if (!_angry) return;
+        _angry = false;
+        _angerLeft = 0;
+        _swipePending = 0;
+        CalmedDown?.Invoke();
+        if (State == CatState.Angry || State == CatState.ScratchAttack)
+        {
+            _lastAction = null;               // allow a clean re-pick from the happy pool
+            SetState(CatState.Sitting, 2.0);
+        }
     }
 
     private void UpdatePassiveCoins(double dt)
@@ -161,6 +375,11 @@ public sealed class CatBrain
             case CatState.Dancing:  AddMood(energy: -5, boredom: -18, happiness: +10); Reward(CoinWallet.DanceReward); break;
             case CatState.PlayingYarn: AddMood(energy: -4, boredom: -18, happiness: +10); Reward(CoinWallet.ActionReward); break;
             case CatState.Scratching: AddMood(boredom: -8, happiness: +2); break;
+            case CatState.Angry: AddMood(boredom: -2, happiness: +0.5); break;
+            case CatState.ScratchAttack:
+                AddMood(happiness: AttackHappinessGain, boredom: -3);
+                if (Happiness >= CalmHappinessThreshold) Calm();   // exhausted the rage
+                break;
             case CatState.Sleeping: AddMood(boredom: -5); break;
             case CatState.ChasingCursor: AddMood(energy: -3, boredom: -12, happiness: +6); break;
             case CatState.Petted:   AddMood(happiness: +8); if (_petCooldownLeft <= 0) { Reward(CoinWallet.PetReward); _petCooldownLeft = PetCooldownSeconds; } break;
@@ -175,6 +394,19 @@ public sealed class CatBrain
     {
         if (s == State && s != CatState.Idle) return 0;                 // never repeat the same activity
         if (s == _lastAction) return s == CatState.Idle ? 1.0 : 0.15;   // discourage immediate repeats
+
+        // ANGRY MODE pool: grumpy pacing, hissy fits and screen-slash mischief.
+        if (IsAngry)
+        {
+            return s switch
+            {
+                CatState.Angry => 3.0,
+                CatState.Walking => 1.2,
+                CatState.ScratchAttack => 0.9,
+                CatState.Sitting => 0.5,
+                _ => 0
+            };
+        }
 
         return s switch
         {
@@ -196,22 +428,68 @@ public sealed class CatBrain
     {
         if (Energy < 8) { SetState(CatState.Sleeping, 10 + _rng.NextDouble() * 10); return; }
 
-        // Standing on a window top? Hop back down to the floor first.
-        if (_model.Y < _currentEnv.FloorY - 2)
+        var env = _currentEnv;
+        var onPlatform = _platform is not null || _model.Y < env.FloorY - 2;
+
+        // ---- standing on a tab top: stroll along it, hop to the nearest neighbour, or descend
+        if (onPlatform)
         {
+            var other = NearestOtherWindow(env);
+            var roll = _rng.NextDouble();
+            if (other is not null && roll < 0.55)
+            {
+                StartJumpTo(other);            // continue the window-to-window stroll
+                return;
+            }
+            if (roll < 0.75)
+            {
+                // walk to a random spot along the current platform
+                var p = _platform!;
+                var target = Math.Clamp(p.X + 40 + _rng.NextDouble() * Math.Max(1, p.W - 80),
+                    _model.MinX, _model.MaxX);
+                _walkTargetX = target;
+                SetState(CatState.Walking, DurationFor(CatState.Walking));
+                return;
+            }
+            // hop back down to the floor
             var dir = _rng.Next(2) == 0 ? 1 : -1;
+            _walkTargetX = null;
             _model.StartJump(new JumpPlan(_model.X, _model.Y, _model.X + dir * (30 + _rng.NextDouble() * 40),
-                _currentEnv.FloorY, 0.7, 50));
+                env.FloorY, 0.7, 50));
             SetStateRaw(CatState.Jumping);
             return;
         }
 
-        var env = _currentEnv;
-        var pool = new List<CatState>
+        // ---- desktop stroll mode: no (visible) windows → wander between folder icons
+        if (env.Windows.Count == 0 && env.DesktopPoints.Count > 0 && !IsAngry)
         {
-            CatState.Idle, CatState.Walking, CatState.Running, CatState.Sitting, CatState.Sleeping,
-            CatState.Dancing, CatState.PlayingYarn, CatState.Scratching, CatState.ChasingCursor, CatState.Jumping
-        };
+            var roll = _rng.NextDouble();
+            if (roll < 0.55)
+            {
+                // walk to a desktop icon, sit beside it for a moment
+                var pt = env.DesktopPoints[_rng.Next(env.DesktopPoints.Count)];
+                _walkTargetX = Math.Clamp(pt.X + _rng.NextDouble() * 90 - 45, _model.MinX + 40, _model.MaxX - 40);
+                SetState(CatState.Walking, DurationFor(CatState.Walking));
+                return;
+            }
+            if (roll < 0.72)
+            {
+                // walk to a folder icon first, then scratch right next to it (desktop mischief)
+                var pt = env.DesktopPoints[_rng.Next(env.DesktopPoints.Count)];
+                _walkTargetX = Math.Clamp(pt.X + (_rng.Next(2) == 0 ? 70 : -70), _model.MinX + 40, _model.MaxX - 40);
+                _scratchWhenArrived = true;
+                SetState(CatState.Walking, 8);
+                return;
+            }
+        }
+
+        var pool = IsAngry
+            ? new List<CatState> { CatState.Angry, CatState.Walking, CatState.ScratchAttack, CatState.Sitting }
+            : new List<CatState>
+            {
+                CatState.Idle, CatState.Walking, CatState.Running, CatState.Sitting, CatState.Sleeping,
+                CatState.Dancing, CatState.PlayingYarn, CatState.Scratching, CatState.ChasingCursor, CatState.Jumping
+            };
 
         double total = 0;
         var weights = new double[pool.Count];
@@ -223,12 +501,12 @@ public sealed class CatBrain
         }
         if (total <= 0) { SetState(CatState.Idle, 2 + _rng.NextDouble() * 3); return; }
 
-        var roll = _rng.NextDouble() * total;
+        var pick = _rng.NextDouble() * total;
         var chosen = CatState.Idle;
         for (var i = 0; i < pool.Count; i++)
         {
-            roll -= weights[i];
-            if (roll <= 0) { chosen = pool[i]; break; }
+            pick -= weights[i];
+            if (pick <= 0) { chosen = pool[i]; break; }
         }
 
         if (chosen == CatState.Jumping)
@@ -239,6 +517,24 @@ public sealed class CatBrain
             return;
         }
         SetState(chosen, DurationFor(chosen));
+    }
+
+    /// <summary>Nearest OTHER window top (used for platform → platform hops).</summary>
+    private TargetWindow? NearestOtherWindow(BrainEnvironment env)
+    {
+        TargetWindow? best = null;
+        var bestD = double.MaxValue;
+        foreach (var w in env.Windows)
+        {
+            if (_platform is { } p && w.Title == p.Title && Math.Abs(w.X - p.X) < 1 && Math.Abs(w.TopY - p.TopY) < 1)
+                continue;
+            var dy = Math.Abs(w.TopY - _model.Y);
+            var dx = Math.Abs(w.CenterX - _model.X);
+            if (dx > AutoJumpReachX * 1.4) continue;
+            var d = dx + dy * 0.5;
+            if (d < bestD) { bestD = d; best = w; }
+        }
+        return best;
     }
 
     private double DurationFor(CatState s) => s switch
@@ -254,6 +550,8 @@ public sealed class CatBrain
         CatState.ChasingCursor => 6,
         CatState.Petted  => 2.5,
         CatState.FeedHappy => 3,
+        CatState.Angry => 4 + _rng.NextDouble() * 4,
+        CatState.ScratchAttack => 1.7,
         _ => 3
     };
 
@@ -270,6 +568,7 @@ public sealed class CatBrain
 
     public bool TryPet()
     {
+        if (_angry) return false;             // an angry cat does NOT want to be petted
         if (!CatStateInfo.CanTransition(State, CatState.Petted)) return false;
         SetState(CatState.Petted, 2.5);
         return true;
@@ -278,6 +577,12 @@ public sealed class CatBrain
     public bool RequestFeed()
     {
         if (!CatStateInfo.CanTransition(State, CatState.FeedHappy)) return false;
+        if (_angry)
+        {
+            // the treat wins the cat over: calm down first, then enjoy the snack
+            AddMood(happiness: TreatCalmHappiness);
+            Calm();
+        }
         SetState(CatState.FeedHappy, 3);
         return true;
     }
@@ -301,10 +606,12 @@ public sealed class CatBrain
         if (target is null || !CatStateInfo.CanTransition(State, CatState.Jumping)) return false;
         var startX = _model.X;
         var startY = _model.Y;
-        var endX = Math.Clamp(target.CenterX, _model.MinX + 60, _model.MaxX - 60);
+        var endX = Math.Clamp(target.CenterX, startX - 620, startX + 620);
+        endX = Math.Clamp(endX, target.X + 40, target.X + target.W - 40);   // land ON the top edge
         var endY = target.TopY;
         var dist = Math.Abs(endX - startX) + Math.Abs(endY - startY);
         var dur = Math.Clamp(0.8 + dist / 900.0, 0.9, 1.8);
+        _walkTargetX = null;
         _model.StartJump(new JumpPlan(startX, startY, endX, endY, dur, 90));
         SetStateRaw(CatState.Jumping);
         return true;

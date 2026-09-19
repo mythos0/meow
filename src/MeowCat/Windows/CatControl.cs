@@ -6,7 +6,7 @@ using MeowCat.Rendering;
 
 namespace MeowCat.Windows;
 
-/// <summary>FrameworkElement that paints one frame of the cat (plus coin popups).</summary>
+/// <summary>FrameworkElement that paints one sprite frame of the cat (plus coin popups).</summary>
 public sealed class CatControl : FrameworkElement
 {
     public static readonly DependencyProperty SpecProperty = DependencyProperty.Register(
@@ -26,21 +26,21 @@ public sealed class CatControl : FrameworkElement
     {
         if (Spec is { } s)
         {
-            CatRenderer.Render(dc, s);
+            SpriteRenderer.Render(dc, s);
+            if (!string.IsNullOrWhiteSpace(s.SpeechText))
+            {
+                EmoteRenderer.RenderSpeechBubble(dc, s.SpeechText, s.SpeechMessage ?? "",
+                    s.SpeechElapsed, s.CanvasW, s.ArtTop + 34 * s.Scale, s.Scale);
+            }
             for (var i = CoinPopups.Count - 1; i >= 0; i--)
             {
                 var (amount, elapsed) = CoinPopups[i];
-                EmoteRenderer.RenderCoinPopup(dc, amount, elapsed, 118 * s.Scale, 34 * s.Scale);
+                EmoteRenderer.RenderCoinPopup(dc, amount, elapsed, s.CanvasW * 0.52, s.CanvasH * 0.16);
             }
         }
         else
         {
             dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, ActualWidth, ActualHeight));
         }
-
-        // generous invisible hit area so petting/dragging feels reliable
-        var s2 = Spec?.Scale ?? 1.0;
-        dc.DrawRectangle(CatPalette.Frozen("#03000000"), null,
-            new Rect(55 * s2, 16 * s2, 110 * s2, 150 * s2));
     }
 }

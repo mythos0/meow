@@ -26,7 +26,7 @@ public class SkinCatalogTests
     public void DefaultBreed_IsFree()
     {
         Assert.Equal(0, SkinCatalog.Breeds[0].Price);
-        Assert.Equal("orange_tabby", SkinCatalog.Breeds[0].Id);
+        Assert.Equal("grey_tabby", SkinCatalog.Breeds[0].Id);
     }
 
     [Fact]
@@ -67,13 +67,18 @@ public class SoundCatalogTests
     [Fact]
     public void EveryMappedSound_HasAnEntryFile()
     {
+        var rng = new Random(7);
         foreach (CatState s in Enum.GetValues(typeof(CatState)))
         {
-            var entry = SoundCatalog.EntryFor(s);
+            var entry = SoundCatalog.EntryFor(s, rng);
             if (entry is not null) Assert.Contains(entry, SoundCatalog.AllFiles());
             var loop = SoundCatalog.LoopFor(s);
             if (loop is not null) Assert.Contains(loop, SoundCatalog.AllFiles());
         }
+        // meow variants resolve to real files too
+        foreach (var m in new[] { SoundCatalog.RandomMeow(rng), SoundCatalog.MeowReal,
+                                  SoundCatalog.MeowReal2, SoundCatalog.MeowReal3 })
+            Assert.Contains(m, SoundCatalog.AllFiles());
     }
 
     [Fact]

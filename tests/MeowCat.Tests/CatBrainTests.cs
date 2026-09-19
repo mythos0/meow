@@ -139,7 +139,10 @@ public class CatBrainTests
         var elapsed = 0.0;
         while (brain.State == CatState.Jumping && elapsed < 10) { brain.Tick(0.1, Env()); elapsed += 0.1; }
         Assert.Equal(CatState.Sitting, brain.State);
-        Assert.Equal(target.CenterX, model.X, 1);
+        // the new jump logic limits reach to ±620 DIU, then clamps inside the window span
+        var expectedX = Math.Clamp(Math.Clamp(target.CenterX, 200 - 620, 200 + 620),
+            target.X + 40, target.X + target.W - 40);
+        Assert.Equal(expectedX, model.X, 1);
         Assert.Equal(target.TopY, model.Y, 1);
     }
 
@@ -229,7 +232,7 @@ public class CatBrainTests
             Assert.InRange(brain.Happiness, 0, 100);
             Assert.InRange(brain.Energy, 0, 100);
             Assert.InRange(brain.Boredom, 0, 100);
-            Assert.InRange(model.X, 0, 1200);
+            Assert.InRange(model.X, 0, 1920);   // bounds span the whole work area now
             Assert.True(wallet.Balance >= coinsBefore, "coins must never decrease without purchases");
             Assert.True(model.Y <= 1040 + 0.001, $"cat below the floor: {model.Y}");
             Assert.True(model.Y >= 100, $"cat launched into space: {model.Y}");

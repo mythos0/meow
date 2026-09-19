@@ -58,3 +58,39 @@ dotnet test MeowCat.sln -c Release        # → 40/40 passed
 - Per-monitor DPI: mouse/window rects are converted with the **primary** monitor scale — mixed-DPI
   multi-monitor setups may show small offset on secondary monitors (listed as a future fix).
 - UWP full-screen apps: DWM-cloaked windows are excluded from jump targets automatically.
+
+---
+
+# v2.0.0 test matrix — 56/56 PASS
+
+## Automated (dotnet test → 56 xunit tests)
+
+New in v2.0.0 (`V3FeatureTests`, +16 tests):
+
+| Area | Tests |
+|---|---|
+| Frame catalog | default breed has 8-frame motion clips & 4-frame stationary; MaxFramesPerClip=8; `FrameFile` wraps by modulo |
+| Platform brain | jump lands on a window top and registers the platform; walking on a platform is clamped to the window span; **auto-hop triggers while walking near a tab top**; `NearestOtherWindow` never picks the current window |
+| Desktop strolls | with no windows + desktop points, the cat's stroll range covers the icon neighbourhoods |
+| Reminders | store round-trip; corrupt file → empty + `.corrupt-` backup; one-shot fires exactly once then disables; repeating rolls forward; stale reminders ignored on first run; `NextOccurrence` math; movement parsing falls back to Dancing |
+| Settings | `AutoStartEnabled` / `ReminderPopupsEnabled` persist round-trip |
+
+Updated legacy tests: jump landing X now honours the ±620 reach clamp + window-span clamp;
+10k-tick sim asserts bounds against the full work area.
+
+Regression suite: 40 v1 tests (brain invariants, economy, catalogs, jump physics, settings) —
+all green.
+
+## Manual QA checklist (Windows 11, v2.0.0)
+
+1. Install `MeowCat-2.0.0-x64.msi` over 1.x → upgrade completes, **desktop shortcut exists**.
+2. Open a fullscreen video (F11) → the cat **stays on top**; toggle glass overlay → also on top.
+3. Walk near a window title bar → the cat hops onto it; watch it stroll along the bar and hop to
+   the neighbouring window's top edge.
+4. Minimize everything → the cat walks between desktop folder icons and scratches beside one.
+5. Right-click → *Make angry*, then click the cat twice → cracks appear **above** other windows;
+   give a treat → every crack fades away.
+6. Right-click → *Reminders…* → add one for 1 minute ahead, movement=Dancing → at fire time:
+   meow + speech bubble + the cat dances; tray balloon shows too.
+7. Right-click → *Settings…* → enable auto-start → registry Run key present; sound off → silence.
+8. Uninstall → both shortcuts and the install folder are gone.
