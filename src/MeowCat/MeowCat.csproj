@@ -12,9 +12,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MeowCat</RootNamespace>
     <AssemblyName>MeowCat</AssemblyName>
-    <Version>2.0.0</Version>
-    <FileVersion>2.0.0.0</FileVersion>
-    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <Version>2.0.1</Version>
+    <FileVersion>2.0.1.0</FileVersion>
+    <AssemblyVersion>2.0.1.0</AssemblyVersion>
     <Product>MeowCat</Product>
     <Description>A realistic frame-animated desktop cat for Windows 11</Description>
     <Company>mythos0</Company>

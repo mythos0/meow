@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Generate a wixl-compatible (WiX v3 dialect) .wxs from the publish output, then the MSI
-is built with msitools' wixl (works on Linux). Stable component GUIDs via uuid5."""
+"""Generate a wixl-compatible (WiX v3 dialect) .wxs from the publish output.
+Built with msitools' wixl (native Linux MSI toolchain — the .NET wix tool's
+Directory compiler is broken on Unix: it canonicalizes names via C:\\ paths).
+
+Recursive: every file under publish/ is packaged in its real subfolder —
+exe+dlls at the root, Assets/sprites/<breed>/<clip>/frame_XX.png nested, etc.
+Stable component GUIDs via uuid5. Shortcuts: Start Menu + Desktop (default on).
+"""
 import os
 import sys
 import uuid
 
 WIX_NS = "http://schemas.microsoft.com/wix/2006/wi"
-GUID_NS = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # standard URL namespace
+GUID_NS = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
 
-def guid_for(rel: str) -> str:
-    return str(uuid.uuid5(GUID_NS, "meowcat:" + rel))
+def guid_for(key: str) -> str:
+    return str(uuid.uuid5(GUID_NS, "meowcat:" + key))
 
 
 def ident(rel: str) -> str:
@@ -18,139 +24,85 @@ def ident(rel: str) -> str:
     return "c_" + safe
 
 
+def dir_ident(rel: str) -> str:
+    safe = rel.replace("\\", "_").replace("/", "_").replace(".", "_").replace("-", "_").replace(" ", "_")
+    return "D_" + safe
+
+
 def main(publish_dir: str, out_path: str, version: str):
     publish_dir = os.path.abspath(publish_dir)
-    root_files, assets, sounds = [], [], []
-    for root, _dirs, files in os.walk(publish_dir):
-        for f in sorted(files):
+
+    # ---- collect files and directory tree
+    files = []           # (rel, full)
+    dirs = set()         # relative dir paths, excluding root
+    for root, _ds, fs in os.walk(publish_dir):
+        for f in sorted(fs):
             full = os.path.join(root, f)
             rel = os.path.relpath(full, publish_dir).replace(os.sep, "/")
-            if rel.startswith("Assets/sounds/"):
-                sounds.append((rel, full))
-            elif rel.startswith("Assets/"):
-                assets.append((rel, full))
-            else:
-                root_files.append((rel, full))
+            files.append((rel, full))
+            rd = os.path.dirname(rel)
+            while rd:
+                dirs.add(rd)
+                rd = os.path.dirname(rd) if os.path.dirname(rd) != rd else ""
 
-    def comp(rel, full, extra=""):
-        cid, fid = ident(rel), ident(rel).replace("c_", "f_", 1)
-        name = rel.split("/")[-1]
-        g = guid_for(rel)
-        return (f'            <Component Id="{cid}" Guid="{g}" {extra}>\n'
-                f'              <File Id="{fid}" Name="{name}" Source="{full}" />\n'
-                f'            </Component>')
+    # nested tree builder
+    tree = {}
+    for d in sorted(dirs):
+        parts = d.split("/")
+        node = tree
+        for p in parts:
+            node = node.setdefault(p, {})
 
-    comps = []
-    feature_refs = []
-
-    def add(items, extra=""):
-        for rel, full in items:
-            comps.append(comp(rel, full, extra))
-            feature_refs.append(ident(rel))
-
-    add(root_files)
-    add(assets)
-    add(sounds)
-
-    # shortcut components (keypath = registry value)
-    sc_cid = "c_StartMenuShortcut"
-    shortcut_comp = f'''            <Component Id="{sc_cid}" Guid="{guid_for('start-menu-shortcut')}">
-              <Shortcut Id="s_MeowCatShortcut" Name="MeowCat"
-                        Description="Your realistic 3D-shaded desktop cat"
-                        Target="[INSTALLFOLDER]MeowCat.exe"
-                        WorkingDirectory="INSTALLFOLDER"
-                        Icon="AppIcon.exe" />
-              <RemoveFolder Id="rm_AppMenuDir" On="uninstall" />
-              <RegistryValue Root="HKCU" Key="Software\\MeowCat" Name="installed"
-                             Type="integer" Value="1" KeyPath="yes" />
-            </Component>'''
-    feature_refs.append(sc_cid)
-
-    # desktop shortcut - created BY DEFAULT on install (removed again on uninstall)
-    dsc_cid = "c_DesktopShortcut"
-    desktop_comp = f'''      <Component Id="{dsc_cid}" Guid="{guid_for('desktop-shortcut')}">
-        <Shortcut Id="s_MeowCatDesktop" Name="MeowCat"
-                  Description="Your realistic 3D-shaded desktop cat"
-                  Target="[INSTALLFOLDER]MeowCat.exe"
-                  WorkingDirectory="INSTALLFOLDER"
-                  Icon="AppIcon.exe" />
-        <RegistryValue Root="HKCU" Key="Software\\MeowCat" Name="desktopShortcut"
-                       Type="integer" Value="1" KeyPath="yes" />
-      </Component>'''
-    feature_refs.append(dsc_cid)
-
-    # desktop shortcut — created BY DEFAULT on install (removed again on uninstall)
-    dsc_cid = "c_DesktopShortcut"
-    desktop_comp = f'''      <Component Id="{dsc_cid}" Guid="{guid_for('desktop-shortcut')}">
-        <Shortcut Id="s_MeowCatDesktop" Name="MeowCat"
-                  Description="Your realistic 3D-shaded desktop cat"
-                  Target="[INSTALLFOLDER]MeowCat.exe"
-                  WorkingDirectory="INSTALLFOLDER"
-                  Icon="AppIcon.exe" />
-        <RegistryValue Root="HKCU" Key="Software\\MeowCat" Name="desktopShortcut"
-                       Type="integer" Value="1" KeyPath="yes" />
-      </Component>'''
-    feature_refs.append(dsc_cid)
-
-    refs = "\n".join(f'        <ComponentRef Id="{r}" />' for r in feature_refs)
-
-    doc = f'''<?xml version="1.0" encoding="utf-8"?>
-<Wix xmlns="{WIX_NS}">
-  <!-- AUTO-GENERATED by scripts/gen_wixl_wxs.py — built with wixl (msitools). -->
-  <Product Id="*" Name="MeowCat" Language="1033" Version="{version}" Manufacturer="mythos0"
-           UpgradeCode="B7E4A2D1-8C93-4F6E-9A15-D20C7E3F8B42">
-
-    <Package Id="*" InstallerVersion="500" Compressed="yes" Description="MeowCat - your desktop cat" />
-
-    <MajorUpgrade AllowSameVersionUpgrades="yes"
-                  DowngradeErrorMessage="A newer version of [ProductName] is already installed. Uninstall it first." />
-    <Media Id="1" Cabinet="MeowCat.cab" EmbedCab="yes" />
-
-    <Icon Id="AppIcon.exe" SourceFile="{publish_dir}/Assets/app.ico" />
-    <Property Id="ARPPRODUCTICON" Value="AppIcon.exe" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/mythos0/meow" />
-    <Property Id="ARPNOREPAIR" Value="1" />
-
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="MeowCat">
-          <Directory Id="AssetsDir" Name="Assets">
-            <Directory Id="SoundsDir" Name="sounds" />
-          </Directory>
-{chr(10).join('          ' + c for c in comps if 'Directory=' not in c).strip()}
-        </Directory>
-      </Directory>
-      <Directory Id="ProgramMenuFolder">
-        <Directory Id="AppMenuDir" Name="MeowCat">
-{shortcut_comp}
-        </Directory>
-      </Directory>
-      <Directory Id="DesktopFolder" Name="Desktop">
-{desktop_comp}
-      </Directory>
-    </Directory>
-
-    <Feature Id="Main" Title="MeowCat" Description="The realistic desktop cat" Level="1">
-{refs}
-    </Feature>
-  </Product>
-</Wix>
-'''
-    # place root components under INSTALLFOLDER, assets under AssetsDir, sounds under SoundsDir
-    # (simplest: regenerate with explicit grouping)
-    def block(items, extra=""):
+    def emit_tree(children, pad, prefix):
+        """Emit nested <Directory> elements, components grouped in their dir."""
         out = []
-        for rel, full in items:
-            cid, fid = ident(rel), ident(rel).replace("c_", "f_", 1)
-            name = rel.split("/")[-1]
-            out.append(f'          <Component Id="{cid}" Guid="{guid_for(rel)}" {extra}>')
-            out.append(f'            <File Id="{fid}" Name="{name}" Source="{full}" />')
-            out.append('          </Component>')
-        return "\n".join(out)
+        for name, kids in sorted(children.items()):
+            rel = f"{prefix}/{name}" if prefix else name
+            did = dir_ident(rel)
+            out.append(f'{pad}<Directory Id="{did}" Name="{name}">')
+            here = [f for f in files if os.path.dirname(f[0]) == rel]
+            out.extend(comp_block(sorted(here), pad + "  "))
+            out.extend(emit_tree(kids, pad + "  ", rel))
+            out.append(f"{pad}</Directory>")
+        return out
 
-    root_block = block(root_files)
-    assets_block = block(assets)
-    sounds_block = block(sounds)
+    root_files = [f for f in files if "/" not in f[0]]
+
+    def comp_block(items, pad):
+        out = []
+        for relf, fullf in sorted(items):
+            cid, fid = ident(relf), ident(relf).replace("c_", "f_", 1)
+            out.append(f'{pad}<Component Id="{cid}" Guid="{guid_for(relf)}">')
+            out.append(f'{pad}  <File Id="{fid}" Name="{os.path.basename(relf)}" Source="{fullf}" />')
+            out.append(f"{pad}</Component>")
+        return out
+
+    shortcut_comp = f'''        <Component Id="c_StartMenuShortcut" Guid="{guid_for('start-menu-shortcut')}">
+          <Shortcut Id="s_MeowCatShortcut" Name="MeowCat"
+                    Description="Your realistic 3D-shaded desktop cat"
+                    Target="[INSTALLFOLDER]MeowCat.exe"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="AppIcon.exe" />
+          <RemoveFolder Id="rm_AppMenuDir" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\\MeowCat" Name="installed"
+                         Type="integer" Value="1" KeyPath="yes" />
+        </Component>'''
+
+    desktop_comp = f'''        <Component Id="c_DesktopShortcut" Guid="{guid_for('desktop-shortcut')}">
+          <Shortcut Id="s_MeowCatDesktop" Name="MeowCat"
+                    Description="Your realistic 3D-shaded desktop cat"
+                    Target="[INSTALLFOLDER]MeowCat.exe"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="AppIcon.exe" />
+          <RegistryValue Root="HKCU" Key="Software\\MeowCat" Name="desktopShortcut"
+                         Type="integer" Value="1" KeyPath="yes" />
+        </Component>'''
+
+    nested = emit_tree(tree.get("Assets", {}), "          ", "Assets")
+    assets_top = comp_block(sorted([f for f in files if os.path.dirname(f[0]) == "Assets"]), "          ")
+    root_block = comp_block(root_files, "        ")
+    feature_refs = [ident(f[0]) for f in files] + ["c_StartMenuShortcut", "c_DesktopShortcut"]
+    refs = "\n".join(f"        <ComponentRef Id=\"{r}\" />" for r in feature_refs)
 
     doc = f'''<?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="{WIX_NS}">
@@ -174,10 +126,8 @@ def main(publish_dir: str, out_path: str, version: str):
         <Directory Id="INSTALLFOLDER" Name="MeowCat">
 {root_block}
           <Directory Id="AssetsDir" Name="Assets">
-{assets_block}
-            <Directory Id="SoundsDir" Name="sounds">
-{sounds_block}
-            </Directory>
+{assets_top}
+{chr(10).join(nested)}
           </Directory>
         </Directory>
       </Directory>
@@ -199,7 +149,7 @@ def main(publish_dir: str, out_path: str, version: str):
 '''
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(doc)
-    print(f"wixl wxs written: {len(comps) + 1} components -> {out_path}")
+    print(f"wixl wxs written: {len(files)} file components, {len(dirs)} asset dirs -> {out_path}")
 
 
 if __name__ == "__main__":

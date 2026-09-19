@@ -27,6 +27,7 @@
     <Feature Id="Main" Title="MeowCat" Description="The realistic desktop cat" Level="1">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
     </Feature>
 
     <?include Dirs.wxi ?>
@@ -44,6 +45,19 @@
                 Icon="AppIcon.exe" />
       <RemoveFolder Id="RemoveAppMenuDir" On="uninstall" />
       <RegistryValue Root="HKCU" Key="Software\MeowCat" Name="installed"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- Desktop shortcut is created BY DEFAULT on install (per-machine →
+         Public Desktop so every user sees it); removed on uninstall. -->
+    <Component Id="DesktopShortcut" Directory="DesktopFolder">
+      <Shortcut Id="MeowCatDesktopShortcut"
+                Name="MeowCat"
+                Description="Your realistic 3D-shaded desktop cat"
+                Target="[INSTALLFOLDER]MeowCat.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="AppIcon.exe" />
+      <RegistryValue Root="HKCU" Key="Software\MeowCat" Name="desktopShortcut"
                      Type="integer" Value="1" KeyPath="yes" />
     </Component>
 

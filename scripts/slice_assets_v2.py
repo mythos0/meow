@@ -28,9 +28,17 @@ MAX_SIDE = 470
 
 from slice_assets import SHEETS  # reuse the mapping
 
+# magenta-screen regenerations for the breeds whose white fur died on green
+SHEETS.update({
+    "calico_walk_magenta":    (2, "walk",    "calico"),
+    "calico_sit_magenta":     (1, "sit",     "calico"),
+    "calico_scratch_magenta": (2, "scratch", "calico"),
+})
+
 # per-sheet minimum green dominance for dist<58 candidates (protect pale/white fur)
 MIN_DOM = {
     "calico_walk": 20, "calico_sit": 20, "calico_scratch": 20,
+    "calico_walk_magenta": 26, "calico_sit_magenta": 26, "calico_scratch_magenta": 26,
     "siamese_walk": 10, "siamese_sit": 10, "siamese_scratch": 10,
     "persian_walk": 10, "persian_sit": 10, "persian_scratch": 10,
 }
@@ -62,13 +70,30 @@ def key_background(rgb: np.ndarray, min_dom: int = 6) -> np.ndarray:
 
     stack = np.stack([np.sqrt((r - s[0]) ** 2 + (g - s[1]) ** 2 + (b - s[2]) ** 2) for s in samples])
     dist = stack.min(axis=0)
-    dom = g - np.maximum(r, b)
 
-    # when the sheet bg is genuinely green, require a green cast on candidate pixels too
-    # (protects white/cream fur against pale green screens)
+    # chroma axis follows the sampled bg: green screens push g up, magenta
+    # screens push r/b up. Everything below is written against `dom`, so the
+    # same thresholds serve both screen colors.
+    dom_green = g - np.maximum(r, b)
+    dom_magenta = np.minimum(r, b) - g
     dom_bg = float(np.median([s[1] - max(s[0], s[2]) for s in samples]))
-    if dom_bg > 10:
-        cand = ((dist < 58) & (dom > min_dom)) | ((dom > 12) & (dist < 140))
+    magenta = dom_bg < -10
+    dom = dom_magenta if magenta else dom_green
+
+    # when the sheet bg is genuinely colored, require a matching cast on
+    # candidate pixels too (protects white/cream fur against pale screens)
+    if abs(dom_bg) > 10:
+        if magenta:
+            # strong magenta screens bounce pink onto white fur; scale the
+            # spill-catcher with bg strength so pink-lit fur is NOT keyed.
+            # The close-range rule (dom>10 & dist<75) catches the bloomed
+            # floor shadow under the paws without reaching normal fur.
+            spill_dom = max(14, int(-dom_bg) // 3)
+            cand = (((dist < 58) & (dom > min_dom))
+                    | ((dom > spill_dom) & (dist < 140))
+                    | ((dom > 10) & (dist < 75)))
+        else:
+            cand = ((dist < 58) & (dom > min_dom)) | ((dom > 12) & (dist < 140))
     else:
         cand = (dist < 58) | ((dom > 12) & (dist < 140))
 
@@ -80,24 +105,78 @@ def key_background(rgb: np.ndarray, min_dom: int = 6) -> np.ndarray:
     bg = np.isin(labels, list(border_labels)) if border_labels else np.zeros((h, w), bool)
 
     # ---- 3. sure-foreground protection
-    # hue-neutral pixels (no green cast at all) or very far from every bg sample
-    sure_fg = (dom < 4) | (dist > 115)
-    protect = np.asarray(Image.fromarray((sure_fg * 255).astype(np.uint8))
-                         .filter(ImageFilter.MaxFilter(5)), dtype=np.uint8) > 0
-    bg &= ~protect
+    # Green/pale screens key aggressively → protect hue-neutral or far pixels.
+    # Strong magenta screens require real chroma for candidacy already, so
+    # protection is skipped: it would only dam off dark shadow cores and
+    # trap bloomed background pockets (between legs, under the belly).
+    if not magenta:
+        sure_fg = (dom < 4) | (dist > 115)
+        protect = np.asarray(Image.fromarray((sure_fg * 255).astype(np.uint8))
+                             .filter(ImageFilter.MaxFilter(5)), dtype=np.uint8) > 0
+        bg &= ~protect
 
-    # ---- 3b. fill enclosed holes (bites fully surrounded by fur)
-    fg_filled = ndimage.binary_fill_holes(~bg)
-    bg = ~fg_filled
+    # ---- 3b. enclosed regions
+    # Green screens key weakly (bites inside fur happen) → repair by filling
+    # enclosed transparent regions back in. Strong chroma screens key cleanly
+    # and enclosed regions are REAL see-through gaps (between-legs wedges) →
+    # they must stay transparent; filling them bakes pink blobs into the cat.
+    if not magenta:
+        fg_filled = ndimage.binary_fill_holes(~bg)
+        holes = (~bg) & fg_filled
+        if holes.any():
+            lab2, n2 = ndimage.label(holes)
+            bg_color = np.array(samples[-1], dtype=np.float32)
+            flat = np.dstack([r, g, b])
+            drop_dom = abs(dom_bg) * 0.45
+            for i in range(1, n2 + 1):
+                comp = lab2 == i
+                med = np.median(flat[comp], axis=0)
+                d = float(np.sqrt(((med - bg_color) ** 2).sum()))
+                dm = float(med[1] - max(med[0], med[2]))
+                if d < 90 and dm > drop_dom:
+                    bg |= comp
+    else:
+        # strong chroma screen: any modest-sized foreground island whose color
+        # is still close to the screen is trapped background (bloomed gaps
+        # between legs, shadow-dammed pockets) → transparent. Tiny islands
+        # (stray pixels) and big ones (real cat parts) are left alone.
+        labF, nF = ndimage.label(~bg)
+        if nF > 1:
+            sizesF = ndimage.sum(~bg, labF, range(1, nF + 1))
+            main = int(np.argmax(sizesF)) + 1
+            main_size = float(sizesF[main - 1])
+            bg_color = np.array(samples[-1], dtype=np.float32)
+            flat = np.dstack([r, g, b])
+            for i in range(1, nF + 1):
+                if i == main:
+                    continue
+                comp = labF == i
+                n_px = int(sizesF[i - 1])
+                if n_px < 60 or n_px > 0.3 * main_size:
+                    continue
+                med = np.median(flat[comp], axis=0)
+                d = float(np.sqrt(((med - bg_color) ** 2).sum()))
+                dm = float(min(med[0], med[2]) - med[1])
+                # bg-tinted pocket (close to screen color) OR dark neutral
+                # shadow core left behind after the bloom around it keyed out
+                if d < 120 or (dm < 10 and d > 100):
+                    bg |= comp
 
     # ---- 4. alpha + despill + boundary refinement
     alpha = np.where(bg, 0.0, 255.0)
     spill = (~bg) & (dom > 8)
-    g2 = g.copy()
-    g2[spill] = np.maximum(r[spill], b[spill]) * 1.05 + g[spill] * 0.15
-    g2 = np.clip(g2, 0, 255)
+    r2, g2, b2 = r.copy(), g.copy(), b.copy()
+    if magenta:
+        # pull the magenta cast out of edge fur: shrink r/b toward g
+        excess = np.minimum(r[spill], b[spill]) - g[spill]
+        excess = np.maximum(excess, 0)
+        r2[spill] = r[spill] - excess * 0.75
+        b2[spill] = b[spill] - excess * 0.75
+    else:
+        g2[spill] = np.maximum(r[spill], b[spill]) * 1.05 + g[spill] * 0.15
+    g2 = np.clip(g2, 0, 255); r2 = np.clip(r2, 0, 255); b2 = np.clip(b2, 0, 255)
 
-    img = np.dstack([r, g2, b, alpha]).astype(np.uint8)
+    img = np.dstack([r2, g2, b2, alpha]).astype(np.uint8)
     im = Image.fromarray(img)
 
     core_fg = np.asarray(
@@ -112,9 +191,16 @@ def key_background(rgb: np.ndarray, min_dom: int = 6) -> np.ndarray:
     # second despill pass on semi-transparent edge pixels
     arr = np.asarray(im).astype(np.float32)
     edge = (arr[..., 3] > 0) & (arr[..., 3] < 250)
-    dom2 = arr[..., 1] - np.maximum(arr[..., 0], arr[..., 2])
-    fix = edge & (dom2 > 12)
-    arr[..., 1][fix] = np.maximum(arr[..., 0][fix], arr[..., 2][fix]) * 1.04
+    if magenta:
+        dom2 = np.minimum(arr[..., 0], arr[..., 2]) - arr[..., 1]
+        fix = edge & (dom2 > 12)
+        excess = np.minimum(arr[..., 0][fix], arr[..., 2][fix]) - arr[..., 1][fix]
+        arr[..., 0][fix] -= excess * 0.7
+        arr[..., 2][fix] -= excess * 0.7
+    else:
+        dom2 = arr[..., 1] - np.maximum(arr[..., 0], arr[..., 2])
+        fix = edge & (dom2 > 12)
+        arr[..., 1][fix] = np.maximum(arr[..., 0][fix], arr[..., 2][fix]) * 1.04
     return np.clip(arr, 0, 255).astype(np.uint8)
 
 
