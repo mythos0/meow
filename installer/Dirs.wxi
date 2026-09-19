@@ -1,0 +1,13 @@
+<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Directory tree for the MeowCat install (generated-safe: static). -->
+  <StandardDirectory Id="ProgramFiles64Folder">
+    <Directory Id="INSTALLFOLDER" Name="MeowCat">
+      <Directory Id="AssetsDir" Name="Assets">
+        <Directory Id="SoundsDir" Name="sounds" />
+      </Directory>
+    </Directory>
+  </StandardDirectory>
+  <StandardDirectory Id="ProgramMenuFolder">
+    <Directory Id="AppMenuDir" Name="MeowCat" />
+  </StandardDirectory>
+</Include>
