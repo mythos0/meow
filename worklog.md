@@ -83,3 +83,18 @@ Work Log:
 Stage Summary:
 - v3.1.0 delivered: download/MeowCat-3.1.0-portable.exe (162 checks green)
 - Ready: push private repo, then public repo (README + release asset only)
+
+---
+Task ID: 9 (final)
+Agent: Super Z (main)
+Task: repos — private push (code+README) and public push (README+release only)
+
+Work Log:
+- Private repo mythos0/meow: commits 6c86bbc (v3.1.0: all features/tests/docs) + 059bc28 (drop debug repro) pushed to main
+- Public repo mythos0/MeowCat (already existed, public): README rewritten for v3.1 procedural era (download/FAQ/interactions/credits), old v2 screenshots replaced with v31_live/v31_store/v31_sheet/v31_panda, commit 1dd4cdb pushed
+- Release v3.1.0 created on public repo ("Panda, Window Hopping & Open-Field Roaming") with MeowCat-3.1.0-portable.exe attached (76,166,079 bytes, state=uploaded); releases/latest now points to v3.1.0; download URL verified (HTTP 302)
+- Final verification: 78 unit + 60 visual + 24 E2E green (two consecutive clean 24/24 runs)
+
+Stage Summary:
+- v3.1.0 shipped: private repo = full source; public repo = README + screenshots + release asset only
+- Deliverable: download/MeowCat-3.1.0-portable.exe + GitHub release live
