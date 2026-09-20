@@ -1,5 +1,5 @@
 // renderer.test.mjs — visual regression via Playwright + pixel analysis.
-// v3.1: covers all 20 states, all 13 breeds, and all 11 emotes.
+// v3.2: covers all 20 states, all 20 breeds, and all 11 emotes.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -110,7 +110,7 @@ describe('cat-renderer visual', () => {
     assert.notEqual(a, b, 'frames identical — animation dead');
   });
 
-  // ---- all 13 breeds render distinctly ----
+  // ---- all 20 breeds render distinctly ----
   test('all breeds render distinctly', async () => {
     const page = await browser.newPage();
     const sig = {};
@@ -132,7 +132,7 @@ describe('cat-renderer visual', () => {
   });
 
   // ---- every body type keeps feet on the ground while walking ----
-  for (const body of ['normal', 'slim', 'kitten', 'chubby', 'large', 'panda']) {
+  for (const body of ['normal', 'slim', 'kitten', 'chubby', 'large', 'panda', 'chibi', 'munchkin']) {
     const breed = Object.keys(PALETTES).find(b => (PALETTES[b].body || 'normal') === body);
     test(`body "${body}" (${breed}) walks with feet near the ground`, async () => {
       const page = await browser.newPage();

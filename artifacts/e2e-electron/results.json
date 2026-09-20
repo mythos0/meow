@@ -12,7 +12,7 @@
   {
     "name": "brain pose advances (animation clock)",
     "pass": true,
-    "extra": "t 0.42 → 2.24"
+    "extra": "t 0.42 → 2.26"
   },
   {
     "name": "cat state machine runs",
@@ -27,7 +27,7 @@
   {
     "name": "coins persist through IPC+store",
     "pass": true,
-    "extra": "150 → 160"
+    "extra": "1000023 → 1000033"
   },
   {
     "name": "settings round-trip",
@@ -52,7 +52,7 @@
   {
     "name": "settings open (warm) is fast (<300ms)",
     "pass": true,
-    "extra": "44ms"
+    "extra": "37ms"
   },
   {
     "name": "close keeps the window warm (page target alive)",
@@ -62,7 +62,7 @@
   {
     "name": "reopen is instant (warm reuse, <300ms)",
     "pass": true,
-    "extra": "18ms"
+    "extra": "27ms"
   },
   {
     "name": "reopened settings window takes focus",
@@ -70,9 +70,9 @@
     "extra": ""
   },
   {
-    "name": "settings shows 13 breed cards",
+    "name": "settings shows 20 breed cards",
     "pass": true,
-    "extra": "13"
+    "extra": "20"
   },
   {
     "name": "unlimited coins: no locked breeds",
@@ -92,27 +92,27 @@
   {
     "name": "about page shows version + developer link",
     "pass": true,
-    "extra": "{\"ver\":\"v3.1.0\",\"dev\":true}"
+    "extra": "{\"ver\":\"v3.2.0\",\"dev\":true}"
   },
   {
     "name": "panda unlocks free (unlimited coins promo)",
     "pass": true,
-    "extra": "{\"ok\":true,\"alreadyOwned\":true,\"coins\":160}"
+    "extra": "{\"ok\":true,\"alreadyOwned\":true,\"coins\":1000033}"
   },
   {
-    "name": "reminders window opens",
+    "name": "settings window opens for reminders UI",
     "pass": true,
     "extra": ""
   },
   {
-    "name": "reminder added from real UI",
+    "name": "reminder added from merged settings UI",
     "pass": true,
     "extra": "1 rows"
   },
   {
     "name": "live: cat jumps onto a nearby window top border",
     "pass": true,
-    "extra": "{\"ok\":true,\"state\":\"scratch\",\"baseY\":640,\"x\":534}"
+    "extra": "{\"ok\":true,\"state\":\"pounce\",\"baseY\":640,\"x\":534}"
   },
   {
     "name": "e2e screenshots saved",

@@ -12,7 +12,7 @@
 <canvas id="cv" width="360" height="260"></canvas>
 <canvas id="grid" width="0" height="0" style="display:none"></canvas>
 <script type="module">
-import { drawCat, drawParticles, drawEmote, STATES, PALETTES, EMOTES } from '../src/cat-renderer.js';
+import { drawCat, drawParticles, drawEmote, emoteAnchor, STATES, PALETTES, EMOTES } from '../src/cat-renderer.js';
 
 // Mode 1: single render — ?state=walk&t=0.3&breed=grey_tabby&dir=1&scale=1[&emote=heart]
 // Mode 2: contact sheet — ?sheet=1 (all states x timestamps + breed rows + emote row)
@@ -97,7 +97,10 @@ if (q.get('sheet')) {
   const opts = { t, state, breed, dir, scale, jumpP };
   drawCat(ctx, opts);
   drawParticles(ctx, opts);
-  if (emote) drawEmote(ctx, { kind: emote, t: parseFloat(q.get('emoteT') || '0.5'), x: 46, y: -150, scale: 1 });
+  if (emote) {
+    const A = emoteAnchor(q.get('breed') || 'grey_tabby');
+    drawEmote(ctx, { kind: emote, t: parseFloat(q.get('emoteT') || '0.5'), x: A.x, y: A.y, scale: 1 });
+  }
   ctx.restore();
   document.title = 'single-ready:' + state;
 }

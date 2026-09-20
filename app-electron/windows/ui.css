@@ -7,7 +7,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
   font: 14px/1.5 system-ui, 'Segoe UI', sans-serif; user-select: none; }
-body { padding: 18px; }
+body { padding: 18px; overflow-y: auto; }  /* settings now holds reminders too */
 h1 { font-size: 17px; margin: 0 0 4px; color: var(--accent); }
 h2 { font-size: 13px; margin: 18px 0 8px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }

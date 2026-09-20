@@ -11,6 +11,20 @@ import { createTopmostEnforcer } from './src/topmost.js';
 import { createWindowScanner } from './src/window-scan.js';
 import { createFastWindows } from './src/fast-windows.js';
 
+// ------------------------------------------------------------------ v3.2 memory diet
+// User-visible goal: fewest possible processes & lowest RAM in Task Manager.
+//  1. no GPU process — the cat is a tiny 2D canvas, Skia software rendering is
+//     plenty and a full GPU process (~50-120MB) is pure waste
+//  2. network service in the browser process (no separate utility process)
+//  3. audio service in the host process (no separate utility process)
+//  4. single helper window: Reminders lives INSIDE Settings (one warm hidden
+//     renderer instead of two)
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('in-process-gpu');            // no GPU process
+app.commandLine.appendSwitch('network-service-in-process'); // no network utility
+app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=160');
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let tray = null;
 let catWin = null;
@@ -64,6 +78,7 @@ function createCatWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true, nodeIntegration: false,
       backgroundThrottling: false,
+      v8CacheOptions: 'none',   // don't hold code-cache blobs we never reuse
     },
   });
   catWin.setMenuBarVisibility(false);
@@ -111,10 +126,10 @@ function createTray() {
 }
 
 // ---------------------------------------------------------------- helper windows
-// v3.1: warm window pool — created hidden at startup, shown instantly on demand.
+// v3.2: ONE warm helper window — Reminders is a section inside Settings now,
+// so there is a single hidden renderer instead of two (RAM diet).
 const WIN_SPECS = {
-  settings: { width: 580, height: 830, title: 'MeowCat Settings' },
-  reminders: { width: 520, height: 620, title: 'MeowCat Reminders' },
+  settings: { width: 640, height: 940, title: 'MeowCat Settings' },
 };
 
 function makeWindow(name) {
@@ -132,16 +147,17 @@ function makeWindow(name) {
 const fastWins = createFastWindows({
   factory: {
     settings: () => makeWindow('settings'),
-    reminders: () => makeWindow('reminders'),
   },
 });
 
 function openSettings() {
-  try { fastWins.show('settings'); } catch { fastWins.warm('settings'); fastWins.show('settings'); }
+  try { return fastWins.show('settings'); } catch { fastWins.warm('settings'); return fastWins.show('settings'); }
 }
 
+// 'reminders' opens the same Settings window (the UI scrolls to the section)
 function openReminders() {
-  try { fastWins.show('reminders'); } catch { fastWins.warm('reminders'); fastWins.show('reminders'); }
+  const w = openSettings();
+  try { w?.webContents?.send('focus-reminders'); } catch {}
 }
 
 // ---------------------------------------------------------------- scheduler + coins
@@ -207,14 +223,14 @@ ipcMain.handle('hit-test', (_e, overCat) => {
 });
 
 ipcMain.handle('open-window', (_e, name) => {
-  if (name === 'settings') openSettings();
   if (name === 'reminders') openReminders();
+  else openSettings();
 });
 
 // in-page Close buttons must hide via IPC: renderer-initiated window.close()
 // destroys the window outright and would bypass the warm-pool close handler
 ipcMain.handle('close-window', (_e, name) => {
-  try { fastWins.hide(name); } catch { /* ignore */ }
+  try { fastWins.hide('settings'); } catch { /* ignore */ }
 });
 
 // About page info + whitelisted external links (developer GitHub)
@@ -258,11 +274,13 @@ app.whenReady().then(() => {
   createTray();
   startBackgroundJobs();
 
-  // v3.1: window-top platform scanner (cat hops onto nearby window borders)
+  // v3.1: window-top platform scanner (cat hops onto nearby window borders).
+  // v3.2: 3.2s cadence — each scan briefly spawns PowerShell; a slightly
+  // longer beat halves the CPU churn and RAM spikes with no perceptible lag.
   if (process.platform === 'win32') {
     scanner = createWindowScanner({
       spawnFn: spawn,
-      intervalMs: 2200,
+      intervalMs: 3200,
       onResult: plats => {
         if (catWin && !catWin.isDestroyed()) catWin.webContents.send('platforms', plats);
       },
@@ -270,8 +288,8 @@ app.whenReady().then(() => {
     scanner.start();
   }
 
-  // v3.1: pre-warm settings + reminders so they open instantly
-  setTimeout(() => { fastWins.warm('settings', 'reminders'); }, 600);
+  // v3.2: pre-warm the single helper window so double-click opens instantly
+  setTimeout(() => { fastWins.warm('settings'); }, 600);
 
   screen.on('display-metrics-changed', () => {
     if (catWin && !catWin.isDestroyed()) catWin.webContents.send('workarea-changed');

@@ -98,3 +98,26 @@ Work Log:
 Stage Summary:
 - v3.1.0 shipped: private repo = full source; public repo = README + screenshots + release asset only
 - Deliverable: download/MeowCat-3.1.0-portable.exe + GitHub release live
+
+---
+Task ID: 10
+Agent: Super Z (main)
+Task: v3.2.0 — remove random walking, emote-anchor bugfix, real eating animation, panda research+redesign, 7 new store cats, RAM diet
+
+Work Log:
+- Web-researched giant pandas per user instruction (3 searches: gait/waddle, feeding posture, anatomy) — sources confirm bear body, 10-15cm stub tail, black ears/eye-patches/muzzle/legs/shoulders, feeding SITTING with curved paws hooking bamboo, love of rolling, sprawled naps
+- cat-brain.js: REMOVED open-field roaming (opts.roam, _roamTarget, _pickRoamTarget, _roamTick) — ground edge-to-edge strolls only + window-top hops; roll state now travels forward; 'happy' weight fixed (was falling to default); eat duration 4.9s for 3 bite cycles
+- Emote bug FIXED: emoteAnchor(breed) exported per-body anchor just above head; cat.html passed y scaled by size AND drawEmote scaled it again (double-scale) + old -158 baseline floated ~60px over every head; harness + tests updated
+- Eating redesigned: fish prop on ground (shrinks per bite, tail fin drops after first bite), 5 mouth modes incl. wide-open 'bite' with teeth and 'chew' with side-to-side jaw + bulging cheek + fish-crumb particles; bamboo upgraded to sit-up + both paws hooking stalk + gnaw cycles (research-backed)
+- Panda rebuilt: BODIES.panda bear barrel (rx 50, 4-seg stub tail r10), pandaFace (dark muzzle, slanted cheek eye patches, low lateral round ears), heavier waddle (3.8Hz, head sway), sprawled-flat sleep; tuned after visual QA (patches/muzzle resized for cuteness)
+- 7 new breeds + 2 new bodies: chibi (mochi/sakura) + munchkin (choco_munchkin); features: foldEars, hetero (eye2), blaze, blush, beans, bigEye, brushTail; prices added; BREEDS 13→20, BODIES 6→8
+- RAM diet: disableHardwareAcceleration + in-process-gpu (no GPU proc), network-service-in-process (no network utility; feature-flag variant didn't work, standalone switch did), AudioServiceOutOfProcess disabled, reminders MERGED into settings window (one warm renderer, reminders.html deleted), v8CacheOptions none, --max-old-space-size=160, window-scan 2.2s→3.2s; scripts/mem-report.mjs measures procs+PSS; measured 10→7 Linux procs (3 zygotes absent on Windows → ~5 procs), RSS 1042→863MB; 'desynchronized' canvas flag caused a real E2E renderer crash — removed
+- Tests: stroll.test.mjs replaces roam.test.mjs (pins no-roaming), breeds tests 20/8 + emote-anchor hugging test, e2e 24/24 incl. merged reminders UI; TOTAL 140 node:test + 24 E2E green
+- Visual QA: 60 screenshots inspected (eat phases, panda phases, all new breeds, emote strip); sheet/panda shots + docs/screenshots/v32_* refreshed
+- Docs: README (8-body table, 20-breeds, panda research table, memory diet section, no-roaming), FEATURES.md v3.2, TESTING.md, RENDERING.md counts
+- Build: MeowCat-3.2.0-portable.exe (76.2MB) built, patch-exe v3.2.0 stamped (PE verified: MeowCat + 3.2.0 UTF-16 present), asar payload verified (27 app files, no reminders.html), delivered to download/
+
+Stage Summary:
+- v3.2.0 shipped: download/MeowCat-3.2.0-portable.exe
+- All user asks addressed: no random walking, emote distance fixed, real fish-biting/chewing eat, 7 fully new designed cats + photo-matched Mochi, panda researched online and rebuilt (not cat-like), memory diet ~5 procs on Windows
+- 164 automated checks green (140 test + 24 e2e)

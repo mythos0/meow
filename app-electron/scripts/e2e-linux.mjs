@@ -160,7 +160,7 @@ try {
 
     await set.waitForTimeout(500);
     const breedCount = await set.evaluate(() => document.querySelectorAll('.breed').length);
-    ok('settings shows 13 breed cards', breedCount === 13, `${breedCount}`);
+    ok('settings shows 20 breed cards', breedCount === 20, `${breedCount}`);
     const unlimited = await set.evaluate(() => !document.querySelector('.breed.locked'));
     ok('unlimited coins: no locked breeds', unlimited);
     const storeUi = await set.evaluate(() => !!document.querySelector('.coins-pill') && !!document.querySelector('.tagnew'));
@@ -201,25 +201,25 @@ try {
   ok('panda unlocks free (unlimited coins promo)', buy.r && buy.r.ok && buy.after === buy.before,
     JSON.stringify(buy.r));
 
-  // ------------------------------------------------ 8. reminders window opens & adds from UI
-  await cat.evaluate(() => window.meow.openWindow('reminders'));
-  const rem = await findPage('reminders.html');
-  ok('reminders window opens', !!rem);
+  // ------------------------------------------------ 8. reminders UI lives inside the settings window (v3.2 merge)
+  await cat.evaluate(() => window.meow.openWindow('settings'));
+  const rem = await findPage('settings.html');
+  ok('settings window opens for reminders UI', !!rem);
   if (rem) {
     await rem.waitForTimeout(600);
-    await rem.fill('#label', 'drink water');
-    await rem.evaluate(() => { document.getElementById('when').value = ''; });
+    await rem.fill('#remLabel', 'drink water');
+    await rem.evaluate(() => { document.getElementById('remWhen').value = ''; });
     // set when = now + 60s
     await rem.evaluate(() => {
       const d = new Date(Date.now() + 60000);
       const pad = n => String(n).padStart(2, '0');
-      document.getElementById('when').value =
+      document.getElementById('remWhen').value =
         `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     });
     await rem.click('#addBtn');
     await rem.waitForTimeout(500);
     const n = await rem.evaluate(() => document.querySelectorAll('.rem').length);
-    ok('reminder added from real UI', n >= 1, `${n} rows`);
+    ok('reminder added from merged settings UI', n >= 1, `${n} rows`);
     await rem.screenshot({ path: path.join(OUT, 'reminders_live.png') });
     // cleanup so one-shot doesn't fire later mid-run
     await rem.evaluate(() => window.meow.listReminders().then(async l => {
@@ -232,7 +232,7 @@ try {
     const b = window.__brain && window.__brain();
     if (!b) return { ok: false, why: 'no brain' };
     window.__setPlatforms([{ title: 'Fake Window', x: 500, y: 640, w: 620, h: 300 }]);
-    b.roam = false; b._roamTarget = null;   // pin the walk path for this test
+    if (b.state === 'sleep') b._enter('idle', 0.5);   // pin the walk path for this test
     b.x = 360; b.baseY = b.groundY; b.onPlatform = null; b._jump = null;
     b._platformCd = 0;
     b._enter('walk', 30); b.dir = 1;

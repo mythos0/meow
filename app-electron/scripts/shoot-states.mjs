@@ -38,17 +38,26 @@ const shots = [
   ['run', 0.2, 'orange_tabby', 1], ['sit', 0.1, 'siamese', 1],
   ['sleep', 0.2, 'persian', 1], ['dance', 0.13, 'calico', 1],
   ['scratch', 0.08, 'tuxedo', 1], ['jump', 0.5, 'grey_tabby', 1],
-  ['happy', 0.1, 'orange_tabby', 1], ['eat', 0.2, 'grey_tabby', 1],
+  ['happy', 0.1, 'orange_tabby', 1],
+  // v3.2 eat: bite / chew / swallow phases
+  ['eat', 0.35, 'grey_tabby', 1], ['eat', 0.9, 'grey_tabby', 1], ['eat', 1.3, 'grey_tabby', 1],
+  ['eat', 1.75, 'grey_tabby', 1], ['eat', 3.1, 'grey_tabby', 1], ['eat', 4.5, 'grey_tabby', 1],
   // v3.1 new actions
   ['stretch', 0.6, 'grey_tabby', 1], ['groom', 0.5, 'russian_blue', 1],
   ['pounce', 0.2, 'bengal', 1], ['pounce', 0.75, 'bengal', 1],
   ['knead', 0.3, 'ragdoll', 1], ['loaf', 0.3, 'bombay', 1],
   ['yawn', 0.6, 'ginger_kitten', 1], ['startle', 0.2, 'tuxedo', 1],
-  // panda
-  ['waddle', 0.3, 'panda', 1], ['bamboo', 0.3, 'panda', 1],
-  ['bamboo', 0.75, 'panda', 1], ['roll', 0.45, 'panda', 1],
-  ['sit', 0.1, 'panda', 1], ['sleep', 0.2, 'panda', 1],
-  // new breeds walking
+  // panda: research-backed gaits + phases
+  ['waddle', 0.3, 'panda', 1], ['waddle', 0.9, 'panda', 1],
+  ['bamboo', 0.3, 'panda', 1], ['bamboo', 0.8, 'panda', 1],
+  ['bamboo', 1.2, 'panda', 1], ['bamboo', 1.45, 'panda', 1],
+  ['roll', 0.45, 'panda', 1], ['sit', 0.1, 'panda', 1], ['sleep', 0.2, 'panda', 1],
+  // v3.2 new breeds (design verification)
+  ['sit', 0.1, 'mochi', 1], ['walk', 0.15, 'mochi', 1],
+  ['sit', 0.1, 'scottish_fold', 1], ['sit', 0.1, 'snow_angora', 1],
+  ['walk', 0.15, 'somali', 1], ['sit', 0.1, 'british_plush', 1],
+  ['walk', 0.15, 'choco_munchkin', 1], ['sit', 0.1, 'sakura', 1],
+  // original v3.1 breeds walking
   ['walk', 0.15, 'bombay', 1], ['walk', 0.15, 'russian_blue', 1],
   ['walk', 0.15, 'ginger_kitten', 1], ['walk', 0.15, 'ragdoll', 1],
   ['walk', 0.15, 'bengal', 1], ['walk', 0.15, 'maine_coon', 1],

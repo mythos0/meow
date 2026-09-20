@@ -4,9 +4,9 @@
 
 | layer | count | runner | what it proves |
 |---|---|---|---|
-| unit | 78 | `node --test` (no browser) | brain gaits & physics, platform hopping, open-field roaming, window JSON parsing, scanner lifecycle, warm-window pool, economy (paid + unlimited promo), reminder scheduling, topmost enforcer, breed/body integrity |
-| visual | 60 | Playwright + `test/harness.html` | every state/breed/emote paints, feet stay planted, animation is alive (frames differ), breeds are pixel-distinct, mirror flip is symmetric, panda has black+white anatomy, emote life-cycle |
-| E2E | 24 | real Electron under Xvfb + CDP | boot → paint → brain advance → IPC actions → coins persist → reminders fire/consume → settings warm-open <300 ms → close keeps pool warm → 13 store cards → premium UI → double-click popup → about page (version + dev link) → free panda unlock → reminders UI → **live window-top jump** |
+| unit | 140 | `node --test` (no browser) | brain gaits & physics, platform hopping, ground-stroll-only (no roaming), emote anchors, window JSON parsing, scanner lifecycle, warm-window pool, economy (paid + unlimited promo), reminder scheduling, topmost enforcer, breed/body integrity (20 breeds / 8 bodies) |
+| visual | 62 | Playwright + `test/harness.html` | every state/breed/emote paints, feet stay planted, animation is alive (frames differ), breeds are pixel-distinct, mirror flip is symmetric, panda has black+white anatomy, emote life-cycle |
+| E2E | 24 | real Electron under Xvfb + CDP | boot → paint → brain advance → IPC actions → coins persist → reminders fire/consume → settings warm-open <300 ms → close keeps pool warm → 20 store cards → premium UI → double-click popup → about page (version + dev link) → free panda unlock → reminders UI → **live window-top jump** |
 
 Run:
 
@@ -18,8 +18,8 @@ node scripts/e2e-linux.mjs      # real app E2E (needs Xvfb on Linux)
 
 ## 2. Determinism
 
-* The brain uses seeded `mulberry32` RNG in tests — platform jumps and roam targets
-  are reproducible.
+* The brain uses seeded `mulberry32` RNG in tests — platform jumps and gaits are
+  reproducible.
 * The renderer is a pure function of `(t, state, breed, dir, scale, jumpP)` — visual
   tests can compare exact pixel buffers between timestamps.
 
@@ -32,10 +32,10 @@ node scripts/e2e-linux.mjs      # real app E2E (needs Xvfb on Linux)
 * `npm run dist` builds `MeowCat-3.1.0-portable.exe` via electron-builder
   (`signAndEditExecutable:false` on Linux; the patch script supplies identity instead).
 
-## 4. Manual QA checklist (Windows 11, v3.1)
+## 4. Manual QA checklist (Windows 11, v3.2)
 
 1. Run the portable exe → tray icon (cat face) appears; Task Manager shows **MeowCat** with the cat icon, not "electron"
-2. Cat walks to random points across the whole screen (open-field roaming), not only the taskbar
+2. Cat strolls along the ground edge-to-edge and never wanders off to random screen points (v3.2: no roaming)
 3. Open any window; when the cat walks near, it jumps onto the **top border** and strolls along it
 4. With two windows side by side, the cat hops from one top border to the other
 5. Resize a window and repeat — any size window is a valid platform

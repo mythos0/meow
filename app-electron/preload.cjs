@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('meow', {
   appInfo: () => ipcRenderer.invoke('app-info'),
   openExternal: url => ipcRenderer.invoke('open-external', url),
   on: (channel, fn) => {
-    const allowed = ['do-action', 'reminder-fired', 'settings-changed', 'workarea-changed', 'platforms'];
+    const allowed = ['do-action', 'reminder-fired', 'settings-changed', 'workarea-changed', 'platforms', 'focus-reminders'];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));
   },

@@ -18,7 +18,7 @@ rendered"*. Source of truth: [`app-electron/src/cat-renderer.js`](../app-electro
 ## 2. Module surface
 
 ```js
-export const PALETTES     // 13 breeds: colors + pattern flags
+export const PALETTES     // 20 breeds: colors + pattern flags
 export const BODIES       // 6 skeletons: ~20 numbers each
 export const STATES       // 20 animation states
 export const EMOTES       // 11 floating emote glyphs
@@ -157,7 +157,7 @@ on a checker background. `tests/renderer.test.mjs` (Playwright) asserts:
 
 * every state/breed/emote paints ≥2 % opaque pixels with a sane bbox, feet near the ground
 * every (non-static) state differs pixel-wise between t=0 and t=0.35 — animation is alive
-* all 13 breeds have unique pixel-hash signatures; mirror flip is symmetric within 8 px
+* all 20 breeds have unique pixel-hash signatures; mirror flip is symmetric within 8 px
 * panda renders with both dark (<70 luma) and light (>215 luma) regions
 * emote pops in above the head and is gone after its 2 s life
 

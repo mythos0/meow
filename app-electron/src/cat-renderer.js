@@ -94,7 +94,62 @@ export const PALETTES = {
     fur: '#f5f3ee', dark: '#26262b', belly: '#f5f3ee', stripe: null,
     earIn: '#26262b', earCol: '#26262b', nose: '#26262b', eye: '#8a6a3a',
     pupil: '#101014', limbCol: '#26262b', eyePatch: true, roundEars: true,
-    band: true, tongue: '#c97884',
+    pandaFace: true, band: true, tongue: '#c97884',
+  },
+  // ---------------- v3.2: completely new designs ----------------
+  mochi: {
+    name: "Mochi Kitten",    // the reference-picture kitten: fluffy orange-white
+                             // chibi, huge slate-blue eyes, white blaze & paws
+    body: 'chibi', fluffy: true,
+    fur: '#eca963', dark: '#c98343', belly: '#fbf3e4', stripe: '#b06a28',
+    earIn: '#f0b6ad', nose: '#e2907f', eye: '#5f7d99', pupil: '#1c2733',
+    patches: [
+      { c: '#9b8474', dk: '#6f5d50' },   // grey-brown saddle like the photo
+      { c: '#e79a4e', dk: '#bd7430' },   // deeper orange patch
+    ],
+    socks: true, blaze: true, beans: true, bigEye: true, tongue: '#d98a94',
+  },
+  scottish_fold: {
+    name: "Scottish Fold",   // round plush face, folded-forward ears, copper eyes
+    body: 'chubby', foldEars: true, bigEye: true, blush: true,
+    fur: '#d9cfc4', dark: '#a89a8c', belly: '#f2ede6', stripe: null,
+    earIn: '#c9a29a', nose: '#c58a80', eye: '#d08a3a', pupil: '#241a10',
+    tongue: '#d98a94',
+  },
+  snow_angora: {
+    name: "Snow Angora",     // all-white longhair with odd eyes (blue + green)
+    body: 'large', fluffy: true,
+    fur: '#f7f5f0', dark: '#d9d4cb', belly: '#ffffff', stripe: null,
+    earIn: '#f0c9c4', nose: '#e8a3a8', eye: '#5f9fd8', eye2: '#6cb489',
+    pupil: '#1c2733', hetero: true, beans: true, tongue: '#d98a94',
+  },
+  somali: {
+    name: "Somali",          // russet fox-like fluff, brush tail, tufted ears
+    body: 'slim', fluffy: true, tufts: true, brushTail: true,
+    fur: '#cf7f46', dark: '#9c5526', belly: '#f4d9b8', stripe: '#7e3f18',
+    earIn: '#d99a86', nose: '#a55f48', eye: '#d9a53a', pupil: '#20180e',
+    tongue: '#d98a94',
+  },
+  british_plush: {
+    name: "British Plush",   // dense blue-cream teddy, round everything
+    body: 'chubby', bigEye: true,
+    fur: '#b5c4cf', dark: '#7f93a3', belly: '#e6edf2', stripe: null,
+    earIn: '#c9a2a8', nose: '#8f9aa5', eye: '#e0902e', pupil: '#1c1a18',
+    tongue: '#d98a94',
+  },
+  choco_munchkin: {
+    name: "Choco Munchkin",  // chocolate sausage cat with cream socks
+    body: 'munchkin', socks: true, blush: true, beans: true,
+    fur: '#6b4a37', dark: '#43301f', belly: '#8a6a52', stripe: null,
+    earIn: '#c99a90', nose: '#3d2a1e', eye: '#e8b34a', pupil: '#181008',
+    tongue: '#d98a94',
+  },
+  sakura: {
+    name: "Sakura Kitten",   // pale cream-pink chibi with blush cheeks
+    body: 'chibi', bigEye: true, blush: true, beans: true, fluffy: true,
+    fur: '#f4ddc9', dark: '#dcbb9f', belly: '#fdf6ee', stripe: '#e8b8a0',
+    earIn: '#f4b8b0', nose: '#eb9a96', eye: '#7fb0d8', pupil: '#22303e',
+    tongue: '#e89a9a',
   },
 };
 
@@ -142,13 +197,30 @@ export const BODIES = {
     tail: { base: [-40, -17], segs: 11, step: 8.8, r: 8.4 },
     standY: -50, preview: 0.55,
   },
-  panda: {          // giant panda: round, stubby tail, short legs
-    rx: 47, ry: 31, haunch: [-25, -2, 25, 22], chest: [29, 2, 18, 19],
-    sh: [22, 5], hp: [-27, 3], head: [38, -40], headR: 27,
-    legL1: 13, legL2: 14, ear: 1.0, footAmp: 7,
-    feet: [25, 31, -23, -29],
-    tail: { base: [-40, -16], segs: 4, step: 7.0, r: 9.0 },
-    standY: -40, preview: 0.52,
+  panda: {          // giant panda — bear build (research): barrel body, round
+                    // head, 10–15cm stub tail, short stocky legs
+    rx: 50, ry: 33, haunch: [-26, -2, 27, 24], chest: [30, 2, 19, 20],
+    sh: [23, 5], hp: [-28, 3], head: [37, -42], headR: 28,
+    legL1: 12, legL2: 13, ear: 0.9, footAmp: 6,
+    feet: [26, 32, -24, -30],
+    tail: { base: [-44, -16], segs: 4, step: 6.0, r: 10.0 },
+    standY: -42, preview: 0.50,
+  },
+  chibi: {          // v3.2 plush-toy proportions: enormous head, tiny body
+    rx: 30, ry: 21, haunch: [-15, -2, 15, 14], chest: [19, 2, 11, 12],
+    sh: [14, 4], hp: [-17, 2], head: [24, -33], headR: 29,
+    legL1: 12, legL2: 13, ear: 1.3, footAmp: 6,
+    feet: [17, 22, -14, -18],
+    tail: { base: [-25, -12], segs: 6, step: 6.2, r: 6.2 },
+    standY: -31, preview: 0.58,
+  },
+  munchkin: {       // v3.2 sausage body on stubby little legs
+    rx: 42, ry: 24, haunch: [-23, -2, 21, 18], chest: [26, 2, 14, 15],
+    sh: [20, 4], hp: [-25, 2], head: [35, -30], headR: 23,
+    legL1: 11, legL2: 10, ear: 1.0, footAmp: 5,
+    feet: [24, 30, -22, -28],
+    tail: { base: [-38, -15], segs: 9, step: 7.6, r: 7.6 },
+    standY: -38, preview: 0.58,
   },
 };
 
@@ -238,7 +310,7 @@ export function drawCat(ctx, opts) {
   ctx.scale(dir * scale, scale);
   ctx.globalAlpha = opts.alpha ?? 1;
 
-  const P = poseFor(state, t, jumpP, B);
+  const P = poseFor(state, t, jumpP, B, pal);
   const bodyY = B.standY + P.bodyY + P.bobY;
   const sqx = 1 + P.sqx, sqy = 1 + P.sqy;
 
@@ -380,8 +452,9 @@ export function drawCat(ctx, opts) {
     drawLeg(ctx, hip.x, hip.y, P.legs[2], pal, nearFill, 1, pal.dark, B);
   }
 
-  // ---------------- held prop (panda bamboo)
+  // ---------------- held / ground props (panda bamboo, cat fish)
   if (P.prop === 'bamboo') drawBamboo(ctx, P, t);
+  else if (P.prop === 'fish') drawFish(ctx, P, t, B);
 
   // ---------------- head
   drawHead(ctx, headC, P, pal, t, state, B);
@@ -390,8 +463,9 @@ export function drawCat(ctx, opts) {
 }
 
 // ---------------------------------------------------------------- pose
-function poseFor(state, t, jumpP, B) {
+function poseFor(state, t, jumpP, B, pal) {
   B = B || BODIES.normal;
+  const panda = !!(pal && pal.pandaFace);
   const P = {
     bodyY: 0, bobY: 0, bodyRot: 0, sqx: 0, sqy: 0, shadowK: 1,
     headX: 0, headY: 0, headRot: 0, wholeRot: 0, hideLegs: false, prop: null,
@@ -401,6 +475,7 @@ function poseFor(state, t, jumpP, B) {
       { fx: B.feet[2], fy: 0 }, { fx: B.feet[3], fy: 0 },   // back near/far
     ],
     tailMode: 'sway', eyeState: 'open', mouth: 'closed',
+    chewP: 0, fishBite: 0,
     particles: null,
   };
   const W = (f, ph) => Math.sin(t * f + ph);
@@ -446,6 +521,21 @@ function poseFor(state, t, jumpP, B) {
       break;
     }
     case 'sleep': {
+      if (panda) {
+        // pandas nap sprawled on side or belly (research) — flat-out flop
+        P.bodyY = 24; P.bodyRot = 0.03;
+        P.sqx = 0.10; P.sqy = -0.20;
+        P.legs[0].fx = F[0] + 12; P.legs[0].fy = 0;
+        P.legs[1].fx = F[1] + 16; P.legs[1].fy = -2;
+        P.legs[2].fx = F[2] + 14; P.legs[2].fy = 0;
+        P.legs[3].fx = F[3] + 18; P.legs[3].fy = -2;
+        P.hideLegs = true;
+        P.headX = -8; P.headY = 19; P.headRot = 0.20;
+        P.tailMode = 'wrap';
+        P.eyeState = 'closed';
+        P.particles = { kind: 'z', f: 1.1 };
+        break;
+      }
       P.bodyY = 18; P.bodyRot = 0.16;
       P.sqx = -0.10; P.sqy = 0.12;
       P.legs[0].fx = F[0] - 4; P.legs[0].fy = -2;
@@ -508,11 +598,34 @@ function poseFor(state, t, jumpP, B) {
       break;
     }
     case 'eat': {
+      // v3.2 proper eating: a fish lies on the ground; each 1.4s cycle the cat
+      // dips its head, BITES a chunk off (fish shrinks), then chews side-to-side
+      // with working cheeks and swallows. 3 bites + a satisfied gulp.
+      const cyc = t % 1.4;
+      const biteN = Math.min(3, Math.floor(t / 1.4));
       P.bodyY = 2;
-      const dip = Math.max(0, Math.sin(t * 4.4));
-      P.headY = 10 + dip * 7; P.headX = -2; P.headRot = 0.22 + dip * 0.12;
-      P.eyeState = 'blink';
-      P.mouth = dip > 0.6 ? 'open' : 'closed';
+      P.prop = biteN < 3 ? 'fish' : null;
+      P.fishBite = biteN;
+      if (cyc < 0.5) {                    // stalk the fish and bite
+        const d = cyc / 0.5;
+        P.headY = 8 + d * 11; P.headX = 2; P.headRot = 0.20 + d * 0.16;
+        P.eyeState = 'open';
+        P.mouth = d > 0.70 ? 'bite' : 'open';
+        P.tailMode = 'sway';
+      } else if (cyc < 1.18) {            // chew: side-to-side jaw, cheeks working
+        const d = (cyc - 0.5) / 0.68;
+        P.headY = 19 - d * 8; P.headX = 2; P.headRot = 0.36 - d * 0.12;
+        P.mouth = 'chew';
+        P.chewP = Math.sin(t * 11.5);
+        P.eyeState = 'closed';
+        P.particles = { kind: 'crumb', f: 2 };
+        P.tailMode = 'curl';
+      } else {                            // swallow, satisfied blink
+        P.headY = 11; P.headRot = 0.24;
+        P.mouth = 'closed';
+        P.eyeState = 'blink';
+        P.tailMode = 'curl';
+      }
       break;
     }
     // ---------------- v3.1 new actions ----------------
@@ -621,29 +734,39 @@ function poseFor(state, t, jumpP, B) {
       break;
     }
     // ---------------- panda-specific actions ----------------
-    case 'waddle': {    // panda gait: slower, rolling, bouncy
-      const f = 4.6;
-      P.legs[0].fx = F[0] + W(f, 0) * A * 0.8;  P.legs[0].fy = -Math.max(0, Math.sin(t * f + Math.PI / 2)) * 5;
-      P.legs[1].fx = F[1] + W(f, Math.PI) * A * 0.8; P.legs[1].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.5)) * 5;
-      P.legs[2].fx = F[2] + W(f, Math.PI * 1.15) * A; P.legs[2].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.65)) * 5;
-      P.legs[3].fx = F[3] + W(f, Math.PI * 0.15) * A; P.legs[3].fy = -Math.max(0, Math.sin(t * f + Math.PI * 0.65)) * 5;
-      P.bobY = -Math.abs(W(f, 0)) * 3.6;
-      P.bodyRot = W(f * 0.5, 0) * 0.09;
-      P.sqx = W(f * 0.5, 1.2) * 0.04; P.sqy = -P.sqx;
-      P.headRot = W(f * 0.5, 0.9) * 0.06;
+    case 'waddle': {    // bear gait: slow, heavy, rolling; head sways with stride
+      const f = 3.8;
+      P.legs[0].fx = F[0] + W(f, 0) * A * 0.7;  P.legs[0].fy = -Math.max(0, Math.sin(t * f + Math.PI / 2)) * 4;
+      P.legs[1].fx = F[1] + W(f, Math.PI) * A * 0.7; P.legs[1].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.5)) * 4;
+      P.legs[2].fx = F[2] + W(f, Math.PI * 1.15) * A; P.legs[2].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.65)) * 4;
+      P.legs[3].fx = F[3] + W(f, Math.PI * 0.15) * A; P.legs[3].fy = -Math.max(0, Math.sin(t * f + Math.PI * 0.65)) * 4;
+      P.bobY = -Math.abs(W(f, 0)) * 4.4;
+      P.bodyRot = W(f * 0.5, 0) * 0.085;
+      P.sqx = W(f * 0.5, 1.2) * 0.05; P.sqy = -P.sqx;
+      P.headRot = W(f * 0.5, 0.9) * 0.075;   // head leads the roll
+      P.headX = W(f * 0.5, 0.9) * 2.2;
       break;
     }
-    case 'bamboo': {    // sitting, munching a held bamboo stalk
-      const f = 3.4;
-      const dip = Math.max(0, Math.sin(t * f));
-      P.bodyY = 6; P.bodyRot = 0.06;
+    case 'bamboo': {
+      // v3.2 research-backed: pandas feed SITTING UP, hooking the stalk toward
+      // the mouth with curved paws and gnawing with loud sideways chews.
+      const cyc = t % 1.6;
+      P.bodyY = 8; P.bodyRot = 0.05;
+      P.sqx = -0.03; P.sqy = 0.04;
       P.legs[2].fx = F[2] + 7; P.legs[2].fy = -2;
       P.legs[3].fx = F[3] + 9; P.legs[3].fy = -2;
-      P.legs[0].fx = F[0] - 6; P.legs[0].fy = -16;   // paws hold stalk
-      P.legs[1].fx = F[1] - 7; P.legs[1].fy = -12;
-      P.headY = 2 + dip * 4; P.headX = 2; P.headRot = 0.16 + dip * 0.10;
-      P.mouth = dip > 0.55 ? 'open' : 'closed';
-      P.eyeState = 'happy';
+      P.legs[0].fx = F[0] - 6; P.legs[0].fy = -16;   // both paws hook the stalk
+      P.legs[1].fx = F[1] - 8; P.legs[1].fy = -12;
+      if (cyc < 0.95) {                    // gnaw-gnaw-gnaw
+        P.headY = 2; P.headX = 3;
+        P.headRot = 0.14 + Math.sin(t * 9) * 0.05;
+        P.mouth = 'chew'; P.chewP = Math.sin(t * 9);
+        P.eyeState = 'happy';
+      } else {                             // re-hook the stalk, take a bite
+        P.headY = 3; P.headX = 2; P.headRot = 0.18;
+        P.mouth = cyc < 1.25 ? 'bite' : 'closed';
+        P.eyeState = 'happy';
+      }
       P.prop = 'bamboo';
       P.particles = { kind: 'leaf', f: 2 };
       break;
@@ -687,6 +810,16 @@ function drawLeg(ctx, ax, ay, foot, pal, fill, near, lineCol, B) {
     ell(ctx, foot.fx + 2, foot.fy - 4.5, 6.8, 5.2);
     ctx.fillStyle = pal.belly; ctx.fill();
   }
+  if (pal.beans && near > 0) {
+    // pink toe beans on the near paws (drawn over white socks)
+    ctx.fillStyle = '#e89aa2';
+    for (const [bxx, byy, br] of [[foot.fx - 2.2, foot.fy - 6.2, 1.35], [foot.fx + 1.2, foot.fy - 6.8, 1.35], [foot.fx + 4.2, foot.fy - 5.8, 1.2]]) {
+      ell(ctx, bxx, byy, br, br * 0.85);
+      ctx.fill();
+    }
+    ell(ctx, foot.fx + 1, foot.fy - 2.6, 2.7, 1.8);
+    ctx.fill();
+  }
 }
 
 // ---------------------------------------------------------------- tail
@@ -720,7 +853,8 @@ function drawTail(ctx, bx, by, P, pal, t, B) {
     y += Math.sin(ang) * step;
     pts.push({ x, y, k });
   }
-  const rad = k => B.tail.r - k * (B.tail.r - 2.8);
+  const radBase = pal.brushTail ? B.tail.r * 1.45 : B.tail.r; // somali brush tail
+  const rad = k => radBase - k * (radBase - (pal.brushTail ? 4.0 : 2.8));
   for (let i = 0; i < segs - 1; i++) {
     const p0 = pts[i], p1 = pts[i + 1];
     limb(ctx, p0.x, p0.y, p1.x, p1.y, rad(p0.k), rad(p1.k), base);
@@ -756,15 +890,34 @@ function drawHead(ctx, C, P, pal, t, state, B) {
   const earFill = pal.earCol || (pal.points ? shade(pal.dark, 0.1) : pal.fur);
   for (const s of [-1, 1]) {
     ctx.save();
-    ctx.translate(s * r * 0.62, -r * 0.78);
+    // bear ears sit low and far to the side; cat ears perch on top
+    ctx.translate(s * r * (pal.pandaFace ? 0.72 : 0.62), -r * (pal.pandaFace ? 0.58 : 0.78));
     ctx.rotate(s * (0.32 + earTwitch + P.earFlat * 0.55));
     if (pal.roundEars) {
       // panda: round circle ears
-      ell(ctx, 0, -5 * es, 8.5 * es, 8.5 * es);
+      const er = (pal.pandaFace ? 7.4 : 8.5) * es;
+      ell(ctx, 0, -5 * es, er, er);
       const eg = radialFill(ctx, -2, -8, 2, 12 * es, [
         [0, shade(earFill, 0.14)], [1, earFill],
       ]);
       ctx.fillStyle = eg; ctx.fill();
+    } else if (pal.foldEars) {
+      // scottish fold: small ear folded forward — a soft low flap + crease
+      ctx.beginPath();
+      ctx.moveTo(-6.5 * es, 3 * es);
+      ctx.quadraticCurveTo(-3.5 * es, -7.5 * es, 2.5 * es, -6 * es);
+      ctx.quadraticCurveTo(7 * es, -2.5 * es, 6 * es, 4 * es);
+      ctx.closePath();
+      const eg = radialFill(ctx, 0, -3 * es, 2, 10 * es, [
+        [0, shade(earFill, 0.12)], [1, shade(earFill, -0.18)],
+      ]);
+      ctx.fillStyle = eg; ctx.fill();
+      ctx.strokeStyle = shade(earFill, -0.35);
+      ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-3 * es, 1.5 * es);
+      ctx.quadraticCurveTo(0, -4 * es, 4 * es, -2.5 * es);
+      ctx.stroke();
     } else {
       ctx.beginPath();
       ctx.moveTo(-7 * es, 4 * es);
@@ -838,6 +991,20 @@ function drawHead(ctx, C, P, pal, t, state, B) {
       ctx.fillStyle = shade(pal.dark, -0.02); ctx.fill();
     }
   }
+  if (pal.blaze) {
+    // white wedge from between the eyes down to the muzzle (mochi photo mark)
+    ctx.beginPath();
+    ctx.moveTo(-2.5, -r * 0.80);
+    ctx.quadraticCurveTo(0, -r * 0.34, r * 0.30, r * 0.10);
+    ctx.quadraticCurveTo(r * 0.48, r * 0.26, r * 0.40, r * 0.36);
+    ctx.quadraticCurveTo(0, r * 0.46, -r * 0.32, r * 0.28);
+    ctx.quadraticCurveTo(-r * 0.16, r * 0.02, -2.5, -r * 0.80);
+    ctx.closePath();
+    const ga = ctx.globalAlpha;
+    ctx.globalAlpha = ga * 0.92;
+    ctx.fillStyle = pal.belly; ctx.fill();
+    ctx.globalAlpha = ga;
+  }
   if (pal.stripe && !pal.points) {
     ctx.strokeStyle = pal.stripe;
     const ga = ctx.globalAlpha;
@@ -873,42 +1040,74 @@ function drawHead(ctx, C, P, pal, t, state, B) {
   const blink = P.eyeState === 'closed' ? 1 :
     P.eyeState === 'happy' ? 1 : (
       (Math.sin(t * 1.9) > 0.985 || Math.sin(t * 0.53 + 2.2) > 0.994) ? 1 : 0);
+  // bear muzzle: dark fur around the nose & mouth (panda fact: black muzzle)
+  if (pal.pandaFace) {
+    ell(ctx, r * 0.38, r * 0.28, r * 0.30, r * 0.24);
+    const mg = radialFill(ctx, r * 0.30, r * 0.20, 2, r * 0.42, [
+      [0, shade(pal.dark, 0.42)], [1, shade(pal.dark, 0.10)],
+    ]);
+    ctx.fillStyle = mg; ctx.fill();
+  }
+  const es2 = pal.bigEye ? 1.34 : pal.pandaFace ? 1.22 : 1;   // eye scale
   for (const s of [-1, 1]) {
     const ex = s * 8.5 + r * 0.12, ey = -r * 0.12;
-    // panda eye patches (behind the eyes)
+    // panda eye patches (behind the eyes) — bear ones are big and slant
+    // down toward the cheeks
     if (pal.eyePatch) {
-      ell(ctx, ex, ey, 8.4, 6.6, s * 0.32);
-      ctx.fillStyle = pal.dark; ctx.fill();
+      if (pal.pandaFace) {
+        ell(ctx, ex + s * 1.2, ey + 1.8, 8.6, 6.7, s * 0.38);
+        ctx.fillStyle = pal.dark; ctx.fill();
+        ell(ctx, ex + s * 4.0, ey + 5.0, 3.6, 4.4, s * 0.62);
+        ctx.fill();
+      } else {
+        ell(ctx, ex, ey, 8.4, 6.6, s * 0.32);
+        ctx.fillStyle = pal.dark; ctx.fill();
+      }
     }
     if (P.eyeState === 'closed' || blink === 1) {
       ctx.strokeStyle = shade(pal.fur, -0.45);
-      ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+      ctx.lineWidth = 2.2 * es2; ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(ex - 4.5, ey);
-      ctx.quadraticCurveTo(ex, ey + (P.eyeState === 'happy' ? -3.5 : 2.5), ex + 4.5, ey);
+      ctx.moveTo(ex - 4.5 * es2, ey);
+      ctx.quadraticCurveTo(ex, ey + (P.eyeState === 'happy' ? -3.5 * es2 : 2.5 * es2), ex + 4.5 * es2, ey);
       ctx.stroke();
       continue;
     }
     if (P.eyeState === 'happy') {
       ctx.strokeStyle = shade(pal.fur, -0.45);
-      ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+      ctx.lineWidth = 2.4 * es2; ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(ex - 4.5, ey + 1);
-      ctx.quadraticCurveTo(ex, ey - 4, ex + 4.5, ey + 1);
+      ctx.moveTo(ex - 4.5 * es2, ey + 1);
+      ctx.quadraticCurveTo(ex, ey - 4 * es2, ex + 4.5 * es2, ey + 1);
       ctx.stroke();
       continue;
     }
-    ell(ctx, ex, ey, 5.4, 4.6);
+    // heterochromia: one blue + one green iris (snow angora)
+    const irisBase = pal.hetero && s === 1 ? (pal.eye2 || pal.eye) : pal.eye;
+    ell(ctx, ex, ey, 5.4 * es2, 4.6 * es2);
     ctx.fillStyle = '#f8f6f2'; ctx.fill();
-    ell(ctx, ex + 1.2, ey, 3.6, 3.8);
-    const ig = radialFill(ctx, ex + 0.6, ey - 0.8, 0.5, 4.2, [
-      [0, shade(pal.eye, 0.35)], [0.7, pal.eye], [1, shade(pal.eye, -0.4)],
+    ell(ctx, ex + 1.2 * es2, ey, 3.6 * es2, 3.8 * es2);
+    const ig = radialFill(ctx, ex + 0.6 * es2, ey - 0.8, 0.5, 4.2 * es2, [
+      [0, shade(irisBase, 0.35)], [0.7, irisBase], [1, shade(irisBase, -0.4)],
     ]);
     ctx.fillStyle = ig; ctx.fill();
-    ell(ctx, ex + 1.4, ey, 1.7, 3.0);
+    ell(ctx, ex + 1.4 * es2, ey, 1.7 * es2, 3.0 * es2);
     ctx.fillStyle = pal.pupil; ctx.fill();
-    ell(ctx, ex + 0.2, ey - 1.4, 1.1, 1.0);
+    ell(ctx, ex + 0.2, ey - 1.4 * es2, 1.1 * es2, 1.0 * es2);
     ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
+    // second sparkle for the plush big-eye look
+    if (pal.bigEye) {
+      ell(ctx, ex + 2.4 * es2, ey + 1.8 * es2, 0.8 * es2, 0.7 * es2);
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
+    }
+  }
+
+  // blush cheeks (scottish fold / choco munchkin / sakura)
+  if (pal.blush) {
+    for (const s of [-1, 1]) {
+      ell(ctx, s * 13.5 + r * 0.10, r * 0.32, 5.2, 3.1, s * 0.2);
+      ctx.fillStyle = 'rgba(238,138,148,0.42)'; ctx.fill();
+    }
   }
 
   // nose
@@ -935,6 +1134,31 @@ function drawHead(ctx, C, P, pal, t, state, B) {
   } else if (P.mouth === 'open') {
     ell(ctx, nx - 1, ny + 7, 3.4, 4.2);
     ctx.fillStyle = pal.tongue; ctx.fill();
+    ctx.stroke();
+  } else if (P.mouth === 'bite') {
+    // wide open bite: big dark maw + tongue + tiny teeth
+    ell(ctx, nx - 1, ny + 8, 4.4, 6.4);
+    ctx.fillStyle = '#5c3138'; ctx.fill();
+    ctx.strokeStyle = shade(pal.fur, -0.42); ctx.stroke();
+    ell(ctx, nx - 1, ny + 11, 3.1, 3.2);
+    ctx.fillStyle = pal.tongue; ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.beginPath();
+    ctx.moveTo(nx - 4.2, ny + 3.4); ctx.lineTo(nx - 2.6, ny + 6.2); ctx.lineTo(nx - 1.4, ny + 3.6);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(nx + 2.2, ny + 3.4); ctx.lineTo(nx + 0.8, ny + 6.2); ctx.lineTo(nx - 0.4, ny + 3.6);
+    ctx.closePath(); ctx.fill();
+  } else if (P.mouth === 'chew') {
+    // side-to-side chew: jaw shifts with the phase, the near cheek bulges
+    const cp = P.chewP || 0;
+    ell(ctx, nx - 2 + cp * 1.6, ny + 6.4, 3.2 + Math.abs(cp) * 2.2, 2.9 + Math.abs(cp) * 1.5);
+    ctx.fillStyle = shade(pal.fur, 0.14); ctx.fill();
+    ctx.strokeStyle = shade(pal.fur, -0.42);
+    ctx.lineWidth = 1.7; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(nx - 3.5 + cp * 2.4, ny + 5.2);
+    ctx.quadraticCurveTo(nx - 1 + cp * 2.4, ny + 7.6, nx + 1.5 + cp * 2.4, ny + 5.6);
     ctx.stroke();
   } else {
     ctx.beginPath();
@@ -978,7 +1202,7 @@ export function drawParticles(ctx, opts) {
   const scale = opts.scale || 1;
   const pal = PALETTES[opts.breed] || PALETTES.grey_tabby;
   const B = BODIES[pal.body] || BODIES.normal;
-  const P = poseFor(state, t, opts.jumpP ?? 0.5, B);
+  const P = poseFor(state, t, opts.jumpP ?? 0.5, B, pal);
   if (!P.particles) return;
   ctx.save();
   ctx.scale(scale, scale);
@@ -1016,6 +1240,16 @@ export function drawParticles(ctx, opts) {
       const y = -70 + ph * 40;
       ctx.fillStyle = `rgba(180,150,110,${0.8 * (1 - ph)})`;
       ell(ctx, x, y, 2.2, 1.6, ph * 6);
+      ctx.fill();
+    }
+  } else if (kind === 'crumb') {
+    // fish-bite crumbs popping near the mouth while chewing
+    for (let i = 0; i < 3; i++) {
+      const ph = (t * 0.9 + i * 0.31) % 1;
+      const x = 34 + i * 5 + Math.sin(t * 8 + i * 2) * 3;
+      const y = -34 - (1 - ph) * 10 + ph * 14;
+      ctx.fillStyle = `rgba(148,180,205,${0.85 * (1 - ph)})`;
+      ell(ctx, x, y, 1.9, 1.5, ph * 5);
       ctx.fill();
     }
   } else if (kind === 'leaf') {
@@ -1058,12 +1292,64 @@ function drawBamboo(ctx, P, t) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------- fish prop
+function drawFish(ctx, P, t, B) {
+  // a fish lying on the ground in front of the cat; shrinks as bites are taken
+  B = B || BODIES.normal;
+  const fx = B.feet[0] + 24;                  // just in front of the front paws
+  const remain = 1 - P.fishBite / 3;          // 1 -> 2/3 -> 1/3 -> gone
+  if (remain <= 0.01) return;
+  const L = 26 * remain + 6;                  // body length shrinks per bite
+  const flap = Math.sin(t * 7) * (0.14 + 0.1 * (1 - remain)); // fresher = livelier
+  ctx.save();
+  ctx.translate(fx, -4);
+  ctx.rotate(flap * 0.4);
+  const g = ctx.createLinearGradient(0, -6, 0, 5);
+  g.addColorStop(0, '#9dbdd6'); g.addColorStop(1, '#6d92ad');
+  ctx.fillStyle = g;
+  ell(ctx, 0, 0, L * 0.5, 5.2 * remain + 2.2, -0.05);
+  ctx.fill();
+  // tail fin (falls off after the first bite — cats eat head-first, tail last)
+  if (P.fishBite < 1) {
+    ctx.beginPath();
+    ctx.moveTo(-L * 0.5, 0);
+    ctx.lineTo(-L * 0.5 - 8 * remain - 3, -5);
+    ctx.lineTo(-L * 0.5 - 8 * remain - 3, 5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // head end + eye (bite marks on the rear once nibbled)
+  ell(ctx, L * 0.42, -0.6, 2.6 * remain + 1.4, 3.1 * remain + 1.2);
+  ctx.fillStyle = '#5d7f97'; ctx.fill();
+  ell(ctx, L * 0.34, -1.6, 1.4, 1.4);
+  ctx.fillStyle = '#1d2830'; ctx.fill();
+  // dorsal shine
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.ellipse(0, -1.6, L * 0.36, 2.4, -0.06, Math.PI * 1.1, Math.PI * 1.9);
+  ctx.stroke();
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- emotes
 // Floating game-style emote glyphs that pop in above the cat's head.
 export const EMOTES = [
   'heart', 'love', 'note', 'question', 'exclaim', 'sweat',
   'angry', 'laugh', 'star', 'zzz', 'fish',
 ];
+
+// Anchor (local units, unscaled) where emotes hover: just above the head,
+// centered. v3.2 fixes the "icons show up far above the cat" bug — the old
+// code passed a size-scaled y AND scaled it again inside drawEmote, and the
+// -158 baseline floated way over every head. Computed from the body skeleton
+// so each body type (kitten/panda/large...) gets a snug anchor.
+export function emoteAnchor(breed) {
+  const pal = PALETTES[breed] || PALETTES.grey_tabby;
+  const B = BODIES[pal.body] || BODIES.normal;
+  const headTop = B.standY + B.head[1] - B.headR;   // highest point of the skull
+  return { x: 10, y: headTop - 16 };
+}
 
 export function drawEmote(ctx, opts) {
   const kind = opts && opts.kind;

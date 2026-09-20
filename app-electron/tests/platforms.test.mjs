@@ -11,7 +11,6 @@ function mkBrain(seed = 42, over = {}) {
     bounds: WIN,
     groundY: 1040,
     rand: mulberry32(seed),
-    roam: false,          // deterministic legacy gaits (roam tested separately)
     ...over,
   });
 }

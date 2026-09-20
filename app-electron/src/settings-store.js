@@ -21,6 +21,8 @@ export const BREED_PRICES = {
   grey_tabby: 0, orange_tabby: 100, siamese: 200, calico: 300, persian: 400, tuxedo: 500,
   bombay: 150, russian_blue: 250, ginger_kitten: 300, ragdoll: 450, bengal: 550,
   maine_coon: 650, panda: 1000,
+  mochi: 350, scottish_fold: 400, snow_angora: 500, somali: 450,
+  british_plush: 380, choco_munchkin: 420, sakura: 300,
 };
 
 export function createSettings(backend) {

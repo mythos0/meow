@@ -22,11 +22,11 @@
 <canvas id="cv"></canvas>
 <div id="bubble"></div>
 <script type="module">
-import { drawCat, drawParticles, drawEmote, CAT_BBOX } from '../src/cat-renderer.js';
+import { drawCat, drawParticles, drawEmote, emoteAnchor, CAT_BBOX } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
 
 const cv = document.getElementById('cv');
-const ctx = cv.getContext('2d');
+const ctx = cv.getContext('2d', { alpha: true });
 const bubble = document.getElementById('bubble');
 
 let S = { breed: 'grey_tabby', size: 1.0, opacity: 1.0, sounds: true, speed: 55, workArea: null };
@@ -210,13 +210,14 @@ function loop(ts) {
     };
     drawCat(ctx, opts);
     drawParticles(ctx, opts);
-    // contextual emote floating above the head
+    // contextual emote floating just above the head (v3.2 anchor fix)
     if (brain.emote && brain.emote.kind) {
       const age = brain.t - brain.emote.t0;
       if (age < 2) {
+        const E = emoteAnchor(S.breed);
         drawEmote(ctx, {
           kind: brain.emote.kind, t: age,
-          x: p.dir * 50 * S.size, y: -158 * S.size, scale: S.size,
+          x: E.x, y: E.y, scale: S.size,
         });
       } else brain.emote = null;
     }

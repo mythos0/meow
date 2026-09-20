@@ -1,8 +1,8 @@
 // cat-brain.js — pure state machine + movement brain. No DOM/Electron deps.
 // Deterministic when seeded: tick(dt) is the only mutator.
-// v3.1: breed-aware actions (panda set), contextual emotes, and window-top
-// platform hopping (jump onto ANY nearby window's top border, stroll along it,
-// hop to the next window, or drop back to the taskbar ground).
+// v3.2: open-field roaming REMOVED (user request) — the cat strolls along the
+// ground edge-to-edge, jumps onto nearby window tops, strolls there, hops to
+// the next window or drops back. Pandas waddle and roll forward as they roll.
 
 'use strict';
 
@@ -47,7 +47,6 @@ export class CatBrain {
     this.rand = opts.rand || Math.random;
     this.onEvent = opts.onEvent || (() => {});
     this.breed = opts.breed || 'grey_tabby';
-    this.roam = opts.roam !== false;        // v3.1: open-field roaming (random → random)
     this.maxX = opts.maxX ?? this.bounds.x + this.bounds.w;
     this.minX = opts.minX ?? this.bounds.x;
 
@@ -69,7 +68,6 @@ export class CatBrain {
     this._jump = null;          // { x0, x1, y0, y1, pl } during a directed jump
     this._platformCd = 0;       // seconds until next platform scan
     this.platformT = 0;         // time spent on current platform
-    this._roamTarget = null;    // { x, y } open-field destination
 
     // contextual emote: { kind, t0 }
     this.emote = null;
@@ -95,25 +93,12 @@ export class CatBrain {
       // bias toward screen center when near edges
       const cx = this.bounds.x + this.bounds.w / 2;
       if (Math.abs(this.x - cx) > this.bounds.w * 0.35) this.dir = this.x < cx ? 1 : -1;
-      // v3.1 open-field: most ground walks head to a random point anywhere on screen
-      this._roamTarget = null;
-      if (this.roam && this.rand() < 0.7) this._pickRoamTarget();
     }
     if (state === 'jump') this.jumpP = 0;
     if (state === 'sleep') this.sleepy = false;
     const em = EMOTE_ON[state];
     if (em) this.emote = { kind: em, t0: this.t };
     this.onEvent('enter:' + state);
-  }
-
-  _pickRoamTarget() {
-    const m = 90;
-    const topY = this.bounds.y + 150;
-    const botY = this.groundY - 14;
-    this._roamTarget = {
-      x: this.minX + m + this.rand() * Math.max(1, (this.maxX - this.minX - 2 * m)),
-      y: topY + this.rand() * Math.max(1, botY - topY),
-    };
   }
 
   _nextAction() {
@@ -131,7 +116,7 @@ export class CatBrain {
       case 'sit': this._enter('sit', 4 + this.rand() * 5); break;
       case 'scratch': this._enter('scratch', 2.2 + this.rand() * 1.5); break;
       case 'dance': this._enter('dance', 2.6 + this.rand() * 2); break;
-      case 'eat': this._enter('eat', 2.4 + this.rand() * 1.6); break;
+      case 'eat': this._enter('eat', 4.9); break;   // 3 bite+chew cycles (1.4s each) + gulp
       case 'sleep': this._enter('sleep', 7 + this.rand() * 6); break;
       case 'jump': this._enter('jump', 0.75); break;
       case 'stretch': this._enter('stretch', 2.6 + this.rand() * 1.2); break;
@@ -144,6 +129,7 @@ export class CatBrain {
       case 'waddle': this._enter('waddle', 3 + this.rand() * 4); break;
       case 'bamboo': this._enter('bamboo', 4 + this.rand() * 2); break;
       case 'roll': this._enter('roll', 1.5 * (2 + Math.floor(this.rand() * 2))); break;
+      case 'happy': this._enter('happy', 1.8 + this.rand() * 1.2); break;
       default: this._enter('idle', 2);
     }
   }
@@ -155,7 +141,7 @@ export class CatBrain {
     this.onEvent('pet');
   }
   poke() { this._enter('startle', 0.7); this.onEvent('poke'); }
-  feed() { this._enter(this.breed === 'panda' ? 'bamboo' : 'eat', this.breed === 'panda' ? 4.5 : 3.2); this.onEvent('feed'); }
+  feed() { this._enter(this.breed === 'panda' ? 'bamboo' : 'eat', this.breed === 'panda' ? 5.5 : 4.9); this.onEvent('feed'); }
   dance() { this._enter('dance', 4); this.onEvent('dance'); }
   sleepNow() { this._enter('sleep', 10); }
 
@@ -227,7 +213,7 @@ export class CatBrain {
   // snap to the best surface under (x, y) — used after a drag
   dropAt(x, y) {
     this.x = x;
-    this.jumpY = 0; this.jumpP = 0; this._jump = null; this._roamTarget = null;
+    this.jumpY = 0; this.jumpP = 0; this._jump = null;
     let best = null;
     for (const pl of this.platforms) {
       if (Math.abs(pl.y - y) < 28 && x > pl.x - 12 && x < pl.x + pl.w + 12) { best = pl; break; }
@@ -261,8 +247,7 @@ export class CatBrain {
           this._tickPlatformWalk(dt);
           break;
         }
-        if (this._roamTick(dt)) break;               // open-field heading to a random point
-        this.x += this.dir * this.speed * dt;        // classic edge-to-edge stroll
+        this.x += this.dir * this.speed * dt;        // classic edge-to-edge ground stroll
         this._clampAndTurn();
         this._platformCd -= dt;
         if (this._platformCd <= 0) {
@@ -282,9 +267,15 @@ export class CatBrain {
           this._tickPlatformWalk(dt);
           break;
         }
-        if (this._roamTick(dt, this.runSpeed)) break;
         this.x += this.dir * this.runSpeed * dt;
         this._clampAndTurn(true);
+        break;
+      }
+      case 'roll': {
+        // pandas really roll: forward/backward somersaults (research, 2025).
+        // give the somersault a little travel so it reads as a tumble, not a spin.
+        this.x += this.dir * 30 * dt;
+        this._clampAndTurn();
         break;
       }
       case 'jump': {
@@ -320,36 +311,6 @@ export class CatBrain {
       }
       this._nextAction();
     }
-  }
-
-  // move toward the open-field roam target (if any). Returns true when handled.
-  _roamTick(dt, speed) {
-    const T = this._roamTarget;
-    if (!T) return false;
-    speed = speed || this.speed;
-    const dx = T.x - this.x, dy = T.y - this.baseY;
-    const dist = Math.hypot(dx, dy);
-    if (dist < 8) {
-      this._roamTarget = null;
-      this._enter('idle', 0.8 + this.rand() * 1.8);   // sniff around, then act again
-      return true;
-    }
-    if (Math.abs(dx) > 1) this.dir = dx > 0 ? 1 : -1;
-    const step = Math.min(dist, speed * dt);
-    this.x += (dx / dist) * step;
-    this.baseY += (dy / dist) * step;
-    // opportunistic window-top jumps while roaming
-    this._platformCd -= dt;
-    if (this._platformCd <= 0) {
-      const pl = this._findPlatformAhead();
-      if (pl && this.rand() < 0.6) {
-        this._platformCd = 4;
-        this._jumpTo(pl, 0.5 + Math.min(0.85, (this.baseY - pl.y) / 460));
-        return true;
-      }
-      this._platformCd = 0.9;
-    }
-    return true;
   }
 
   _clampAndTurn(forceTurn = false) {
