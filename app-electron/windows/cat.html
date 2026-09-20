@@ -22,7 +22,7 @@
 <canvas id="cv"></canvas>
 <div id="bubble"></div>
 <script type="module">
-import { drawCat, drawParticles, CAT_BBOX } from '../src/cat-renderer.js';
+import { drawCat, drawParticles, drawEmote, CAT_BBOX } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
 
 const cv = document.getElementById('cv');
@@ -62,10 +62,12 @@ async function init() {
     bounds: { x: wa.x, y: wa.y, w: wa.width, h: wa.height },
     groundY: wa.y + wa.height - 8,
     speed: S.speed,
+    breed: S.breed,
   });
   window.meow.on('settings-changed', applySettings);
   window.meow.on('do-action', doAction);
   window.meow.on('reminder-fired', showReminder);
+  window.meow.on('platforms', list => { if (brain) brain.setPlatforms(list); });
   window.meow.on('workarea-changed', async () => {
     const s2 = await window.meow.getSettings();
     S = { ...S, ...s2 };
@@ -86,6 +88,7 @@ function resize(wa) {
 function applySettings(kv) {
   S = { ...S, ...kv };
   if (kv.speed && brain) brain.speed = kv.speed;
+  if (kv.breed && brain) brain.breed = kv.breed;
 }
 
 function doAction(act) {
@@ -116,7 +119,8 @@ function showReminder(item) {
 let overCat = false;
 let dragging = false;
 let dragDX = 0, dragDY = 0;
-let lastPat = 0;
+let downX = 0, downY = 0;
+let pendingPet = null;   // delayed so a double-click can cancel it → settings
 
 function catHit(mx, my) {
   if (!brain) return false;
@@ -133,30 +137,41 @@ window.addEventListener('mousemove', e => {
   const hit = dragging || catHit(e.clientX, e.clientY);
   if (hit !== overCat) { overCat = hit; window.meow.hitTest(hit); }
   if (dragging) {
+    const moved = Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY);
+    if (moved > 6 && pendingPet) { clearTimeout(pendingPet); pendingPet = null; } // it's a drag, not a tap
     brain.x = Math.max(brain.bounds.x + 60, Math.min(brain.bounds.x + brain.bounds.w - 60, e.clientX - dragDX));
-    brain.y = Math.max(brain.bounds.y + 120, Math.min(brain.bounds.y + brain.bounds.h - 8, e.clientY - dragDY));
-    brain.groundY = brain.y; // dragged baseline
+    brain.baseY = Math.max(brain.bounds.y + 120, Math.min(brain.bounds.y + brain.bounds.h - 8, e.clientY - dragDY));
+    brain.jumpY = 0;
   }
 });
 window.addEventListener('mousedown', e => {
   if (!catHit(e.clientX, e.clientY)) return;
-  if (e.button === 2) return; // context menu handled by main? keep simple
-  dragging = true;
+  if (e.button !== 0) return;      // right button opens the context menu
+  downX = e.clientX; downY = e.clientY;
   dragDX = e.clientX - brain.x;
-  dragDY = e.clientY - brain.y;
-  const now = Date.now();
-  if (now - lastPat < 400) { // double-click = pet
+  dragDY = e.clientY - brain.baseY;
+  dragging = true;
+  // no sound here: drag/drop must be silent — the purr plays only when a
+  // quick tap is confirmed as a pet (pendingPet below)
+  if (pendingPet) clearTimeout(pendingPet);
+  pendingPet = setTimeout(() => {
+    pendingPet = null;
     brain.pet(); play('purr_real', 0.9); window.meow.addCoins(2);
-    lastPat = 0;
-  } else {
-    play('meow_real' + (1 + Math.floor(Math.random() * 3)), 0.7);
-    lastPat = now;
-  }
+  }, 280);
 });
-window.addEventListener('mouseup', () => { dragging = false; });
+window.addEventListener('dblclick', e => {
+  if (!catHit(e.clientX, e.clientY)) return;
+  if (pendingPet) { clearTimeout(pendingPet); pendingPet = null; }
+  dragging = false;
+  window.meow.openWindow('settings');  // v3.1: double-click opens Settings popup
+});
+window.addEventListener('mouseup', () => {
+  if (dragging) brain.dropAt(brain.x, brain.baseY); // snap to a window top or the ground
+  dragging = false;
+});
 window.addEventListener('contextmenu', e => {
   e.preventDefault();
-  window.meow.openWindow('settings');
+  window.meow.contextMenu({ x: e.clientX, y: e.clientY });
 });
 
 // footsteps sound on walk
@@ -195,6 +210,16 @@ function loop(ts) {
     };
     drawCat(ctx, opts);
     drawParticles(ctx, opts);
+    // contextual emote floating above the head
+    if (brain.emote && brain.emote.kind) {
+      const age = brain.t - brain.emote.t0;
+      if (age < 2) {
+        drawEmote(ctx, {
+          kind: brain.emote.kind, t: age,
+          x: p.dir * 50 * S.size, y: -158 * S.size, scale: S.size,
+        });
+      } else brain.emote = null;
+    }
     ctx.restore();
   }
   requestAnimationFrame(loop);
@@ -206,6 +231,8 @@ init();
 window.__catBooted = true;
 window.__pose = () => brain ? JSON.parse(JSON.stringify(brain.pose)) : null;
 window.__doAction = act => doAction(act);
+window.__brain = () => brain;                 // live object access for e2e
+window.__setPlatforms = list => { if (brain) brain.setPlatforms(list); };
 </script>
 </body>
 </html>

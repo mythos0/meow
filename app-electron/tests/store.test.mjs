@@ -18,7 +18,9 @@ describe('settings-store', () => {
     const st = createSettings(memBackend());
     assert.equal(st.get('breed'), DEFAULTS.breed);
     assert.equal(st.get('coins'), DEFAULTS.coins);
-    assert.deepEqual(st.get('owned'), ['grey_tabby']);
+    // v3.1: unlimited-coins promo grants every breed up-front
+    assert.deepEqual(st.get('owned'), Object.keys(BREED_PRICES));
+    assert.equal(st.get('unlimitedCoins'), true);
   });
 
   test('set() persists and reloads', () => {
@@ -50,27 +52,43 @@ describe('settings-store', () => {
     assert.equal(st2.get('reminders').length, 1);
   });
 
-  test('coins: add clamps to [0, 999999]', () => {
+  test('coins: add clamps to [0, 9999999]', () => {
     const st = createSettings(memBackend());
     st.addCoins(100);
-    assert.equal(st.get('coins'), 150);
-    st.addCoins(-999999);
+    assert.equal(st.get('coins'), DEFAULTS.coins + 100);
+    st.addCoins(-99_999_999);
     assert.equal(st.get('coins'), 0);
-    st.addCoins(2_000_000);
-    assert.equal(st.get('coins'), 999999);
+    st.addCoins(2_000_000_000);
+    assert.equal(st.get('coins'), 9_999_999);
   });
 
-  test('buyBreed: success path deducts and owns', () => {
+  test('unlimited promo: buyBreed is free and owns the breed', () => {
     const st = createSettings(memBackend());
-    st.addCoins(300); // 350 total
+    // shrink owned to prove the free-unlock path (promo would auto-grant on load)
+    st.set('owned', ['grey_tabby']);
+    const before = st.get('coins');
+    const r = st.buyBreed('panda');
+    assert.equal(r.ok, true);
+    assert.equal(r.free, true);
+    assert.equal(st.get('coins'), before, 'nothing deducted during promo');
+    assert.ok(st.get('owned').includes('panda'));
+  });
+
+  test('paid path (unlimitedCoins off): success deducts and owns', () => {
+    const be = memBackend();
+    be.write(JSON.stringify({ unlimitedCoins: false, coins: 350, owned: ['grey_tabby'] }));
+    const st = createSettings(be);
     const r = st.buyBreed('siamese'); // 200
     assert.equal(r.ok, true);
     assert.equal(st.get('coins'), 350 - 200);
     assert.ok(st.get('owned').includes('siamese'));
+    assert.equal(st.get('owned').length, 2, 'no auto-grant when promo off');
   });
 
-  test('buyBreed: insufficient coins fails with deficit', () => {
-    const st = createSettings(memBackend());
+  test('paid path: insufficient coins fails with deficit', () => {
+    const be = memBackend();
+    be.write(JSON.stringify({ unlimitedCoins: false, coins: 50, owned: ['grey_tabby'] }));
+    const st = createSettings(be);
     const r = st.buyBreed('tuxedo'); // 500 > 50
     assert.equal(r.ok, false);
     assert.equal(r.reason, 'insufficient');
@@ -78,8 +96,10 @@ describe('settings-store', () => {
     assert.equal(st.get('coins'), 50);
   });
 
-  test('buyBreed: already owned is free', () => {
-    const st = createSettings(memBackend());
+  test('paid path: already owned is free', () => {
+    const be = memBackend();
+    be.write(JSON.stringify({ unlimitedCoins: false, coins: 50, owned: ['grey_tabby'] }));
+    const st = createSettings(be);
     const r = st.buyBreed('grey_tabby');
     assert.equal(r.ok, true);
     assert.equal(r.alreadyOwned, true);

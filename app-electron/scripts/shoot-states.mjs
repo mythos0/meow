@@ -32,19 +32,29 @@ await page.waitForFunction('window.__ready === true');
 await page.waitForTimeout(150);
 await page.locator('#grid').screenshot({ path: path.join(outDir, 'sheet.png') });
 
-// individual states for detail
+// individual states for detail — v3.1 set (new actions + panda + new breeds)
 const shots = [
-  ['walk', 0.0, 'grey_tabby', 1],
-  ['walk', 0.35, 'grey_tabby', 1],
-  ['run', 0.2, 'orange_tabby', 1],
-  ['sit', 0.1, 'siamese', 1],
-  ['sleep', 0.2, 'persian', 1],
-  ['dance', 0.13, 'calico', 1],
-  ['scratch', 0.08, 'tuxedo', 1],
-  ['jump', 0.5, 'grey_tabby', 1],
-  ['happy', 0.1, 'orange_tabby', 1],
-  ['eat', 0.2, 'grey_tabby', 1],
-  ['walk', 0.0, 'grey_tabby', -1], // flipped
+  ['walk', 0.0, 'grey_tabby', 1], ['walk', 0.35, 'grey_tabby', 1],
+  ['run', 0.2, 'orange_tabby', 1], ['sit', 0.1, 'siamese', 1],
+  ['sleep', 0.2, 'persian', 1], ['dance', 0.13, 'calico', 1],
+  ['scratch', 0.08, 'tuxedo', 1], ['jump', 0.5, 'grey_tabby', 1],
+  ['happy', 0.1, 'orange_tabby', 1], ['eat', 0.2, 'grey_tabby', 1],
+  // v3.1 new actions
+  ['stretch', 0.6, 'grey_tabby', 1], ['groom', 0.5, 'russian_blue', 1],
+  ['pounce', 0.2, 'bengal', 1], ['pounce', 0.75, 'bengal', 1],
+  ['knead', 0.3, 'ragdoll', 1], ['loaf', 0.3, 'bombay', 1],
+  ['yawn', 0.6, 'ginger_kitten', 1], ['startle', 0.2, 'tuxedo', 1],
+  // panda
+  ['waddle', 0.3, 'panda', 1], ['bamboo', 0.3, 'panda', 1],
+  ['bamboo', 0.75, 'panda', 1], ['roll', 0.45, 'panda', 1],
+  ['sit', 0.1, 'panda', 1], ['sleep', 0.2, 'panda', 1],
+  // new breeds walking
+  ['walk', 0.15, 'bombay', 1], ['walk', 0.15, 'russian_blue', 1],
+  ['walk', 0.15, 'ginger_kitten', 1], ['walk', 0.15, 'ragdoll', 1],
+  ['walk', 0.15, 'bengal', 1], ['walk', 0.15, 'maine_coon', 1],
+  ['walk', 0.15, 'panda', 1],
+  // flipped
+  ['walk', 0.0, 'grey_tabby', -1],
 ];
 for (const [st, t, breed, dir] of shots) {
   const u = `${url}?state=${st}&t=${t}&breed=${breed}&dir=${dir}`;
@@ -52,6 +62,15 @@ for (const [st, t, breed, dir] of shots) {
   await page.waitForFunction('window.__ready === true');
   await page.locator('#cv').screenshot({ path: path.join(outDir, `${st}_${breed}_d${dir}_t${t}.png`) });
 }
+
+// emote strip
+for (const em of ['heart', 'love', 'note', 'question', 'exclaim', 'sweat', 'angry', 'laugh', 'star', 'zzz', 'fish']) {
+  const u = `${url}?state=sit&t=0.15&emote=${em}&emoteT=0.5`;
+  await page.goto(u);
+  await page.waitForFunction('window.__ready === true');
+  await page.locator('#cv').screenshot({ path: path.join(outDir, `emote_${em}.png`) });
+}
+
 await browser.close();
 server.close();
 process.exit(0);

@@ -8,8 +8,13 @@
 <h1>🐱 MeowCat Settings</h1>
 <div class="hint">Changes apply instantly.</div>
 
-<h2>Cat</h2>
-<div class="card">
+<h2>Cat Store</h2>
+<div class="card store">
+  <div class="store-head">
+    <div class="store-title">Choose your companion</div>
+    <div class="coins-pill" id="coins">🪙 0</div>
+  </div>
+  <div class="store-hint" id="shopHint">🎁 Unlimited-coins promo — every breed unlocks free!</div>
   <div class="breeds" id="breeds"></div>
 </div>
 
@@ -26,26 +31,42 @@
   <div class="row"><label>Start with Windows</label><input type="checkbox" id="autoStart"></div>
 </div>
 
-<h2>Coin Shop</h2>
-<div class="card">
-  <div class="row"><span>Balance</span><span class="coins" id="coins">🪙 0</span></div>
-  <div class="hint">Earn 1 🪙 every 30s · +2 🪙 every double-click pet</div>
-  <div id="shop" style="margin-top:8px"></div>
-</div>
-
 <div class="row" style="margin-top:14px">
   <button class="ghost" id="openReminders">⏰ Reminders…</button>
   <span style="flex:1"></span>
   <button class="ghost" id="closeBtn">Close</button>
 </div>
+
+<h2>About</h2>
+<div class="card about" id="about">
+  <div class="about-head">
+    <img src="../assets/icon.png" width="44" height="44" alt="MeowCat">
+    <div>
+      <div class="about-name">MeowCat <span class="ver" id="ver"></span></div>
+      <div class="hint">A procedurally animated desktop cat — every frame is drawn by code, no sprite frames.</div>
+    </div>
+  </div>
+  <div class="about-links">
+    <button class="chip" id="lnkDev">👨‍💻 Developer — github.com/mythos0</button>
+    <button class="chip" id="lnkRepo">🐾 Source &amp; releases</button>
+    <button class="chip" id="lnkIssues">🐛 Report an issue</button>
+  </div>
+  <div class="hint" style="margin-top:8px">
+    Electron <span id="verElectron"></span> · Canvas 2D renderer · 13 breeds · 20 actions · 11 emotes<br>
+    Sounds recorded from real cats. MIT License © 2026 mythos0.
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script type="module">
-import { drawCat, PALETTES } from '../src/cat-renderer.js';
+import { drawCat, PALETTES, BODIES } from '../src/cat-renderer.js';
 import { BREED_PRICES as prices } from '../src/settings-store.js';
 
 const $ = id => document.getElementById(id);
 let S = null;
+
+const NEW_BREEDS = new Set(['bombay', 'russian_blue', 'ginger_kitten', 'ragdoll', 'bengal', 'maine_coon', 'panda']);
 
 function toast(msg, ok = true) {
   const t = $('toast');
@@ -60,29 +81,33 @@ function save(kv) { return window.meow.setSettings(kv); }
 
 function drawPreview(canvas, breed) {
   const dpr = 2;
-  canvas.width = 140 * dpr; canvas.height = 84 * dpr;
+  canvas.width = 150 * dpr; canvas.height = 96 * dpr;
   const g = canvas.getContext('2d');
   g.clearRect(0, 0, canvas.width, canvas.height);
+  const pal = PALETTES[breed] || PALETTES.grey_tabby;
+  const k = (BODIES[pal.body] || BODIES.normal).preview;
   g.save();
-  g.translate(canvas.width / 2, canvas.height - 8 * dpr);
+  g.translate(canvas.width / 2, canvas.height - 10 * dpr);
   g.scale(dpr, dpr);
-  drawCat(g, { t: 0.15, state: 'sit', breed, dir: 1, scale: 0.62 });
+  drawCat(g, { t: 0.15, state: 'sit', breed, dir: 1, scale: k });
   g.restore();
 }
 
 function renderBreeds() {
   const owned = S.owned || [];
+  const unlimited = !!S.unlimitedCoins;
   const grid = $('breeds');
   grid.innerHTML = '';
   for (const [breed, pal] of Object.entries(PALETTES)) {
     const d = document.createElement('div');
-    d.className = 'breed' + (S.breed === breed ? ' sel' : '') + (!owned.includes(breed) ? ' locked' : '');
+    d.className = 'breed' + (S.breed === breed ? ' sel' : '') + (!owned.includes(breed) && !unlimited ? ' locked' : '');
+    d.dataset.breed = breed;
     const cv = document.createElement('canvas');
     d.appendChild(cv);
     const nm = document.createElement('div');
     nm.className = 'nm'; nm.textContent = pal.name || breed;
     d.appendChild(nm);
-    if (!owned.includes(breed)) {
+    if (!owned.includes(breed) && !unlimited) {
       const pr = document.createElement('div');
       pr.className = 'pr'; pr.textContent = '🔒 ' + (prices[breed] ?? '?') + ' 🪙';
       d.appendChild(pr);
@@ -91,13 +116,23 @@ function renderBreeds() {
       own.className = 'own'; own.textContent = '✓';
       d.appendChild(own);
     }
+    if (NEW_BREEDS.has(breed)) {
+      const tag = document.createElement('div');
+      tag.className = 'tagnew';
+      tag.textContent = breed === 'panda' ? '🐼 new' : 'new';
+      d.appendChild(tag);
+    }
     drawPreview(cv, breed);
     d.onclick = async () => {
-      if (!owned.includes(breed)) {
+      if (!owned.includes(breed) && !unlimited) {
         const r = await window.meow.buyBreed(breed);
         if (r.ok) { toast('Unlocked ' + breed + '!'); S = await refresh(); }
         else toast('Need ' + r.needed + ' more 🪙', false);
         return;
+      }
+      if (!owned.includes(breed)) {
+        const r = await window.meow.buyBreed(breed);   // free unlock (unlimited promo)
+        if (r.ok) { S = await refresh(); }
       }
       S.breed = breed;
       drawSelection();
@@ -120,6 +155,9 @@ function syncControls() {
   $('topmost').checked = S.topmost !== false;
   $('autoStart').checked = !!S.autoStart;
   $('coins').textContent = '🪙 ' + (S.coins ?? 0);
+  $('shopHint').textContent = S.unlimitedCoins
+    ? '🎁 Unlimited-coins promo — every breed unlocks free!'
+    : 'Earn 1 🪙 every 30s · +2 🪙 every pet tap';
 }
 
 async function refresh() {
@@ -136,7 +174,19 @@ $('sounds').onchange = e => save({ sounds: e.target.checked });
 $('topmost').onchange = e => save({ topmost: e.target.checked });
 $('autoStart').onchange = e => { save({ autoStart: e.target.checked }); toast(e.target.checked ? 'Will start with Windows' : 'Auto-start disabled'); };
 $('openReminders').onclick = () => window.meow.openWindow('reminders');
-$('closeBtn').onclick = () => window.close();
+$('closeBtn').onclick = () => window.meow.closeWindow('settings');
+
+// ---- About page ----
+(async () => {
+  try {
+    const info = await window.meow.appInfo();
+    $('ver').textContent = 'v' + info.version;
+    $('verElectron').textContent = 'v' + info.electron;
+  } catch { $('ver').textContent = ''; }
+})();
+$('lnkDev').onclick = () => window.meow.openExternal('https://github.com/mythos0');
+$('lnkRepo').onclick = () => window.meow.openExternal('https://github.com/mythos0/MeowCat');
+$('lnkIssues').onclick = () => window.meow.openExternal('https://github.com/mythos0/MeowCat/issues');
 
 refresh();
 </script>

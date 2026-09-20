@@ -59,3 +59,27 @@ Work Log:
 Stage Summary:
 - v3 portable EXE delivered and fully tested (64 automated checks)
 - Frame-based sprite pipeline superseded by procedural canvas renderer
+
+---
+Task ID: 9
+Agent: Super Z (main)
+Task: v3.1.0 — more breeds/bodies + panda, more actions/emotes, window-top hopping, fast settings, roaming, identity/UX polish
+
+Work Log:
+- Renderer: BODIES body-type system (6 skeletons), 7 new breeds (bombay, russian_blue, ginger_kitten, ragdoll, bengal, maine_coon) + panda (round ears, eye patches, black limbs, shoulder band, stubby tail) → 13 breeds
+- Renderer: 10 new actions (stretch/groom/pounce/knead/loaf/yawn/startle + panda waddle/bamboo/roll) → 20 states; drawEmote with 11 glyphs (pop/spring/fade, badge bubbles); leaf/bamboo prop; whole-body rotation for somersault
+- FIX: tail drawn inside body transform — no longer floats off rotated/squashed torso (sleep bug user reported)
+- Brain: breed-aware weights (panda set), EMOTE_ON contextual emotes, platform hopping (jump onto ANY nearby window top ≤420px, walk span-clamped, neighbor hops ≤560px, drop to ground), open-field roaming (70% of walks go to random screen points), dropAt snapping
+- window-scan.js: PowerShell EnumWindows scanner (DWM cloaked filter, own windows excluded) + pure JSON parser + dedupe emitter; main starts it on win32 only
+- fast-windows.js warm pool: settings/reminders created hidden at startup; open = show+focus (4ms measured); FIX: renderer window.close() destroys → new close-window IPC keeps pool warm
+- UX: double-click opens Settings popup (pet moved to delayed tap), right-click context menu, drag/drop silent (mousedown meow removed)
+- Settings: premium store UI (gradient cards, hover lift, gold selected ring, NEW badges, coin pill), breed display names, About panel (version, Electron, github.com/mythos0 dev/repo/issues links via whitelisted open-external)
+- Icon: new background-less procedural cat face (256→16), icon.ico 7 sizes + tray.png via png-to-ico
+- patch-exe.mjs: pure-JS resedit PE patcher — strips stub resources, stamps MeowCat FileDescription/ProductName/version/mythos0 + 7 icon sizes (Task Manager shows MeowCat, not electron); verified by PE parse
+- Tests: roam.test.mjs + platforms/window-scan/fastwindows/breeds suites → 78 unit; visual suite extended to all states/breeds/emotes → 60; e2e extended (fast open, dblclick, about, store, live hop) → 24/24. TOTAL 162 automated checks green
+- Docs: README rewritten ("How the cat is rendered" full detail), docs/RENDERING.md, FEATURES/TESTING refreshed for v3.1
+- Build: electron-builder portable → dist/MeowCat-3.1.0-portable.exe → patched → download/ (76.2MB, asar payload verified)
+
+Stage Summary:
+- v3.1.0 delivered: download/MeowCat-3.1.0-portable.exe (162 checks green)
+- Ready: push private repo, then public repo (README + release asset only)

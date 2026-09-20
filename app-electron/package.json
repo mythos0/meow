@@ -1,7 +1,7 @@
 {
   "name": "meowcat",
   "productName": "MeowCat",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "A smooth procedural desktop cat for Windows 11 — real-time 2D canvas animation, no sprite frames",
   "main": "main.js",
   "type": "module",
@@ -9,7 +9,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node --test tests/brain.test.mjs tests/scheduler.test.mjs tests/store.test.mjs tests/topmost.test.mjs && node --test tests/renderer.test.mjs",
+    "test": "node --test tests/brain.test.mjs tests/scheduler.test.mjs tests/store.test.mjs tests/topmost.test.mjs tests/platforms.test.mjs tests/roam.test.mjs tests/window-scan.test.mjs tests/fastwindows.test.mjs tests/breeds.test.mjs && node --test tests/renderer.test.mjs",
     "dist": "electron-builder --win portable --publish never"
   },
   "build": {
@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "electron": "^33.4.11",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.2"
   }
 }

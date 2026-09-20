@@ -1,96 +1,63 @@
-# Testing MeowCat
+# MeowCat — Testing Guide
 
-## 1. Automated test suite (runs on any OS)
+## 1. Test pyramid (all runnable on Linux CI)
+
+| layer | count | runner | what it proves |
+|---|---|---|---|
+| unit | 78 | `node --test` (no browser) | brain gaits & physics, platform hopping, open-field roaming, window JSON parsing, scanner lifecycle, warm-window pool, economy (paid + unlimited promo), reminder scheduling, topmost enforcer, breed/body integrity |
+| visual | 60 | Playwright + `test/harness.html` | every state/breed/emote paints, feet stay planted, animation is alive (frames differ), breeds are pixel-distinct, mirror flip is symmetric, panda has black+white anatomy, emote life-cycle |
+| E2E | 24 | real Electron under Xvfb + CDP | boot → paint → brain advance → IPC actions → coins persist → reminders fire/consume → settings warm-open <300 ms → close keeps pool warm → 13 store cards → premium UI → double-click popup → about page (version + dev link) → free panda unlock → reminders UI → **live window-top jump** |
+
+Run:
 
 ```bash
-dotnet test MeowCat.sln -c Release        # → 40/40 passed
+cd app-electron
+npm test                        # unit + visual (138 checks)
+node scripts/e2e-linux.mjs      # real app E2E (needs Xvfb on Linux)
 ```
 
-| Suite | What it proves |
-|---|---|
-| `CatBrainTests` (13) | starts idle · mood clamping · sleep restores energy · passive drain · finite actions complete on time · dance rewards & mood relief · **low energy forces sleep** · pet coin cooldown · **jump reaches window top edge exactly + lands sitting** · apex above both endpoints & velocity signs · **hop-down from window tops** · chase ends near mouse · command legality mid-air · drag override rules · **10 000-tick simulation: mood bounds, floor bounds, no lost coins, ≥4 distinct activities, naps when tired** · weight table never negative & no instant repeats |
-| `CoinWalletTests` (5) | start balance · earn · spend within balance · **overdraft impossible** · negative amounts rejected · change events |
-| `SettingsStoreTests` (4) | JSON round-trip · **corrupt file → defaults + .corrupt backup** · missing file → defaults · sanitize clamps crazy values |
-| `CatModelTests` (2) | walking integrates + bounces at walls · jump completes exactly at planned duration & position |
-| `CatStateInfoTests` (3) | drag blocks commands, release returns to sitting · mid-air interrupts blocked · finite flags |
-| `SkinCatalogTests` (6) | 6/6/5 merch counts · **ids unique across whole store** · default breed free · sane prices · lookups · max 3 accessories |
-| `SoundCatalogTests` (3) | every mapped sound is a known file · **all 10 WAVs exist in Assets** · positive loop intervals |
+## 2. Determinism
 
-## 2. Build-level verification already performed
+* The brain uses seeded `mulberry32` RNG in tests — platform jumps and roam targets
+  are reproducible.
+* The renderer is a pure function of `(t, state, breed, dir, scale, jumpP)` — visual
+  tests can compare exact pixel buffers between timestamps.
 
-- `dotnet build` of the **full WPF app** on Linux (`EnableWindowsTargeting`) — the entire app
-  (renderer, windows, interop) compiles cleanly.
-- `dotnet publish -r win-x64` — Windows exe + all deps produced.
-- MSI built & inspected table-by-table with `msiinfo` (Property, Upgrade, Directory, Component,
-  File, Shortcut, Registry, InstallExecuteSequence, embedded cabinet).
+## 3. Build-level verification
 
-## 3. Manual QA checklist (Windows 11 — 20 points)
+* `node scripts/gen-icons.mjs` regenerates `icon.ico` (7 sizes), `icon.png`, `tray.png`
+  from the procedural face — no binary assets committed by hand.
+* `node scripts/patch-exe.mjs <exe> [out] [ver]` stamps PE resources (name/icon/version)
+  — verified by parsing the output PE for the UTF-16 strings and PNG icon payloads.
+* `npm run dist` builds `MeowCat-3.1.0-portable.exe` via electron-builder
+  (`signAndEditExecutable:false` on Linux; the patch script supplies identity instead).
 
-*(automated UI tests need a real Windows session; this is the 15-minute pass)*
+## 4. Manual QA checklist (Windows 11, v3.1)
 
-| # | Check | Expected |
-|---|---|---|
-| 1 | Install MSI | completes, Start-Menu shortcut exists, entry in Apps & Features |
-| 2 | Launch | cat appears on the floor line (above taskbar), no console window |
-| 3 | Walk | strolls both directions, bounces at screen edges, footstep sounds |
-| 4 | Overlay | cat renders **over** browsers/tabs/taskbar; rest of screen fully clickable (click under the cat's empty window corners) |
-| 5 | Idle life | sits, looks around, blinks; boredom builds → dances/plays on its own |
-| 6 | Sleep | lies down, breathes, purrs, Zzz floats; wakes with energy |
-| 7 | Dance | bounce + roll + music notes + dance loop |
-| 8 | Jump | tray menu ▸ Jump to window ▸ pick a Notepad/Explorer window → arc, tuck, landing squash + thud, proud sit |
-| 9 | After jump | when it next walks it hops down from the window top automatically |
-| 10 | Pet | single click → hearts + happiness; double-click → meow |
-| 11 | Drag | drag by the cat → dangles, follows cursor; release → sits where dropped |
-| 12 | Chase | move mouse a lot while bored → cat runs to the cursor and sits by it |
-| 13 | Yarn | ball appears, paw bats it, ball rolls |
-| 14 | Scratch | occasional edge-scratch with scratch sound + lines |
-| 15 | Store preview | open store (tray double-click or cat menu) → preview pane walks with your pending selections; emote pick shows showcase |
-| 16 | Store economy | buy Calico (120) with start coins → applied instantly; try buying when broke → friendly hint; daily gift +50 once/day |
-| 17 | Accessories | equip top hat + scarf + glasses together (max 3), then unequip |
-| 18 | Size | slider 0.5→2.0 resizes cat + overlay live; size persists after restart |
-| 19 | Persistence | restart app → coins/wardrobe/mood restored from %APPDATA%\MeowCat\config.json |
-| 20 | Upgrade & uninstall | install MSI again over itself (same version upgrade), then uninstall → files, shortcut and ARP entry removed; config.json survives for the next install |
+1. Run the portable exe → tray icon (cat face) appears; Task Manager shows **MeowCat** with the cat icon, not "electron"
+2. Cat walks to random points across the whole screen (open-field roaming), not only the taskbar
+3. Open any window; when the cat walks near, it jumps onto the **top border** and strolls along it
+4. With two windows side by side, the cat hops from one top border to the other
+5. Resize a window and repeat — any size window is a valid platform
+6. Close a window while the cat is on it → the cat is back on the ground (no crash, no floating)
+7. Double-click the cat → Settings opens instantly; Close hides it; reopen is instant
+8. Single click → purr + heart emote; **drag & drop is silent**
+9. Right-click → context menu (Settings/Reminders/Dance/Feed/Sleep/Quit)
+10. Switch to Panda → waddle gait, bamboo munch with drawn stalk, somersault roll
+11. Watch sleep → tail stays attached to the curled body (no floating tail)
+12. Watch run/dance/pounce → squash & stretch, feet plant on the ground, natural gait
+13. Emotes pop above the head and fade after ~2 s
+14. Reminders → add one for 1 min ahead → cat dances + bubble + chirp
+15. Coin pill updates; every breed unlocks free (unlimited promo); select Panda persists after restart
+16. About panel → version v3.1.x, developer GitHub link opens the browser
+17. Toggle "Start with Windows" → survives reboot (HKCU Run / Electron login item)
+18. Fullscreen a video/game → cat remains visible above it
+19. Drag the cat onto a window top border → it snaps to the border
+20. Tray → Quit → app exits cleanly (no zombie processes in Task Manager)
 
-## 4. Known environment notes
+## 5. Environment notes
 
-- Other *always-on-top* overlays (some game HUDs) can cover the cat; the cat re-asserts topmost on
-  state changes.
-- Per-monitor DPI: mouse/window rects are converted with the **primary** monitor scale — mixed-DPI
-  multi-monitor setups may show small offset on secondary monitors (listed as a future fix).
-- UWP full-screen apps: DWM-cloaked windows are excluded from jump targets automatically.
-
----
-
-# v2.0.0 test matrix — 56/56 PASS
-
-## Automated (dotnet test → 56 xunit tests)
-
-New in v2.0.0 (`V3FeatureTests`, +16 tests):
-
-| Area | Tests |
-|---|---|
-| Frame catalog | default breed has 8-frame motion clips & 4-frame stationary; MaxFramesPerClip=8; `FrameFile` wraps by modulo |
-| Platform brain | jump lands on a window top and registers the platform; walking on a platform is clamped to the window span; **auto-hop triggers while walking near a tab top**; `NearestOtherWindow` never picks the current window |
-| Desktop strolls | with no windows + desktop points, the cat's stroll range covers the icon neighbourhoods |
-| Reminders | store round-trip; corrupt file → empty + `.corrupt-` backup; one-shot fires exactly once then disables; repeating rolls forward; stale reminders ignored on first run; `NextOccurrence` math; movement parsing falls back to Dancing |
-| Settings | `AutoStartEnabled` / `ReminderPopupsEnabled` persist round-trip |
-
-Updated legacy tests: jump landing X now honours the ±620 reach clamp + window-span clamp;
-10k-tick sim asserts bounds against the full work area.
-
-Regression suite: 40 v1 tests (brain invariants, economy, catalogs, jump physics, settings) —
-all green.
-
-## Manual QA checklist (Windows 11, v2.0.0)
-
-1. Install `MeowCat-2.0.0-x64.msi` over 1.x → upgrade completes, **desktop shortcut exists**.
-2. Open a fullscreen video (F11) → the cat **stays on top**; toggle glass overlay → also on top.
-3. Walk near a window title bar → the cat hops onto it; watch it stroll along the bar and hop to
-   the neighbouring window's top edge.
-4. Minimize everything → the cat walks between desktop folder icons and scratches beside one.
-5. Right-click → *Make angry*, then click the cat twice → cracks appear **above** other windows;
-   give a treat → every crack fades away.
-6. Right-click → *Reminders…* → add one for 1 minute ahead, movement=Dancing → at fire time:
-   meow + speech bubble + the cat dances; tray balloon shows too.
-7. Right-click → *Settings…* → enable auto-start → registry Run key present; sound off → silence.
-8. Uninstall → both shortcuts and the install folder are gone.
+* Linux CI: Electron runs under Xvfb; `wine` is blocked by the sandbox, which is why
+  the portable exe is resource-patched in pure JS instead of rcedit.
+* PowerShell window scanning only starts on `process.platform === 'win32'`; everywhere
+  else the brain simply has no platforms (tests inject them).

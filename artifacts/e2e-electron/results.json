@@ -12,12 +12,12 @@
   {
     "name": "brain pose advances (animation clock)",
     "pass": true,
-    "extra": "t 0.39 → 2.22"
+    "extra": "t 0.42 → 2.24"
   },
   {
     "name": "cat state machine runs",
     "pass": true,
-    "extra": "idle@800 → sit@800"
+    "extra": "idle@800 → dance@800"
   },
   {
     "name": "tray-style action (dance) reaches the cat",
@@ -27,7 +27,7 @@
   {
     "name": "coins persist through IPC+store",
     "pass": true,
-    "extra": "80 → 90"
+    "extra": "150 → 160"
   },
   {
     "name": "settings round-trip",
@@ -50,9 +50,54 @@
     "extra": ""
   },
   {
-    "name": "settings shows 6 breed cards",
+    "name": "settings open (warm) is fast (<300ms)",
     "pass": true,
-    "extra": "6"
+    "extra": "44ms"
+  },
+  {
+    "name": "close keeps the window warm (page target alive)",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "reopen is instant (warm reuse, <300ms)",
+    "pass": true,
+    "extra": "18ms"
+  },
+  {
+    "name": "reopened settings window takes focus",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "settings shows 13 breed cards",
+    "pass": true,
+    "extra": "13"
+  },
+  {
+    "name": "unlimited coins: no locked breeds",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "premium store UI renders (pill + NEW badges)",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "double-click on the cat opens the settings popup",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "about page shows version + developer link",
+    "pass": true,
+    "extra": "{\"ver\":\"v3.1.0\",\"dev\":true}"
+  },
+  {
+    "name": "panda unlocks free (unlimited coins promo)",
+    "pass": true,
+    "extra": "{\"ok\":true,\"alreadyOwned\":true,\"coins\":160}"
   },
   {
     "name": "reminders window opens",
@@ -63,6 +108,11 @@
     "name": "reminder added from real UI",
     "pass": true,
     "extra": "1 rows"
+  },
+  {
+    "name": "live: cat jumps onto a nearby window top border",
+    "pass": true,
+    "extra": "{\"ok\":true,\"state\":\"scratch\",\"baseY\":640,\"x\":534}"
   },
   {
     "name": "e2e screenshots saved",

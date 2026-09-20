@@ -8,6 +8,7 @@ function mkBrain(seed = 42, over = {}) {
     bounds: { x: 0, y: 0, w: 1920, h: 1080 },
     groundY: 1040,
     rand: mulberry32(seed),
+    roam: false,          // deterministic legacy gaits (roam tested separately)
     ...over,
   });
 }
@@ -79,10 +80,11 @@ describe('CatBrain', () => {
     assert.notEqual(b.state, 'happy');
   });
 
-  test('poke() triggers a jump', () => {
+  test('poke() triggers a startle (v3.1)', () => {
     const b = mkBrain();
     b.poke();
-    assert.equal(b.state, 'jump');
+    assert.equal(b.state, 'startle');
+    assert.equal(b.emote && b.emote.kind, 'exclaim', 'startle shows ! emote');
   });
 
   test('feed() triggers eat', () => {

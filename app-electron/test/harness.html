@@ -12,10 +12,10 @@
 <canvas id="cv" width="360" height="260"></canvas>
 <canvas id="grid" width="0" height="0" style="display:none"></canvas>
 <script type="module">
-import { drawCat, drawParticles, STATES, PALETTES } from '../src/cat-renderer.js';
+import { drawCat, drawParticles, drawEmote, STATES, PALETTES, EMOTES } from '../src/cat-renderer.js';
 
-// Mode 1: single render — ?state=walk&t=0.3&breed=grey_tabby&dir=1&scale=1
-// Mode 2: contact sheet — ?sheet=1 (all states x timestamps + breed row)
+// Mode 1: single render — ?state=walk&t=0.3&breed=grey_tabby&dir=1&scale=1[&emote=heart]
+// Mode 2: contact sheet — ?sheet=1 (all states x timestamps + breed rows + emote row)
 const q = new URLSearchParams(location.search);
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
@@ -28,10 +28,13 @@ if (q.get('sheet')) {
   const cols = 5;
   const stateCells = states.length * times.length;
   const rows = Math.ceil(stateCells / cols);
+  const breedRows = Math.ceil(breeds.length / cols);
+  const emoteCells = EMOTES.length;
+  const emoteRows = Math.ceil(emoteCells / cols);
   const grid = document.getElementById('grid');
   grid.style.display = 'block';
   grid.width = cols * CELL_W;
-  grid.height = (rows + 2) * CELL_H; // state rows + breed rows (2 rows for 6 breeds)
+  grid.height = (rows + breedRows + emoteRows) * CELL_H;
   const g = grid.getContext('2d');
   g.fillStyle = '#e8e8f0'; g.fillRect(0,0,grid.width,grid.height);
   for (let y = 0; y < grid.height; y += 20)
@@ -63,6 +66,17 @@ if (q.get('sheet')) {
     drawCat(g, { t: 0.15, state: 'walk', breed: br, dir: 1, scale: 1 });
     g.restore();
   });
+  EMOTES.forEach((em, i) => {
+    const col = i % cols, row = rows + breedRows + Math.floor(i / cols);
+    const ox = col * CELL_W, oy = row * CELL_H;
+    g.strokeStyle = '#bbb'; g.strokeRect(ox, oy, CELL_W, CELL_H);
+    g.fillStyle = '#333'; g.fillText('emote:' + em, ox + 6, oy + 16);
+    g.save();
+    g.translate(ox + CELL_W/2, oy + CELL_H - 34);
+    drawCat(g, { t: 0.15, state: 'sit', breed: 'grey_tabby', dir: 1, scale: 1 });
+    drawEmote(g, { kind: em, t: 0.5, x: 46, y: -150, scale: 1 });
+    g.restore();
+  });
 
   document.title = 'sheet-ready';
 } else {
@@ -72,6 +86,7 @@ if (q.get('sheet')) {
   const dir = parseInt(q.get('dir') || '1');
   const scale = parseFloat(q.get('scale') || '1');
   const jumpP = parseFloat(q.get('jumpP') || '0.5');
+  const emote = q.get('emote');
   const W = cv.width, H = cv.height;
   ctx.fillStyle = '#eceff4'; ctx.fillRect(0,0,W,H);
   for (let y = 0; y < H; y += 16)
@@ -82,6 +97,7 @@ if (q.get('sheet')) {
   const opts = { t, state, breed, dir, scale, jumpP };
   drawCat(ctx, opts);
   drawParticles(ctx, opts);
+  if (emote) drawEmote(ctx, { kind: emote, t: parseFloat(q.get('emoteT') || '0.5'), x: 46, y: -150, scale: 1 });
   ctx.restore();
   document.title = 'single-ready:' + state;
 }

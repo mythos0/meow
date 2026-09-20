@@ -10,14 +10,17 @@ export const DEFAULTS = {
   autoStart: false,
   topmost: true,
   speed: 55,
-  coins: 50,
-  owned: ['grey_tabby'],  // owned breeds
+  coins: 999999,        // v3.1: promo — effectively unlimited coins
+  unlimitedCoins: true, // v3.1: every breed unlocks free while true
+  owned: ['grey_tabby'],  // owned breeds (auto-granted to ALL while unlimitedCoins)
   reminders: [],          // [{id,label,at,repeat,anim,sound}]
   version: 1,
 };
 
 export const BREED_PRICES = {
   grey_tabby: 0, orange_tabby: 100, siamese: 200, calico: 300, persian: 400, tuxedo: 500,
+  bombay: 150, russian_blue: 250, ginger_kitten: 300, ragdoll: 450, bengal: 550,
+  maine_coon: 650, panda: 1000,
 };
 
 export function createSettings(backend) {
@@ -27,10 +30,10 @@ export function createSettings(backend) {
   function load(b) {
     try {
       const raw = b.read();
-      if (!raw) return structuredClone(DEFAULTS);
+      if (!raw) return sanitize({});
       const parsed = JSON.parse(raw);
       return sanitize(parsed);
-    } catch { return structuredClone(DEFAULTS); }
+    } catch { return sanitize({}); }
   }
 
   function sanitize(p) {
@@ -44,6 +47,8 @@ export function createSettings(backend) {
       } else if (typeof d[k] === typeof p[k]) d[k] = p[k];
     }
     if (p.version) d.version = p.version;
+    // v3.1 promo: unlimited coins -> everything unlocked
+    if (d.unlimitedCoins) d.owned = Object.keys(BREED_PRICES);
     return d;
   }
 
@@ -62,14 +67,23 @@ export function createSettings(backend) {
     },
     // economy
     addCoins(n) {
-      data.coins = Math.max(0, Math.min(999999, (data.coins | 0) + (n | 0)));
+      data.coins = Math.max(0, Math.min(9999999, (data.coins | 0) + (n | 0)));
       persist();
       return data.coins;
     },
-    canAfford(breed) { return (BREED_PRICES[breed] ?? Infinity) <= data.coins; },
+    canAfford(breed) {
+      if (data.unlimitedCoins) return true;
+      return (BREED_PRICES[breed] ?? Infinity) <= data.coins;
+    },
     buyBreed(breed) {
       if (!(breed in BREED_PRICES)) return { ok: false, reason: 'unknown' };
       if (data.owned.includes(breed)) return { ok: true, alreadyOwned: true, coins: data.coins };
+      // v3.1 promo: unlimited coins -> free unlock, nothing deducted
+      if (data.unlimitedCoins) {
+        data.owned.push(breed);
+        persist();
+        return { ok: true, free: true, coins: data.coins };
+      }
       const price = BREED_PRICES[breed];
       if (data.coins < price) return { ok: false, reason: 'insufficient', needed: price - data.coins };
       data.coins -= price;

@@ -32,7 +32,7 @@ button.small { padding: 5px 10px; font-size: 12px; }
 button:disabled { opacity: .45; cursor: default; }
 
 /* breed grid */
-.breeds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.breeds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .breed {
   background: var(--bg2); border: 2px solid var(--line); border-radius: 10px;
   padding: 6px 4px 4px; text-align: center; cursor: pointer; position: relative;
@@ -57,3 +57,66 @@ button:disabled { opacity: .45; cursor: default; }
 .toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
   background: var(--bg2); border: 1px solid var(--line); color: var(--text);
   border-radius: 10px; padding: 8px 16px; display: none; z-index: 50; }
+
+/* ---------------- v3.1 premium Cat Store ---------------- */
+.card.store { background: linear-gradient(160deg, #232633 0%, #1d1f2a 55%, #201b26 100%); }
+.store-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.store-title { font-weight: 700; font-size: 14px; letter-spacing: .02em; }
+.coins-pill {
+  background: linear-gradient(135deg, #f0b45c, #d98a2c);
+  color: #241a08; font-weight: 800; font-size: 13px;
+  border-radius: 999px; padding: 5px 14px;
+  box-shadow: 0 2px 10px rgba(240, 180, 92, .35);
+}
+.store-hint { color: var(--dim); font-size: 12px; margin-bottom: 10px; }
+
+.breeds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.breed {
+  background: linear-gradient(165deg, #2a2d3c 0%, #22242f 100%);
+  border: 2px solid #3a3e4e; border-radius: 14px;
+  padding: 10px 6px 8px; text-align: center; cursor: pointer; position: relative;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+  overflow: hidden;
+}
+.breed:hover {
+  transform: translateY(-3px) scale(1.02);
+  border-color: #5a6076;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .45);
+}
+.breed canvas { width: 100%; height: 84px; }
+.breed .nm { font-size: 11.5px; font-weight: 600; color: var(--text); margin-top: 2px; }
+.breed .pr { font-size: 11px; color: var(--accent); }
+.breed .own {
+  position: absolute; top: 7px; right: 7px; width: 20px; height: 20px;
+  background: linear-gradient(135deg, #7fc46f, #4e9e50);
+  color: #0c1a08; border-radius: 999px; font-size: 12px; font-weight: 800;
+  line-height: 20px; box-shadow: 0 2px 8px rgba(0, 0, 0, .4);
+}
+.breed .tagnew {
+  position: absolute; top: 7px; left: 7px;
+  background: linear-gradient(135deg, #e07070, #c04848);
+  color: #fff; font-size: 9.5px; font-weight: 700; letter-spacing: .04em;
+  border-radius: 999px; padding: 2px 8px; text-transform: uppercase;
+}
+.breed.sel {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(240, 180, 92, .22), 0 10px 26px rgba(0, 0, 0, .5);
+  background: linear-gradient(165deg, #3a3223 0%, #2a2419 100%);
+}
+.breed.sel::after {
+  content: ''; position: absolute; inset: -40% -20% auto; height: 70%;
+  background: radial-gradient(ellipse at center, rgba(240, 180, 92, .16), transparent 65%);
+  pointer-events: none;
+}
+.breed.locked { opacity: .5; filter: saturate(.35); }
+
+/* ---------------- About ---------------- */
+.about .about-head { display: flex; gap: 12px; align-items: center; }
+.about .about-name { font-weight: 800; font-size: 15px; }
+.about .ver { color: var(--accent); font-weight: 700; font-size: 12px; margin-left: 4px; }
+.about-links { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+button.chip {
+  background: var(--bg2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600;
+}
+button.chip:hover { border-color: var(--accent); color: var(--accent); }

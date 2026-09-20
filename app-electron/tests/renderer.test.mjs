@@ -1,4 +1,5 @@
-// renderer.test.mjs — visual regression via Playwright + pixel analysis (pure logic part)
+// renderer.test.mjs — visual regression via Playwright + pixel analysis.
+// v3.1: covers all 20 states, all 13 breeds, and all 11 emotes.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -6,6 +7,7 @@ import http from 'http';
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { STATES, PALETTES, EMOTES } from '../src/cat-renderer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -56,9 +58,8 @@ describe('cat-renderer visual', () => {
   });
   after(async () => { await browser?.close(); srv?.close(); });
 
-  const states = ['walk', 'run', 'idle', 'sit', 'sleep', 'dance', 'scratch', 'jump', 'happy', 'eat'];
-
-  for (const st of states) {
+  // ---- every state renders a plausible cat ----
+  for (const st of STATES) {
     test(`state "${st}" renders a visible cat`, async () => {
       const page = await browser.newPage();
       await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=${st}&t=0.2`);
@@ -69,8 +70,27 @@ describe('cat-renderer visual', () => {
       assert.ok(s.frac < 0.9, `${st}: canvas nearly full — suspicious`);
       const [x0, y0, x1, y1] = s.bbox;
       assert.ok(x1 > x0 && y1 > y0, `${st}: has bbox`);
-      // feet must be near bottom area (ground)
+      // feet must be near the bottom area (ground) — loaf/roll/sit tuck but never fly
       assert.ok(y1 > 170, `${st}: feet at y=${y1}, expected near bottom`);
+    });
+  }
+
+  // ---- every state animates (two timestamps differ) ----
+  for (const st of STATES.filter(s => !['idle', 'loaf'].includes(s))) {
+    test(`state "${st}" is animated (frames differ)`, async () => {
+      const page = await browser.newPage();
+      const grab = async t => {
+        await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=${st}&t=${t}`);
+        await page.waitForFunction('window.__ready === true');
+        return page.evaluate(() => {
+          const cv = document.getElementById('cv');
+          return cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data.join(',');
+        });
+      };
+      const a = await grab(0);
+      const b = await grab(0.35);
+      await page.close();
+      assert.notEqual(a, b, `${st}: frames identical — animation dead`);
     });
   }
 
@@ -90,10 +110,11 @@ describe('cat-renderer visual', () => {
     assert.notEqual(a, b, 'frames identical — animation dead');
   });
 
+  // ---- all 13 breeds render distinctly ----
   test('all breeds render distinctly', async () => {
     const page = await browser.newPage();
     const sig = {};
-    for (const br of ['grey_tabby', 'orange_tabby', 'siamese', 'calico', 'persian', 'tuxedo']) {
+    for (const br of Object.keys(PALETTES)) {
       await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=walk&t=0.15&breed=${br}`);
       await page.waitForFunction('window.__ready === true');
       sig[br] = await page.evaluate(() => {
@@ -106,7 +127,72 @@ describe('cat-renderer visual', () => {
     }
     await page.close();
     const uniq = new Set(Object.values(sig));
-    assert.equal(uniq.size, 6, `breeds should be visually distinct, got ${uniq.size}/6`);
+    assert.equal(uniq.size, Object.keys(PALETTES).length,
+      `breeds should be visually distinct, got ${uniq.size}/${Object.keys(PALETTES).length}`);
+  });
+
+  // ---- every body type keeps feet on the ground while walking ----
+  for (const body of ['normal', 'slim', 'kitten', 'chubby', 'large', 'panda']) {
+    const breed = Object.keys(PALETTES).find(b => (PALETTES[b].body || 'normal') === body);
+    test(`body "${body}" (${breed}) walks with feet near the ground`, async () => {
+      const page = await browser.newPage();
+      await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=walk&t=0.15&breed=${breed}`);
+      await page.waitForFunction('window.__ready === true');
+      const s = await canvasStats(page);
+      await page.close();
+      const [, , , y1] = s.bbox;
+      assert.ok(y1 > 195, `${body}: feet at y=${y1}, expected planted near the ground`);
+    });
+  }
+
+  // ---- panda specifics ----
+  test('panda shows black + white anatomy (dark and light regions)', async () => {
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=sit&t=0.2&breed=panda`);
+    await page.waitForFunction('window.__ready === true');
+    const colors = await page.evaluate(() => {
+      const cv = document.getElementById('cv');
+      const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+      let dark = 0, light = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 40) continue;
+        const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+        if (lum < 70) dark++;
+        else if (lum > 215) light++;
+      }
+      return { dark, light };
+    });
+    await page.close();
+    assert.ok(colors.dark > 300, `panda needs black limbs/ears/patches (${colors.dark}px)`);
+    assert.ok(colors.light > 2000, `panda needs a white body (${colors.light}px)`);
+  });
+
+  // ---- every emote renders above the cat ----
+  for (const em of EMOTES) {
+    test(`emote "${em}" renders visibly`, async () => {
+      const page = await browser.newPage();
+      await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=sit&t=0.15&emote=${em}&emoteT=0.5`);
+      await page.waitForFunction('window.__ready === true');
+      const s = await canvasStats(page);
+      await page.close();
+      const [x0, y0] = s.bbox;
+      assert.ok(s.frac > 0.02, `${em}: nothing rendered`);
+      assert.ok(y0 < 130, `${em}: emote should appear in the upper area (top y=${y0})`);
+    });
+  }
+
+  test('emote pops in and fades out (life-cycle)', async () => {
+    const page = await browser.newPage();
+    const grab = async emoteT => {
+      await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=sit&t=0.15&emote=heart&emoteT=${emoteT}`);
+      await page.waitForFunction('window.__ready === true');
+      return canvasStats(page);
+    };
+    const mid = await grab(0.5);
+    const dead = await grab(2.5);   // past life=2.0 → nothing above the cat
+    await page.close();
+    assert.ok(mid.bbox[1] < 100, 'emote visible mid-life (top=' + mid.bbox[1] + ')');
+    assert.ok(dead.bbox[1] >= 100, 'emote gone after life expiry (top=' + dead.bbox[1] + ', ear tips ~112)');
   });
 
   test('flipped cat mirrors correctly', async () => {
@@ -121,7 +207,7 @@ describe('cat-renderer visual', () => {
     await page.close();
     // mirrored bbox x should be mirrored around center 180
     const mR = 360 - right.bbox[2], MR = 360 - right.bbox[0];
-    assert.ok(Math.abs(mR - left.bbox[0]) < 8 && Math.abs(MR - left.bbox[1 + 1]) < 8,
+    assert.ok(Math.abs(mR - left.bbox[0]) < 8 && Math.abs(MR - left.bbox[2]) < 8,
       `mirror mismatch: R ${right.bbox} vs L ${left.bbox}`);
   });
 });

@@ -127,16 +127,79 @@ try {
   const rlist = await cat.evaluate(() => window.meow.listReminders());
   ok('one-shot reminder consumed after firing', rlist.length === 0, `${rlist.length} left`);
 
-  // ------------------------------------------------ 7. settings window opens & renders
-  await cat.evaluate(() => window.meow.openWindow('settings'));
+  // ------------------------------------------------ 7. settings window opens fast (warm pool) & renders
+  const openMs = await cat.evaluate(async () => {
+    const t = Date.now();
+    await window.meow.openWindow('settings');
+    return Date.now() - t;
+  });
   const set = await findPage('settings.html');
   ok('settings window opens', !!set);
   if (set) {
-    await set.waitForTimeout(800);
+    ok('settings open (warm) is fast (<300ms)', openMs < 300, openMs + 'ms');
+    // close via IPC → pool must stay warm (page target stays alive)
+    await set.evaluate(() => window.meow.closeWindow('settings'));
+    await cat.waitForTimeout(350);
+    const stillAlive = await set.evaluate(() => document.title !== undefined).then(() => true).catch(() => false);
+    ok('close keeps the window warm (page target alive)', stillAlive);
+    // reopen — must be instant AND focused
+    const openMs2 = await cat.evaluate(async () => {
+      const t = Date.now();
+      await window.meow.openWindow('settings');
+      return Date.now() - t;
+    });
+    let focused = false;
+    const tF = Date.now();
+    while (Date.now() - tF < 1500) {
+      focused = await set.evaluate(() => document.hasFocus()).catch(() => false);
+      if (focused) break;
+      await cat.waitForTimeout(25);
+    }
+    ok('reopen is instant (warm reuse, <300ms)', openMs2 < 300, openMs2 + 'ms');
+    ok('reopened settings window takes focus', focused);
+
+    await set.waitForTimeout(500);
     const breedCount = await set.evaluate(() => document.querySelectorAll('.breed').length);
-    ok('settings shows 6 breed cards', breedCount === 6, `${breedCount}`);
+    ok('settings shows 13 breed cards', breedCount === 13, `${breedCount}`);
+    const unlimited = await set.evaluate(() => !document.querySelector('.breed.locked'));
+    ok('unlimited coins: no locked breeds', unlimited);
+    const storeUi = await set.evaluate(() => !!document.querySelector('.coins-pill') && !!document.querySelector('.tagnew'));
+    ok('premium store UI renders (pill + NEW badges)', storeUi);
     await set.screenshot({ path: path.join(OUT, 'settings_live.png') });
   }
+
+  // ------------------------------------------------ 7b. double-click on cat opens settings
+  if (set) {
+    await set.evaluate(() => window.meow.closeWindow('settings'));   // start hidden
+    await cat.waitForTimeout(350);
+    const pos = await cat.evaluate(() => { const p = window.__pose(); return { x: p.x, y: p.y - 40 }; });
+    await cat.mouse.dblclick(pos.x, pos.y);
+    let dblOk = false;
+    const tD = Date.now();
+    while (Date.now() - tD < 3000) {
+      const v = await set.evaluate(() => document.visibilityState === 'visible').catch(() => false);
+      if (v) { dblOk = true; break; }
+      await cat.waitForTimeout(30);
+    }
+    ok('double-click on the cat opens the settings popup', dblOk);
+    // About page: version + developer link
+    const about = await set.evaluate(async () => {
+      const ver = document.getElementById('ver');
+      for (let i = 0; i < 40 && !ver.textContent; i++) await new Promise(r => setTimeout(r, 50));
+      return { ver: ver.textContent, dev: !!document.getElementById('lnkDev') };
+    });
+    ok('about page shows version + developer link', about.dev && about.ver.startsWith('v'), JSON.stringify(about));
+  }
+
+  // ------------------------------------------------ 7c. store: panda unlocks free under unlimited promo
+  const buy = await cat.evaluate(async () => {
+    const before = await window.meow.getCoins();
+    const r = await window.meow.buyBreed('panda');
+    const after = await window.meow.getCoins();
+    return { r, before, after };
+  });
+  ok('panda unlocks free (unlimited coins promo)', buy.r && buy.r.ok && buy.after === buy.before,
+    JSON.stringify(buy.r));
 
   // ------------------------------------------------ 8. reminders window opens & adds from UI
   await cat.evaluate(() => window.meow.openWindow('reminders'));
@@ -163,6 +226,26 @@ try {
       for (const it of l) await window.meow.removeReminder(it.id);
     }));
   }
+
+  // ------------------------------------------------ 9. platform hop: cat jumps onto a window top border (live)
+  const hop = await cat.evaluate(async () => {
+    const b = window.__brain && window.__brain();
+    if (!b) return { ok: false, why: 'no brain' };
+    window.__setPlatforms([{ title: 'Fake Window', x: 500, y: 640, w: 620, h: 300 }]);
+    b.roam = false; b._roamTarget = null;   // pin the walk path for this test
+    b.x = 360; b.baseY = b.groundY; b.onPlatform = null; b._jump = null;
+    b._platformCd = 0;
+    b._enter('walk', 30); b.dir = 1;
+    const t0 = Date.now();
+    while (Date.now() - t0 < 6000) {
+      if (b.onPlatform) break;
+      await new Promise(r => setTimeout(r, 60));
+    }
+    return { ok: !!b.onPlatform, state: b.state, baseY: Math.round(b.baseY), x: Math.round(b.x) };
+  });
+  ok('live: cat jumps onto a nearby window top border', hop.ok, JSON.stringify(hop));
+  // cleanup: remove platforms so later checks run on the ground
+  await cat.evaluate(() => window.__setPlatforms([]));
 
   // topmost enforcer sanity: window has always-on-top state via CDP? (skip on Linux)
   ok('e2e screenshots saved', true, OUT);

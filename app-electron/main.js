@@ -1,19 +1,21 @@
 // main.js — MeowCat Electron main process (ESM)
 'use strict';
-import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell } from 'electron';
+import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createSettings } from './src/settings-store.js';
 import { ReminderScheduler } from './src/reminder-scheduler.js';
 import { createTopmostEnforcer } from './src/topmost.js';
+import { createWindowScanner } from './src/window-scan.js';
+import { createFastWindows } from './src/fast-windows.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let tray = null;
 let catWin = null;
-let settingsWin = null;
-let remindersWin = null;
 let enforcer = null;
+let scanner = null;
 let schedTimer = null;
 let coinTimer = null;
 let quitting = false;
@@ -109,28 +111,37 @@ function createTray() {
 }
 
 // ---------------------------------------------------------------- helper windows
-function openSettings() {
-  if (settingsWin && !settingsWin.isDestroyed()) { settingsWin.focus(); return; }
-  settingsWin = new BrowserWindow({
-    width: 560, height: 660, resizable: false, minimizable: true,
-    title: 'MeowCat Settings', backgroundColor: '#15161c', autoHideMenuBar: true,
-    icon: ICON_PATH,
+// v3.1: warm window pool — created hidden at startup, shown instantly on demand.
+const WIN_SPECS = {
+  settings: { width: 580, height: 830, title: 'MeowCat Settings' },
+  reminders: { width: 520, height: 620, title: 'MeowCat Reminders' },
+};
+
+function makeWindow(name) {
+  const spec = WIN_SPECS[name];
+  const w = new BrowserWindow({
+    width: spec.width, height: spec.height, show: false,
+    resizable: false, minimizable: true, autoHideMenuBar: true,
+    title: spec.title, backgroundColor: '#15161c', icon: ICON_PATH,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
   });
-  settingsWin.loadFile(path.join(__dirname, 'windows', 'settings.html'));
-  settingsWin.on('closed', () => { settingsWin = null; });
+  w.loadFile(path.join(__dirname, 'windows', name + '.html'));
+  return w;
+}
+
+const fastWins = createFastWindows({
+  factory: {
+    settings: () => makeWindow('settings'),
+    reminders: () => makeWindow('reminders'),
+  },
+});
+
+function openSettings() {
+  try { fastWins.show('settings'); } catch { fastWins.warm('settings'); fastWins.show('settings'); }
 }
 
 function openReminders() {
-  if (remindersWin && !remindersWin.isDestroyed()) { remindersWin.focus(); return; }
-  remindersWin = new BrowserWindow({
-    width: 520, height: 620, resizable: false,
-    title: 'MeowCat Reminders', backgroundColor: '#15161c', autoHideMenuBar: true,
-    icon: ICON_PATH,
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
-  });
-  remindersWin.loadFile(path.join(__dirname, 'windows', 'reminders.html'));
-  remindersWin.on('closed', () => { remindersWin = null; });
+  try { fastWins.show('reminders'); } catch { fastWins.warm('reminders'); fastWins.show('reminders'); }
 }
 
 // ---------------------------------------------------------------- scheduler + coins
@@ -200,11 +211,68 @@ ipcMain.handle('open-window', (_e, name) => {
   if (name === 'reminders') openReminders();
 });
 
+// in-page Close buttons must hide via IPC: renderer-initiated window.close()
+// destroys the window outright and would bypass the warm-pool close handler
+ipcMain.handle('close-window', (_e, name) => {
+  try { fastWins.hide(name); } catch { /* ignore */ }
+});
+
+// About page info + whitelisted external links (developer GitHub)
+ipcMain.handle('app-info', () => ({
+  version: app.getVersion(),
+  electron: process.versions.electron,
+  platform: process.platform,
+}));
+ipcMain.handle('open-external', (_e, url) => {
+  try {
+    if (typeof url === 'string' && /^https:\/\/github\.com\/[\w.-]+(\/[\w.-]+)?(\/[\w.-]+)?\/?$/.test(url)) {
+      shell.openExternal(url);
+    }
+  } catch { /* ignore */ }
+});
+
+// right-click context menu on the cat, positioned at the cursor
+ipcMain.handle('context-menu', (_e, pos) => {
+  const menu = Menu.buildFromTemplate([
+    { label: '⚙ Settings…', click: () => openSettings() },
+    { label: '⏰ Reminders…', click: () => openReminders() },
+    { type: 'separator' },
+    { label: '💃 Dance!', click: () => catWin?.webContents.send('do-action', 'dance') },
+    { label: '🍖 Feed', click: () => catWin?.webContents.send('do-action', 'eat') },
+    { label: '💤 Sleep now', click: () => catWin?.webContents.send('do-action', 'sleep') },
+    { type: 'separator' },
+    { label: 'Quit MeowCat', click: () => { quitting = true; app.quit(); } },
+  ]);
+  try {
+    menu.popup({
+      window: catWin || undefined,
+      x: Number.isFinite(pos?.x) ? Math.round(pos.x) : undefined,
+      y: Number.isFinite(pos?.y) ? Math.round(pos.y) : undefined,
+    });
+  } catch { menu.popup(); }
+});
+
 app.whenReady().then(() => {
   applyAutoStart(store.get('autoStart'));
   createCatWindow();
   createTray();
   startBackgroundJobs();
+
+  // v3.1: window-top platform scanner (cat hops onto nearby window borders)
+  if (process.platform === 'win32') {
+    scanner = createWindowScanner({
+      spawnFn: spawn,
+      intervalMs: 2200,
+      onResult: plats => {
+        if (catWin && !catWin.isDestroyed()) catWin.webContents.send('platforms', plats);
+      },
+    });
+    scanner.start();
+  }
+
+  // v3.1: pre-warm settings + reminders so they open instantly
+  setTimeout(() => { fastWins.warm('settings', 'reminders'); }, 600);
+
   screen.on('display-metrics-changed', () => {
     if (catWin && !catWin.isDestroyed()) catWin.webContents.send('workarea-changed');
   });
@@ -219,6 +287,8 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   quitting = true;
   enforcer?.stop();
+  scanner?.stop();
+  fastWins.closeAll();
   if (schedTimer) clearInterval(schedTimer);
   if (coinTimer) clearInterval(coinTimer);
 });

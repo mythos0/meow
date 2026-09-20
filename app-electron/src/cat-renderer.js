@@ -7,21 +7,25 @@
 // ---------------------------------------------------------------- palettes
 export const PALETTES = {
   grey_tabby: {
+    name: "Grey Tabby",
     fur: '#9aa0a8', dark: '#565b63', belly: '#d7dade', stripe: '#43474e',
     earIn: '#d59aa2', nose: '#c47583', eye: '#79b356', pupil: '#1c1f24',
     tongue: '#d98a94',
   },
   orange_tabby: {
+    name: "Orange Tabby",
     fur: '#eaa75f', dark: '#c47f3c', belly: '#f8e3c4', stripe: '#a85a24',
     earIn: '#e0a89e', nose: '#d07f6e', eye: '#93bb4e', pupil: '#241a10',
     tongue: '#d98a94',
   },
   siamese: {
+    name: "Siamese",
     fur: '#ece0cb', dark: '#6e5138', belly: '#f4ecdd', stripe: '#6e5138',
     earIn: '#caa79b', nose: '#8a6055', eye: '#5f9fd8', pupil: '#1a2230',
     points: true, tongue: '#d98a94',
   },
   calico: {
+    name: "Calico",
     fur: '#f3e9d7', dark: '#c9b69a', belly: '#faf3e6', stripe: '#b39b78',
     earIn: '#dba8a0', nose: '#cf8076', eye: '#c28a2e', pupil: '#241a10',
     patches: [
@@ -31,19 +35,127 @@ export const PALETTES = {
     tongue: '#d98a94',
   },
   persian: {
+    name: "Persian",
     fur: '#f1e4cf', dark: '#d3bda0', belly: '#fbf4e8', stripe: '#dcc7a8',
     earIn: '#e0b0aa', nose: '#d4858d', eye: '#5f9fd8', pupil: '#1c2733',
     fluffy: true, tongue: '#d98a94',
   },
   tuxedo: {
+    name: "Tuxedo",
     fur: '#43434c', dark: '#26262d', belly: '#f4f4f4', stripe: '#1e1e24',
     earIn: '#c98f96', nose: '#b56b74', eye: '#93bb4e', pupil: '#0e0e12',
     socks: true, tongue: '#d98a94',
+  },
+  // ---------------- v3.1: more designs + body types ----------------
+  bombay: {
+    name: "Bombay",          // sleek all-black panther-like cat, copper eyes
+    body: 'slim',
+    fur: '#3a3a42', dark: '#202026', belly: '#5a5a64', stripe: null,
+    earIn: '#8a5a62', nose: '#41363b', eye: '#c9822e', pupil: '#0a0a0e',
+    tongue: '#d98a94', sheen: true,
+  },
+  russian_blue: {
+    name: "Russian Blue",    // plush blue-grey coat, emerald eyes
+    fur: '#93a7b8', dark: '#5f7488', belly: '#d3dee6', stripe: null,
+    earIn: '#b98f96', nose: '#7d8894', eye: '#4fb573', pupil: '#131c22',
+    tongue: '#d98a94',
+  },
+  ginger_kitten: {
+    name: "Ginger Kitten",   // tiny kitten: big head, short legs, big eyes
+    body: 'kitten',
+    fur: '#f0b268', dark: '#cf8b42', belly: '#fae8cd', stripe: '#b06226',
+    earIn: '#e2a79b', nose: '#d07f6e', eye: '#93bb4e', pupil: '#241a10',
+    tongue: '#d98a94',
+  },
+  ragdoll: {
+    name: "Ragdoll",         // big fluffy chubby cat, seal points, blue eyes
+    body: 'chubby', fluffy: true,
+    fur: '#efe6da', dark: '#7a624e', belly: '#f9f3ea', stripe: '#7a624e',
+    earIn: '#c9a49b', nose: '#c08a80', eye: '#6fa8dc', pupil: '#1a2230',
+    points: true, tongue: '#d98a94',
+  },
+  bengal: {
+    name: "Bengal",          // golden coat with dark rosette spots
+    body: 'slim',
+    fur: '#dfb570', dark: '#9c6b2e', belly: '#f6e8cd', stripe: null,
+    earIn: '#cf9d8c', nose: '#b5765e', eye: '#8fb84e', pupil: '#20180e',
+    spots: true, tongue: '#d98a94',
+  },
+  maine_coon: {
+    name: "Maine Coon",      // extra-large, fluffy, lynx ear tufts
+    body: 'large', fluffy: true,
+    fur: '#a8835c', dark: '#6d4f30', belly: '#e8d9c2', stripe: '#5a3f24',
+    earIn: '#b98f96', nose: '#a06a58', eye: '#79b356', pupil: '#1c1710',
+    tufts: true, tongue: '#d98a94',
+  },
+  panda: {
+    name: "Panda",           // giant panda: white body, black limbs/ears/eye-patches
+    body: 'panda',
+    fur: '#f5f3ee', dark: '#26262b', belly: '#f5f3ee', stripe: null,
+    earIn: '#26262b', earCol: '#26262b', nose: '#26262b', eye: '#8a6a3a',
+    pupil: '#101014', limbCol: '#26262b', eyePatch: true, roundEars: true,
+    band: true, tongue: '#c97884',
+  },
+};
+
+// ---------------- body types (v3.1) ----------------
+// Curated skeleton per body type. Every coordinate is in cat-local units:
+// feet on y=0, facing +x, so all values are negative above ground.
+export const BODIES = {
+  normal: {
+    rx: 41, ry: 25, haunch: [-22, -2, 20, 18], chest: [26, 2, 14, 15],
+    sh: [20, 4], hp: [-24, 2], head: [36, -34], headR: 23,
+    legL1: 16, legL2: 18, ear: 1.0, footAmp: 9,
+    feet: [24, 30, -22, -28],
+    tail: { base: [-36, -16], segs: 9, step: 8.2, r: 7.5 },
+    standY: -44, preview: 0.62,
+  },
+  slim: {           // oriental/sleek: longer legs, narrower torso
+    rx: 37, ry: 22.5, haunch: [-20, -2, 18, 16], chest: [24, 2, 12, 13],
+    sh: [18, 4], hp: [-22, 2], head: [33, -32], headR: 21,
+    legL1: 17, legL2: 19, ear: 1.05, footAmp: 10,
+    feet: [22, 28, -20, -26],
+    tail: { base: [-33, -15], segs: 10, step: 8.0, r: 6.6 },
+    standY: -46, preview: 0.60,
+  },
+  kitten: {         // baby proportions: huge head, short legs, stubby tail
+    rx: 31, ry: 22, haunch: [-16, -2, 15, 15], chest: [20, 2, 11, 12],
+    sh: [15, 4], hp: [-18, 2], head: [27, -36], headR: 26,
+    legL1: 14, legL2: 15, ear: 1.25, footAmp: 7,
+    feet: [18, 23, -15, -19],
+    tail: { base: [-26, -13], segs: 6, step: 6.6, r: 5.4 },
+    standY: -34, preview: 0.60,
+  },
+  chubby: {         // round and heavy: short legs, thick tail
+    rx: 47, ry: 30, haunch: [-25, -2, 24, 21], chest: [29, 2, 17, 18],
+    sh: [22, 5], hp: [-27, 3], head: [38, -38], headR: 25,
+    legL1: 13, legL2: 14, ear: 0.95, footAmp: 8,
+    feet: [25, 31, -23, -29],
+    tail: { base: [-40, -17], segs: 8, step: 7.8, r: 8.4 },
+    standY: -40, preview: 0.55,
+  },
+  large: {          // maine coon: tall, long, bushy tail
+    rx: 46, ry: 27, haunch: [-25, -2, 23, 20], chest: [29, 2, 16, 17],
+    sh: [22, 4], hp: [-27, 2], head: [40, -38], headR: 26,
+    legL1: 19, legL2: 21, ear: 1.1, footAmp: 10,
+    feet: [26, 33, -24, -31],
+    tail: { base: [-40, -17], segs: 11, step: 8.8, r: 8.4 },
+    standY: -50, preview: 0.55,
+  },
+  panda: {          // giant panda: round, stubby tail, short legs
+    rx: 47, ry: 31, haunch: [-25, -2, 25, 22], chest: [29, 2, 18, 19],
+    sh: [22, 5], hp: [-27, 3], head: [38, -40], headR: 27,
+    legL1: 13, legL2: 14, ear: 1.0, footAmp: 7,
+    feet: [25, 31, -23, -29],
+    tail: { base: [-40, -16], segs: 4, step: 7.0, r: 9.0 },
+    standY: -40, preview: 0.52,
   },
 };
 
 export const STATES = [
   'walk', 'run', 'idle', 'sit', 'sleep', 'dance', 'scratch', 'jump', 'happy', 'eat',
+  'stretch', 'groom', 'pounce', 'knead', 'loaf', 'yawn', 'startle',
+  'waddle', 'bamboo', 'roll',
 ];
 
 const TAU = Math.PI * 2;
@@ -118,6 +230,7 @@ export function drawCat(ctx, opts) {
   const state = opts.state || 'walk';
   const dir = opts.dir >= 0 ? 1 : -1;
   const pal = PALETTES[opts.breed] || PALETTES.grey_tabby;
+  const B = BODIES[pal.body] || BODIES.normal;
   const scale = opts.scale || 1;
   const jumpP = opts.jumpP ?? 0.5;
 
@@ -125,11 +238,11 @@ export function drawCat(ctx, opts) {
   ctx.scale(dir * scale, scale);
   ctx.globalAlpha = opts.alpha ?? 1;
 
-  const P = poseFor(state, t, jumpP);
-  const bodyY = P.bodyY + P.bobY;
+  const P = poseFor(state, t, jumpP, B);
+  const bodyY = B.standY + P.bodyY + P.bobY;
   const sqx = 1 + P.sqx, sqy = 1 + P.sqy;
 
-  // ---------------- ground shadow
+  // ---------------- ground shadow (outside whole-body rotation)
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.30)';
   ctx.filter = 'blur(2px)';
@@ -137,51 +250,61 @@ export function drawCat(ctx, opts) {
   ctx.fill();
   ctx.restore();
 
-  const shoulder = { x: 20, y: bodyY - 4 };
-  const hip = { x: -24, y: bodyY - 2 };
+  // whole-body rotation (panda somersault)
+  if (P.wholeRot) {
+    ctx.translate(0, bodyY);
+    ctx.rotate(P.wholeRot);
+    ctx.translate(0, -bodyY);
+  }
+
+  const shoulder = { x: B.sh[0], y: bodyY - B.sh[1] };
+  const hip = { x: B.hp[0], y: bodyY - B.hp[1] };
   const headC = {
-    x: 36 + P.headX, y: bodyY - 34 + P.headY + Math.sin(t * 2.1) * 1.2,
-    r: 23, rot: P.headRot,
+    x: B.head[0] + P.headX, y: bodyY + B.head[1] + P.headY + Math.sin(t * 2.1) * 1.2,
+    r: B.headR, rot: P.headRot,
   };
+  const nearFill = pal.limbCol || pal.fur;
+  const farFill = pal.limbCol ? shade(pal.limbCol, 0.24) : shade(pal.dark, 0.18);
 
-  // ---------------- FAR legs (slightly darker)
-  const darkFill = shade(pal.dark, 0.18);
-  drawLeg(ctx, shoulder.x, shoulder.y, P.legs[1], pal, darkFill, -1, pal.dark);
-  drawLeg(ctx, hip.x, hip.y, P.legs[3], pal, darkFill, -1, pal.dark);
+  // ---------------- FAR legs (slightly darker; skipped when tucked)
+  if (!P.hideLegs) {
+    drawLeg(ctx, shoulder.x, shoulder.y, P.legs[1], pal, farFill, -1, pal.dark, B);
+    drawLeg(ctx, hip.x, hip.y, P.legs[3], pal, farFill, -1, pal.dark, B);
+  }
 
-  // ---------------- tail (behind body)
-  drawTail(ctx, -36, bodyY - 16, P, pal, t);
-
-  // ---------------- body
+  // ---------------- body (tail drawn INSIDE this transform so it stays
+  // attached when the torso rotates/squashes — sleep curl, stretch, scratch)
   ctx.save();
   ctx.translate(0, bodyY);
   ctx.rotate(P.bodyRot);
   ctx.scale(sqx, sqy);
 
-  const bodyGrad = radialFill(ctx, -10, -10, 6, 52, [
+  drawTail(ctx, B.tail.base[0], B.tail.base[1], P, pal, t, B);
+
+  const bodyGrad = radialFill(ctx, -10, -10, 6, B.rx + 12, [
     [0, shade(pal.fur, 0.22)],
     [0.55, pal.fur],
     [1, shade(pal.fur, -0.28)],
   ]);
-  ell(ctx, 0, -8, 41, 25);
+  ell(ctx, 0, -8, B.rx, B.ry);
   ctx.fillStyle = bodyGrad;
   ctx.fill();
   // rear haunch volume
-  ell(ctx, -22, -2, 20, 18);
-  ctx.fillStyle = radialFill(ctx, -26, -8, 3, 22, [
+  ell(ctx, B.haunch[0], B.haunch[1], B.haunch[2], B.haunch[3]);
+  ctx.fillStyle = radialFill(ctx, B.haunch[0] - 4, B.haunch[1] - 6, 3, B.haunch[2] + 2, [
     [0, shade(pal.fur, 0.16)], [1, shade(pal.fur, -0.2)],
   ]);
   ctx.fill();
   // chest volume
-  ell(ctx, 26, 2, 14, 15);
-  ctx.fillStyle = radialFill(ctx, 24, -3, 2, 16, [
+  ell(ctx, B.chest[0], B.chest[1], B.chest[2], B.chest[3]);
+  ctx.fillStyle = radialFill(ctx, B.chest[0] - 2, B.chest[1] - 5, 2, B.chest[2] + 2, [
     [0, shade(pal.fur, 0.10)], [1, shade(pal.fur, -0.18)],
   ]);
   ctx.fill();
 
   // breed marks on body (clipped)
   ctx.save();
-  ell(ctx, 0, -8, 41, 25);
+  ell(ctx, 0, -8, B.rx, B.ry);
   ctx.clip();
   if (pal.patches) {
     const [a, b] = pal.patches;
@@ -196,25 +319,43 @@ export function drawCat(ctx, opts) {
       ctx.fillStyle = g; ctx.fill();
     }
   }
+  if (pal.spots) {
+    // bengal rosettes: dark ring, warm center
+    for (const [cx, cy, rx2, ry2, rot] of [
+      [-16, -18, 6.8, 5.2, 0.4], [4, -23, 6.2, 4.8, -0.3], [23, -13, 5.8, 4.6, 0.5],
+      [-30, 1, 5.6, 4.4, 0.2], [12, 1, 5.2, 4.2, -0.4], [-4, 5, 4.8, 3.9, 0.3],
+      [32, 4, 4.6, 3.8, 0.1],
+    ]) {
+      ell(ctx, cx, cy, rx2, ry2, rot);
+      ctx.fillStyle = shade(pal.dark, -0.05); ctx.fill();
+      ell(ctx, cx, cy, rx2 * 0.52, ry2 * 0.52, rot);
+      ctx.fillStyle = shade(pal.fur, 0.10); ctx.fill();
+    }
+  }
+  if (pal.band) {
+    // panda shoulder band
+    ell(ctx, 22, -3, 19, B.ry * 0.86, -0.12);
+    ctx.fillStyle = pal.dark; ctx.fill();
+  }
   if (pal.stripe && !pal.points) {
     ctx.strokeStyle = pal.stripe;
     ctx.globalAlpha *= 0.30;
     ctx.lineWidth = 5; ctx.lineCap = 'round';
     for (let i = 0; i < 4; i++) {
-      const sx = -18 + i * 13;
+      const sx = -B.rx * 0.44 + i * B.rx * 0.30;
       ctx.beginPath();
-      ctx.moveTo(sx, -30);
+      ctx.moveTo(sx, -B.ry - 5);
       ctx.quadraticCurveTo(sx + 3, -20, sx - 1, -12);
       ctx.stroke();
     }
     ctx.globalAlpha /= 0.30;
   }
   if (pal.socks) {
-    ell(ctx, 16, 2, 24, 18, -0.15);
+    ell(ctx, 16, 2, B.rx * 0.58, B.ry * 0.72, -0.15);
     ctx.fillStyle = pal.belly; ctx.fill();
   } else {
     ctx.globalAlpha *= 0.55;
-    ell(ctx, 10, 8, 24, 13, -0.1);
+    ell(ctx, 10, 8, B.rx * 0.58, B.ry * 0.52, -0.1);
     ctx.fillStyle = pal.belly; ctx.fill();
     ctx.globalAlpha /= 0.55;
   }
@@ -224,51 +365,64 @@ export function drawCat(ctx, opts) {
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';
   ctx.lineWidth = 3; ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.ellipse(0, -8, 39, 23.4, 0, -Math.PI * 0.82, -Math.PI * 0.25);
+  ctx.ellipse(0, -8, B.rx - 2, B.ry - 1.6, 0, -Math.PI * 0.82, -Math.PI * 0.25);
   ctx.stroke();
   ctx.restore(); // body
 
-  // ---------------- NEAR legs (base color, on top of body)
-  drawLeg(ctx, shoulder.x, shoulder.y, P.legs[0], pal, pal.fur, 1, pal.dark);
-  drawLeg(ctx, hip.x, hip.y, P.legs[2], pal, pal.fur, 1, pal.dark);
+  // ---------------- tucked paws (loaf / roll) OR near legs
+  if (P.hideLegs) {
+    ell(ctx, B.rx * 0.46, bodyY + B.ry * 0.40, 8, 5.5, 0.25);
+    ctx.fillStyle = nearFill; ctx.fill();
+    ell(ctx, B.rx * 0.12, bodyY + B.ry * 0.48, 7.5, 5, 0.35);
+    ctx.fill();
+  } else {
+    drawLeg(ctx, shoulder.x, shoulder.y, P.legs[0], pal, nearFill, 1, pal.dark, B);
+    drawLeg(ctx, hip.x, hip.y, P.legs[2], pal, nearFill, 1, pal.dark, B);
+  }
+
+  // ---------------- held prop (panda bamboo)
+  if (P.prop === 'bamboo') drawBamboo(ctx, P, t);
 
   // ---------------- head
-  drawHead(ctx, headC, P, pal, t, state);
+  drawHead(ctx, headC, P, pal, t, state, B);
 
   ctx.restore();
 }
 
 // ---------------------------------------------------------------- pose
-function poseFor(state, t, jumpP) {
+function poseFor(state, t, jumpP, B) {
+  B = B || BODIES.normal;
   const P = {
-    bodyY: -44, bobY: 0, bodyRot: 0, sqx: 0, sqy: 0, shadowK: 1,
-    headX: 0, headY: 0, headRot: 0,
+    bodyY: 0, bobY: 0, bodyRot: 0, sqx: 0, sqy: 0, shadowK: 1,
+    headX: 0, headY: 0, headRot: 0, wholeRot: 0, hideLegs: false, prop: null,
+    earFlat: 0,
     legs: [
-      { fx: 24, fy: 0 }, { fx: 30, fy: 0 },   // front near/far
-      { fx: -22, fy: 0 }, { fx: -28, fy: 0 }, // back near/far
+      { fx: B.feet[0], fy: 0 }, { fx: B.feet[1], fy: 0 },   // front near/far
+      { fx: B.feet[2], fy: 0 }, { fx: B.feet[3], fy: 0 },   // back near/far
     ],
     tailMode: 'sway', eyeState: 'open', mouth: 'closed',
     particles: null,
   };
   const W = (f, ph) => Math.sin(t * f + ph);
+  const F = B.feet, A = B.footAmp;
 
   switch (state) {
     case 'walk': {
       const f = 7.0;
-      P.legs[0].fx = 24 + W(f, 0) * 9;         P.legs[0].fy = -Math.max(0, Math.sin(t * f + Math.PI / 2)) * 6;
-      P.legs[1].fx = 30 + W(f, Math.PI) * 9;   P.legs[1].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.5)) * 6;
-      P.legs[2].fx = -22 + W(f, Math.PI * 1.15) * 10; P.legs[2].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.65)) * 6;
-      P.legs[3].fx = -28 + W(f, Math.PI * 0.15) * 10; P.legs[3].fy = -Math.max(0, Math.sin(t * f + Math.PI * 0.65)) * 6;
+      P.legs[0].fx = F[0] + W(f, 0) * A;         P.legs[0].fy = -Math.max(0, Math.sin(t * f + Math.PI / 2)) * 6;
+      P.legs[1].fx = F[1] + W(f, Math.PI) * A;   P.legs[1].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.5)) * 6;
+      P.legs[2].fx = F[2] + W(f, Math.PI * 1.15) * (A + 1); P.legs[2].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.65)) * 6;
+      P.legs[3].fx = F[3] + W(f, Math.PI * 0.15) * (A + 1); P.legs[3].fy = -Math.max(0, Math.sin(t * f + Math.PI * 0.65)) * 6;
       P.bobY = -Math.abs(W(f, 0)) * 2.2;
       P.bodyRot = W(f, Math.PI / 2) * 0.02;
       break;
     }
     case 'run': {
       const f = 12.5;
-      P.legs[0].fx = 24 + W(f, 0) * 15;  P.legs[0].fy = -Math.max(0, Math.sin(t * f + 1.7)) * 11;
-      P.legs[1].fx = 30 + W(f, Math.PI) * 15; P.legs[1].fy = -Math.max(0, Math.sin(t * f + 1.7 + Math.PI)) * 11;
-      P.legs[2].fx = -22 + W(f, Math.PI * 1.2) * 17; P.legs[2].fy = -Math.max(0, Math.sin(t * f + 1.2 + Math.PI * 1.5)) * 12;
-      P.legs[3].fx = -28 + W(f, Math.PI * 0.2) * 17; P.legs[3].fy = -Math.max(0, Math.sin(t * f + 1.2 + Math.PI * 0.5)) * 12;
+      P.legs[0].fx = F[0] + W(f, 0) * A * 1.7;  P.legs[0].fy = -Math.max(0, Math.sin(t * f + 1.7)) * 11;
+      P.legs[1].fx = F[1] + W(f, Math.PI) * A * 1.7; P.legs[1].fy = -Math.max(0, Math.sin(t * f + 1.7 + Math.PI)) * 11;
+      P.legs[2].fx = F[2] + W(f, Math.PI * 1.2) * (A + 8); P.legs[2].fy = -Math.max(0, Math.sin(t * f + 1.2 + Math.PI * 1.5)) * 12;
+      P.legs[3].fx = F[3] + W(f, Math.PI * 0.2) * (A + 8); P.legs[3].fy = -Math.max(0, Math.sin(t * f + 1.2 + Math.PI * 0.5)) * 12;
       P.bobY = -Math.abs(W(f, 0)) * 5;
       P.sqx = W(f * 0.5, 0) * 0.05; P.sqy = -P.sqx;
       P.bodyRot = 0.06 + W(f, 1) * 0.03;
@@ -281,23 +435,23 @@ function poseFor(state, t, jumpP) {
       break;
     }
     case 'sit': {
-      P.bodyY = -40; P.bodyRot = 0.10;
+      P.bodyY = 4; P.bodyRot = 0.10;
       P.sqx = -0.04; P.sqy = 0.05;
-      P.legs[2].fx = -14; P.legs[2].fy = -2;
-      P.legs[3].fx = -18; P.legs[3].fy = -2;
-      P.legs[0].fx = 26; P.legs[1].fx = 31;
+      P.legs[2].fx = F[2] + 8; P.legs[2].fy = -2;
+      P.legs[3].fx = F[3] + 10; P.legs[3].fy = -2;
+      P.legs[0].fx = F[0] + 2; P.legs[1].fx = F[1] + 1;
       P.tailMode = 'curl';
       P.eyeState = 'blink';
       P.bobY = Math.sin(t * 1.7) * 0.7;
       break;
     }
     case 'sleep': {
-      P.bodyY = -26; P.bodyRot = 0.16;
+      P.bodyY = 18; P.bodyRot = 0.16;
       P.sqx = -0.10; P.sqy = 0.12;
-      P.legs[0].fx = 20; P.legs[0].fy = -2;
-      P.legs[1].fx = 24; P.legs[1].fy = -2;
-      P.legs[2].fx = -10; P.legs[2].fy = -2;
-      P.legs[3].fx = -14; P.legs[3].fy = -2;
+      P.legs[0].fx = F[0] - 4; P.legs[0].fy = -2;
+      P.legs[1].fx = F[1] - 6; P.legs[1].fy = -2;
+      P.legs[2].fx = F[2] + 12; P.legs[2].fy = -2;
+      P.legs[3].fx = F[3] + 14; P.legs[3].fy = -2;
       P.headX = -14; P.headY = 12; P.headRot = 0.18;
       P.tailMode = 'wrap';
       P.eyeState = 'closed';
@@ -306,13 +460,13 @@ function poseFor(state, t, jumpP) {
     }
     case 'dance': {
       const f = 6.2;
-      P.bodyY = -46;
+      P.bodyY = -2;
       P.bobY = -Math.abs(W(f, 0)) * 9;
       P.bodyRot = W(f * 0.5, 0) * 0.10;
       P.sqx = W(f, 0) * 0.05; P.sqy = -P.sqx;
-      P.legs[0].fx = 24 + W(f, 0) * 4; P.legs[0].fy = -Math.max(0, W(f, 0.8)) * 16;
-      P.legs[1].fx = 30; P.legs[1].fy = -Math.max(0, W(f, 0.8 + Math.PI)) * 16;
-      P.legs[2].fx = -22 + W(f, Math.PI) * 3; P.legs[2].fy = -Math.max(0, W(f, Math.PI + 0.8)) * 10;
+      P.legs[0].fx = F[0] + W(f, 0) * 4; P.legs[0].fy = -Math.max(0, W(f, 0.8)) * 16;
+      P.legs[1].fx = F[1]; P.legs[1].fy = -Math.max(0, W(f, 0.8 + Math.PI)) * 16;
+      P.legs[2].fx = F[2] + W(f, Math.PI) * 3; P.legs[2].fy = -Math.max(0, W(f, Math.PI + 0.8)) * 10;
       P.headRot = W(f * 0.5, 0.4) * 0.14;
       P.tailMode = 'spiral';
       P.eyeState = 'happy';
@@ -321,11 +475,11 @@ function poseFor(state, t, jumpP) {
     }
     case 'scratch': {
       const f = 10.5;
-      P.bodyY = -50; P.bodyRot = -0.16;
-      P.legs[2].fx = -18; P.legs[2].fy = -4;
-      P.legs[3].fx = -22; P.legs[3].fy = -4;
-      P.legs[0].fx = 30 + W(f, 0) * 7; P.legs[0].fy = -26 + Math.abs(W(f, 0)) * 8;
-      P.legs[1].fx = 34 + W(f, Math.PI) * 7; P.legs[1].fy = -26 + Math.abs(W(f, Math.PI)) * 8;
+      P.bodyY = -6; P.bodyRot = -0.16;
+      P.legs[2].fx = F[2] + 4; P.legs[2].fy = -4;
+      P.legs[3].fx = F[3] + 6; P.legs[3].fy = -4;
+      P.legs[0].fx = F[0] + 6 + W(f, 0) * 7; P.legs[0].fy = -26 + Math.abs(W(f, 0)) * 8;
+      P.legs[1].fx = F[1] + 4 + W(f, Math.PI) * 7; P.legs[1].fy = -26 + Math.abs(W(f, Math.PI)) * 8;
       P.headRot = -0.08 + W(f, 0) * 0.06;
       P.tailMode = 'stream';
       P.particles = { kind: 'chip', f: 9 };
@@ -338,8 +492,8 @@ function poseFor(state, t, jumpP) {
       P.sqy = stretch * 0.14 - (p > 0.85 ? 0.10 : 0);
       P.legs[0].fy = -8 - stretch * 14; P.legs[1].fy = -8 - stretch * 14;
       P.legs[2].fy = -4 - stretch * 16; P.legs[3].fy = -4 - stretch * 16;
-      P.legs[0].fx = 28; P.legs[1].fx = 34;
-      P.legs[2].fx = -18; P.legs[3].fx = -24;
+      P.legs[0].fx = F[0] + 4; P.legs[1].fx = F[1] + 4;
+      P.legs[2].fx = F[2] + 4; P.legs[3].fx = F[3] + 4;
       P.bodyRot = -0.10 + p * 0.06;
       P.tailMode = 'stream';
       break;
@@ -354,11 +508,156 @@ function poseFor(state, t, jumpP) {
       break;
     }
     case 'eat': {
-      P.bodyY = -42;
+      P.bodyY = 2;
       const dip = Math.max(0, Math.sin(t * 4.4));
       P.headY = 10 + dip * 7; P.headX = -2; P.headRot = 0.22 + dip * 0.12;
       P.eyeState = 'blink';
       P.mouth = dip > 0.6 ? 'open' : 'closed';
+      break;
+    }
+    // ---------------- v3.1 new actions ----------------
+    case 'stretch': {   // downward-dog stretch: front low, rear up
+      const breathe = W(1.3, 0) * 0.015;
+      P.bodyY = 4; P.bodyRot = -0.30 + breathe;
+      P.sqx = 0.06; P.sqy = -0.05;
+      P.legs[0].fx = F[0] + 16; P.legs[0].fy = -2;
+      P.legs[1].fx = F[1] + 14; P.legs[1].fy = -2;
+      P.legs[2].fx = F[2] + 6; P.legs[2].fy = -8;
+      P.legs[3].fx = F[3] + 6; P.legs[3].fy = -8;
+      P.headY = 12; P.headRot = 0.14;
+      P.tailMode = 'curl';
+      P.eyeState = 'blink';
+      break;
+    }
+    case 'groom': {     // sitting, licking a raised front paw
+      const f = 3.2;
+      const d = Math.max(0, Math.sin(t * f));
+      P.bodyY = 6; P.bodyRot = 0.12;
+      P.sqx = -0.05; P.sqy = 0.04;
+      P.legs[2].fx = F[2] + 8; P.legs[2].fy = -2;
+      P.legs[3].fx = F[3] + 10; P.legs[3].fy = -2;
+      P.legs[0].fx = F[0] - 2; P.legs[0].fy = -18 - d * 6;  // raised paw
+      P.legs[1].fx = F[1] + 2; P.legs[1].fy = -2;
+      P.headY = 4 + d * 6; P.headX = 4; P.headRot = 0.30 + d * 0.20;
+      P.mouth = d > 0.62 ? 'open' : 'closed';
+      P.eyeState = 'closed';
+      P.tailMode = 'curl';
+      break;
+    }
+    case 'pounce': {    // play-crouch, butt-wiggle, then a little leap
+      const cyc = (t % 1.7) / 1.7;
+      if (cyc < 0.55) {
+        const wig = Math.sin(t * 22) * 0.045 * Math.min(1, cyc * 3);
+        P.bodyY = 8; P.bodyRot = -0.10;
+        P.sqx = -0.06 + wig; P.sqy = 0.08;
+        P.legs[0].fx = F[0] + 2; P.legs[0].fy = -4;
+        P.legs[1].fx = F[1] + 2; P.legs[1].fy = -4;
+        P.legs[2].fx = F[2] + 6; P.legs[2].fy = -2;
+        P.legs[3].fx = F[3] + 6; P.legs[3].fy = -2;
+        P.headY = 4; P.headRot = -0.06 + wig * 2;
+        P.tailMode = 'spiral';
+      } else {
+        const q = (cyc - 0.55) / 0.45;
+        const arc = Math.sin(q * Math.PI);
+        P.bodyY = 8 - arc * 24;
+        P.bodyRot = -0.10 + q * 0.16;
+        P.sqx = 0.05; P.sqy = -0.04;
+        P.legs[0].fx = F[0] + 6; P.legs[0].fy = -10 - arc * 10;
+        P.legs[1].fx = F[1] + 6; P.legs[1].fy = -10 - arc * 10;
+        P.legs[2].fx = F[2] + 10; P.legs[2].fy = -6 - arc * 8;
+        P.legs[3].fx = F[3] + 10; P.legs[3].fy = -6 - arc * 8;
+        P.tailMode = 'stream';
+      }
+      P.eyeState = 'open';
+      break;
+    }
+    case 'knead': {     // making biscuits: alternating paw presses
+      const f = 2.6;
+      const s = Math.sin(t * f);
+      P.bodyY = 4; P.bodyRot = 0.08;
+      P.sqx = -0.04; P.sqy = 0.05;
+      P.legs[2].fx = F[2] + 8; P.legs[2].fy = -2;
+      P.legs[3].fx = F[3] + 10; P.legs[3].fy = -2;
+      P.legs[0].fx = F[0] - 6; P.legs[0].fy = -10 - Math.max(0, s) * 5;
+      P.legs[1].fx = F[1] - 4; P.legs[1].fy = -10 - Math.max(0, -s) * 5;
+      P.headY = 3; P.headRot = 0.10;
+      P.tailMode = 'curl';
+      P.eyeState = 'happy';
+      P.bobY = Math.sin(t * f) * 0.6;
+      break;
+    }
+    case 'loaf': {      // full loaf: legs tucked under
+      P.bodyY = 14; P.bodyRot = 0.02;
+      P.sqx = 0.06; P.sqy = -0.16;
+      P.hideLegs = true;
+      P.headX = -2; P.headY = 6; P.headRot = 0.06;
+      P.tailMode = 'wrap';
+      P.eyeState = 'blink';
+      P.bobY = Math.sin(t * 1.6) * 0.5;
+      break;
+    }
+    case 'yawn': {      // big slow yawn
+      const cyc = (t % 2.4) / 2.4;
+      const d = Math.sin(cyc * Math.PI);
+      P.bodyY = 0;
+      P.headY = -4 - d * 3; P.headRot = -0.12 - d * 0.10;
+      P.mouth = d > 0.35 ? 'yawn' : 'closed';
+      P.eyeState = 'closed';
+      P.sqx = -d * 0.03; P.sqy = d * 0.04;
+      P.legs[0].fy = -2; P.legs[1].fy = -2;
+      break;
+    }
+    case 'startle': {   // jump-in-place, ears flat, fur puffed
+      const cyc = (t % 0.7) / 0.7;
+      const j = Math.sin(cyc * Math.PI);
+      P.bodyY = -j * 16;
+      P.sqx = -0.06 + (cyc < 0.2 ? 0.10 : 0);
+      P.sqy = 0.06 + j * 0.05 - (cyc < 0.2 ? 0.10 : 0);
+      P.legs[0].fy = -6 - j * 10; P.legs[1].fy = -6 - j * 10;
+      P.legs[2].fy = -4 - j * 8; P.legs[3].fy = -4 - j * 8;
+      P.earFlat = cyc < 0.55 ? 1 : 0;
+      P.headY = -2; P.headRot = -0.08;
+      P.tailMode = 'spiral';
+      break;
+    }
+    // ---------------- panda-specific actions ----------------
+    case 'waddle': {    // panda gait: slower, rolling, bouncy
+      const f = 4.6;
+      P.legs[0].fx = F[0] + W(f, 0) * A * 0.8;  P.legs[0].fy = -Math.max(0, Math.sin(t * f + Math.PI / 2)) * 5;
+      P.legs[1].fx = F[1] + W(f, Math.PI) * A * 0.8; P.legs[1].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.5)) * 5;
+      P.legs[2].fx = F[2] + W(f, Math.PI * 1.15) * A; P.legs[2].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.65)) * 5;
+      P.legs[3].fx = F[3] + W(f, Math.PI * 0.15) * A; P.legs[3].fy = -Math.max(0, Math.sin(t * f + Math.PI * 0.65)) * 5;
+      P.bobY = -Math.abs(W(f, 0)) * 3.6;
+      P.bodyRot = W(f * 0.5, 0) * 0.09;
+      P.sqx = W(f * 0.5, 1.2) * 0.04; P.sqy = -P.sqx;
+      P.headRot = W(f * 0.5, 0.9) * 0.06;
+      break;
+    }
+    case 'bamboo': {    // sitting, munching a held bamboo stalk
+      const f = 3.4;
+      const dip = Math.max(0, Math.sin(t * f));
+      P.bodyY = 6; P.bodyRot = 0.06;
+      P.legs[2].fx = F[2] + 7; P.legs[2].fy = -2;
+      P.legs[3].fx = F[3] + 9; P.legs[3].fy = -2;
+      P.legs[0].fx = F[0] - 6; P.legs[0].fy = -16;   // paws hold stalk
+      P.legs[1].fx = F[1] - 7; P.legs[1].fy = -12;
+      P.headY = 2 + dip * 4; P.headX = 2; P.headRot = 0.16 + dip * 0.10;
+      P.mouth = dip > 0.55 ? 'open' : 'closed';
+      P.eyeState = 'happy';
+      P.prop = 'bamboo';
+      P.particles = { kind: 'leaf', f: 2 };
+      break;
+    }
+    case 'roll': {      // somersault: whole body rotates
+      const cyc = (t % 1.5) / 1.5;
+      const q = cyc < 0.15 ? 0 : cyc > 0.85 ? 1 : (cyc - 0.15) / 0.7;
+      const e = q * q * (3 - 2 * q); // smoothstep
+      P.wholeRot = e * Math.PI * 2;
+      P.bodyY = -Math.sin(e * Math.PI) * 5;
+      P.hideLegs = true;
+      P.sqx = -0.06; P.sqy = 0.08;
+      P.eyeState = 'happy';
+      P.tailMode = 'wrap';
       break;
     }
   }
@@ -366,8 +665,9 @@ function poseFor(state, t, jumpP) {
 }
 
 // ---------------------------------------------------------------- legs
-function drawLeg(ctx, ax, ay, foot, pal, fill, near, lineCol) {
-  const l1 = 16, l2 = 18;
+function drawLeg(ctx, ax, ay, foot, pal, fill, near, lineCol, B) {
+  B = B || BODIES.normal;
+  const l1 = B.legL1, l2 = B.legL2;
   const { kx, ky } = solveIK(ax, ay, foot.fx, foot.fy, l1, l2, -1);
   limb(ctx, ax, ay, kx, ky, 8.5, 6, fill);
   limb(ctx, kx, ky, foot.fx, foot.fy - 4, 6, 5, fill);
@@ -390,13 +690,14 @@ function drawLeg(ctx, ax, ay, foot, pal, fill, near, lineCol) {
 }
 
 // ---------------------------------------------------------------- tail
-function drawTail(ctx, bx, by, P, pal, t) {
+function drawTail(ctx, bx, by, P, pal, t, B) {
+  B = B || BODIES.normal;
   let base = pal.fur, tip = shade(pal.fur, 0.1);
   if (pal.points) { base = shade(pal.dark, 0.22); tip = pal.dark; }
   if (pal.patches) tip = pal.patches[0].c;
   if (pal.socks) tip = pal.dark;
 
-  const segs = 9;
+  const segs = B.tail.segs;
   const mode = P.tailMode === ' spiral' ? 'spiral' : P.tailMode;
   // canvas +y is DOWN -> negative sin angle = tail points UP-back
   const CFG = {
@@ -414,23 +715,24 @@ function drawTail(ctx, bx, by, P, pal, t) {
     const k = i / (segs - 1);
     const w = Math.sin(t * cfg.waveF + k * cfg.kw) * cfg.waveA;
     ang += w * 0.55 + cfg.bend;
-    const step = 8.2 - k * 1.2;
+    const step = B.tail.step - k * 1.2;
     x += Math.cos(ang) * step;
     y += Math.sin(ang) * step;
     pts.push({ x, y, k });
   }
+  const rad = k => B.tail.r - k * (B.tail.r - 2.8);
   for (let i = 0; i < segs - 1; i++) {
     const p0 = pts[i], p1 = pts[i + 1];
-    const r0 = 7.5 - p0.k * 5.4, r1 = 7.5 - p1.k * 5.4;
-    limb(ctx, p0.x, p0.y, p1.x, p1.y, r0, r1, base);
+    limb(ctx, p0.x, p0.y, p1.x, p1.y, rad(p0.k), rad(p1.k), base);
   }
   const tp = pts[segs - 1], tp1 = pts[segs - 2];
-  limb(ctx, tp1.x, tp1.y, tp.x, tp.y, 2.6, 3.4, tip);
+  limb(ctx, tp1.x, tp1.y, tp.x, tp.y, rad(tp1.k), rad(tp.k), tip);
   if (pal.stripe && !pal.points && !pal.patches) {
     const ga = ctx.globalAlpha;
     ctx.fillStyle = pal.stripe;
     ctx.globalAlpha = ga * 0.5;
     for (const i of [2, 4, 6]) {
+      if (!pts[i]) continue;
       const p = pts[i];
       ell(ctx, p.x, p.y, 3.4, 3.0);
       ctx.fill();
@@ -440,38 +742,61 @@ function drawTail(ctx, bx, by, P, pal, t) {
 }
 
 // ---------------------------------------------------------------- head
-function drawHead(ctx, C, P, pal, t, state) {
+function drawHead(ctx, C, P, pal, t, state, B) {
+  B = B || BODIES.normal;
   ctx.save();
   ctx.translate(C.x, C.y);
   ctx.rotate(C.rot || 0);
   const r = C.r;
+  const es = B.ear; // ear scale
 
   // ears
   const earTwitch = (Math.sin(t * 0.9) > 0.97 ? 0.12 : 0) +
     (state === 'dance' ? Math.sin(t * 12) * 0.05 : 0);
-  const earFill = pal.points ? shade(pal.dark, 0.1) : pal.fur;
+  const earFill = pal.earCol || (pal.points ? shade(pal.dark, 0.1) : pal.fur);
   for (const s of [-1, 1]) {
     ctx.save();
     ctx.translate(s * r * 0.62, -r * 0.78);
-    ctx.rotate(s * (0.32 + earTwitch));
-    ctx.beginPath();
-    ctx.moveTo(-7, 4);
-    ctx.quadraticCurveTo(-2, -16, 3, -14);
-    ctx.quadraticCurveTo(8, -6, 7, 5);
-    ctx.closePath();
-    const eg = radialFill(ctx, 0, -6, 2, 14, [
-      [0, shade(earFill, 0.12)], [1, shade(earFill, -0.2)],
-    ]);
-    ctx.fillStyle = eg; ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-3.5, 2);
-    ctx.quadraticCurveTo(-1, -9, 2, -8);
-    ctx.quadraticCurveTo(4.5, -3, 4, 3);
-    ctx.closePath();
-    const ga = ctx.globalAlpha;
-    ctx.globalAlpha = ga * 0.9;
-    ctx.fillStyle = pal.earIn; ctx.fill();
-    ctx.globalAlpha = ga;
+    ctx.rotate(s * (0.32 + earTwitch + P.earFlat * 0.55));
+    if (pal.roundEars) {
+      // panda: round circle ears
+      ell(ctx, 0, -5 * es, 8.5 * es, 8.5 * es);
+      const eg = radialFill(ctx, -2, -8, 2, 12 * es, [
+        [0, shade(earFill, 0.14)], [1, earFill],
+      ]);
+      ctx.fillStyle = eg; ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(-7 * es, 4 * es);
+      ctx.quadraticCurveTo(-2 * es, -16 * es, 3 * es, -14 * es);
+      ctx.quadraticCurveTo(8 * es, -6 * es, 7 * es, 5 * es);
+      ctx.closePath();
+      const eg = radialFill(ctx, 0, -6 * es, 2, 14 * es, [
+        [0, shade(earFill, 0.12)], [1, shade(earFill, -0.2)],
+      ]);
+      ctx.fillStyle = eg; ctx.fill();
+      // inner ear
+      ctx.beginPath();
+      ctx.moveTo(-3.5 * es, 2 * es);
+      ctx.quadraticCurveTo(-1 * es, -9 * es, 2 * es, -8 * es);
+      ctx.quadraticCurveTo(4.5 * es, -3 * es, 4 * es, 3 * es);
+      ctx.closePath();
+      const ga = ctx.globalAlpha;
+      ctx.globalAlpha = ga * 0.9;
+      ctx.fillStyle = pal.earIn; ctx.fill();
+      ctx.globalAlpha = ga;
+      // lynx tufts (maine coon)
+      if (pal.tufts) {
+        ctx.strokeStyle = shade(pal.fur, 0.28);
+        ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+        for (const [tx, ty, ex2, ey2] of [[-2, -14, -4, -21], [1, -15, 2, -23], [4, -13, 7, -19]]) {
+          ctx.beginPath();
+          ctx.moveTo(tx * es, ty * es);
+          ctx.lineTo(ex2 * es, ey2 * es);
+          ctx.stroke();
+        }
+      }
+    }
     ctx.restore();
   }
 
@@ -507,6 +832,12 @@ function drawHead(ctx, C, P, pal, t, state) {
     ctx.fillStyle = mg; ctx.fill();
     ctx.globalAlpha = ga;
   }
+  if (pal.spots) {
+    for (const [dx, dy, sr] of [[-5, -r * 0.55, 2.2], [3, -r * 0.62, 1.8], [-11, -r * 0.4, 1.7]]) {
+      ell(ctx, dx, dy, sr, sr * 0.85);
+      ctx.fillStyle = shade(pal.dark, -0.02); ctx.fill();
+    }
+  }
   if (pal.stripe && !pal.points) {
     ctx.strokeStyle = pal.stripe;
     const ga = ctx.globalAlpha;
@@ -529,7 +860,7 @@ function drawHead(ctx, C, P, pal, t, state) {
   }
   ctx.restore(); // clip
 
-  // fluffy cheek fur (persian)
+  // fluffy cheek fur (persian / ragdoll / maine coon)
   if (pal.fluffy) {
     ctx.fillStyle = pal.fur;
     for (const [ax, ay] of [[-r * 0.9, r * 0.35], [-r * 0.95, r * 0.1], [-r * 0.8, r * 0.55]]) {
@@ -544,6 +875,11 @@ function drawHead(ctx, C, P, pal, t, state) {
       (Math.sin(t * 1.9) > 0.985 || Math.sin(t * 0.53 + 2.2) > 0.994) ? 1 : 0);
   for (const s of [-1, 1]) {
     const ex = s * 8.5 + r * 0.12, ey = -r * 0.12;
+    // panda eye patches (behind the eyes)
+    if (pal.eyePatch) {
+      ell(ctx, ex, ey, 8.4, 6.6, s * 0.32);
+      ctx.fillStyle = pal.dark; ctx.fill();
+    }
     if (P.eyeState === 'closed' || blink === 1) {
       ctx.strokeStyle = shade(pal.fur, -0.45);
       ctx.lineWidth = 2.2; ctx.lineCap = 'round';
@@ -589,7 +925,14 @@ function drawHead(ctx, C, P, pal, t, state) {
   // mouth
   ctx.strokeStyle = shade(pal.fur, -0.42);
   ctx.lineWidth = 1.6; ctx.lineCap = 'round';
-  if (P.mouth === 'open') {
+  if (P.mouth === 'yawn') {
+    // big wide-open yawn
+    ell(ctx, nx - 1, ny + 9, 5.2, 8.5);
+    ctx.fillStyle = shade(pal.tongue, -0.18); ctx.fill();
+    ctx.strokeStyle = shade(pal.fur, -0.42); ctx.stroke();
+    ell(ctx, nx - 1, ny + 12.5, 3.4, 4.4);
+    ctx.fillStyle = pal.tongue; ctx.fill();
+  } else if (P.mouth === 'open') {
     ell(ctx, nx - 1, ny + 7, 3.4, 4.2);
     ctx.fillStyle = pal.tongue; ctx.fill();
     ctx.stroke();
@@ -633,7 +976,9 @@ export function drawParticles(ctx, opts) {
   const t = opts.t || 0;
   const state = opts.state || 'idle';
   const scale = opts.scale || 1;
-  const P = poseFor(state, t, opts.jumpP ?? 0.5);
+  const pal = PALETTES[opts.breed] || PALETTES.grey_tabby;
+  const B = BODIES[pal.body] || BODIES.normal;
+  const P = poseFor(state, t, opts.jumpP ?? 0.5, B);
   if (!P.particles) return;
   ctx.save();
   ctx.scale(scale, scale);
@@ -673,6 +1018,194 @@ export function drawParticles(ctx, opts) {
       ell(ctx, x, y, 2.2, 1.6, ph * 6);
       ctx.fill();
     }
+  } else if (kind === 'leaf') {
+    // bamboo leaf bits drifting down while the panda munches
+    for (let i = 0; i < 3; i++) {
+      const ph = (t * 0.5 + i * 0.33) % 1;
+      const x = 24 + i * 7 + Math.sin(t * 2 + i) * 4 + ph * 8;
+      const y = -56 + ph * 48;
+      ctx.fillStyle = `rgba(110,160,70,${0.85 * (1 - ph)})`;
+      ell(ctx, x, y, 2.8, 1.5, ph * 5 + i);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- bamboo prop
+function drawBamboo(ctx, P, t) {
+  // stalk held between the front paws, leaning toward the face
+  const munch = Math.max(0, Math.sin(t * 3.4)) * 1.6;
+  ctx.save();
+  ctx.translate(20, 0);
+  ctx.rotate(-0.14);
+  const g = ctx.createLinearGradient(0, 0, 0, -62);
+  g.addColorStop(0, '#4c7a2e');
+  g.addColorStop(1, '#7ab04a');
+  ctx.fillStyle = g;
+  rr(ctx, -2.6, -62, 5.2, 64, 2.4);
+  ctx.fill();
+  // segment joints
+  ctx.fillStyle = 'rgba(28,48,16,0.4)';
+  for (const yy of [-16, -34, -52]) ctx.fillRect(-2.6, yy, 5.2, 1.7);
+  // leaves at the top
+  ctx.fillStyle = '#5d9440';
+  ell(ctx, 9, -58 - munch * 0.4, 9.5, 3.5, -0.5); ctx.fill();
+  ell(ctx, -7, -54, 8.5, 3.1, 0.6); ctx.fill();
+  ell(ctx, 7, -47, 7.5, 2.9, -0.3); ctx.fill();
+  ctx.fillStyle = '#6ea44c';
+  ell(ctx, -4, -62, 7, 2.7, 0.5); ctx.fill();
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- emotes
+// Floating game-style emote glyphs that pop in above the cat's head.
+export const EMOTES = [
+  'heart', 'love', 'note', 'question', 'exclaim', 'sweat',
+  'angry', 'laugh', 'star', 'zzz', 'fish',
+];
+
+export function drawEmote(ctx, opts) {
+  const kind = opts && opts.kind;
+  if (!kind || !EMOTES.includes(kind)) return;
+  const t = Math.max(0, opts.t || 0);
+  const life = 2.0;
+  if (t > life) return;
+  const scale = opts.scale || 1;
+  const pop = Math.min(1, t * 5.5);
+  const spring = 1 + Math.sin(pop * Math.PI) * 0.28;
+  const bob = Math.sin(t * 3.2) * 2.2;
+  const fade = t > life - 0.35 ? Math.max(0, (life - t) / 0.35) : 1;
+
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.translate(opts.x ?? 46, (opts.y ?? -150) + bob);
+  ctx.scale(spring, spring);
+  ctx.globalAlpha *= Math.max(0, Math.min(1, fade));
+
+  const hasBadge = ['question', 'exclaim', 'note', 'angry', 'laugh'].includes(kind);
+  if (hasBadge) {
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU);
+    ctx.fillStyle = 'rgba(255,255,255,0.94)'; ctx.fill();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = 'rgba(60,70,90,0.35)'; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-4, 13); ctx.lineTo(0, 19); ctx.lineTo(4, 13);
+    ctx.closePath(); ctx.fillStyle = 'rgba(255,255,255,0.94)'; ctx.fill();
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  switch (kind) {
+    case 'question':
+      ctx.fillStyle = '#3a6fd8';
+      ctx.font = 'bold 19px system-ui, sans-serif';
+      ctx.fillText('?', 0, 1);
+      break;
+    case 'exclaim':
+      ctx.fillStyle = '#e0483e';
+      ctx.font = 'bold 20px system-ui, sans-serif';
+      ctx.fillText('!', 0, 1);
+      break;
+    case 'note': {
+      ctx.fillStyle = '#7a4fd8';
+      ell(ctx, -1.5, 6, 4.8, 3.9, -0.25);
+      ctx.fill();
+      ctx.fillRect(2.6, -10, 2.4, 16);
+      ctx.strokeStyle = '#7a4fd8';
+      ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(4, -10);
+      ctx.quadraticCurveTo(10, -8, 11, -2);
+      ctx.stroke();
+      break;
+    }
+    case 'angry': {
+      // manga anger mark: 4 curved brackets facing the center
+      ctx.strokeStyle = '#e0483e';
+      ctx.lineWidth = 3.2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(-6.5, -6.5, 5, 0.1, Math.PI * 0.5); ctx.stroke();
+      ctx.beginPath(); ctx.arc(6.5, -6.5, 5, Math.PI * 0.5, Math.PI - 0.1); ctx.stroke();
+      ctx.beginPath(); ctx.arc(6.5, 6.5, 5, Math.PI + 0.1, Math.PI * 1.5); ctx.stroke();
+      ctx.beginPath(); ctx.arc(-6.5, 6.5, 5, Math.PI * 1.5, Math.PI * 2 - 0.1); ctx.stroke();
+      break;
+    }
+    case 'laugh': {
+      ell(ctx, 0, 0, 11, 11);
+      ctx.fillStyle = '#ffd94d'; ctx.fill();
+      ctx.lineWidth = 1.4; ctx.strokeStyle = '#d9a821'; ctx.stroke();
+      ctx.strokeStyle = '#5a4014';
+      ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-6.5, -3.5); ctx.quadraticCurveTo(-4.5, -6.5, -2.5, -3.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2.5, -3.5); ctx.quadraticCurveTo(4.5, -6.5, 6.5, -3.5); ctx.stroke();
+      ell(ctx, 0, 3.5, 4.5, 3.6);
+      ctx.fillStyle = '#7a3020'; ctx.fill();
+      ell(ctx, 0, 5.4, 2.6, 1.6);
+      ctx.fillStyle = '#e0705e'; ctx.fill();
+      break;
+    }
+    case 'heart':
+      ctx.fillStyle = '#f06e82';
+      heart(ctx, 0, 0, 9);
+      ell(ctx, -3.2, -3.4, 1.7, 1.2, -0.5);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fill();
+      break;
+    case 'love':
+      ctx.fillStyle = '#f0566e';
+      heart(ctx, 0, 0, 10);
+      ctx.fillStyle = '#f89aa8';
+      heart(ctx, -12.5, -7.5, 4.6);
+      heart(ctx, 12, -5.5, 4.0);
+      break;
+    case 'star':
+      ctx.fillStyle = '#ffcf4d';
+      star(ctx, 0, 0, 9.5, 4.0, 5);
+      break;
+    case 'sweat': {
+      ctx.fillStyle = '#5aa8e8';
+      ctx.beginPath();
+      ctx.moveTo(0, -10);
+      ctx.bezierCurveTo(6.5, -1, 5.5, 5.5, 0, 7);
+      ctx.bezierCurveTo(-5.5, 5.5, -6.5, -1, 0, -10);
+      ctx.closePath();
+      ctx.fill();
+      ell(ctx, -1.6, 1.6, 1.3, 2.1, 0.3);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fill();
+      break;
+    }
+    case 'zzz': {
+      const drawZ = (zx, zy, s, rot) => {
+        ctx.save();
+        ctx.translate(zx, zy);
+        ctx.rotate(rot);
+        ctx.font = `bold ${s}px system-ui, sans-serif`;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.strokeText('Z', 0, 0);
+        ctx.fillStyle = '#6a86b8';
+        ctx.fillText('Z', 0, 0);
+        ctx.restore();
+      };
+      drawZ(2, -4, 14, 0.12);
+      drawZ(11, 4, 10, 0.12);
+      drawZ(17, 10, 7, 0.12);
+      break;
+    }
+    case 'fish': {
+      ctx.fillStyle = '#7fa8c9';
+      ell(ctx, -2.5, 0, 9.5, 5.8, -0.06);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(6, 0);
+      ctx.lineTo(13, -5.5);
+      ctx.lineTo(13, 5.5);
+      ctx.closePath();
+      ctx.fill();
+      ell(ctx, -7, -1.2, 1.6, 1.6);
+      ctx.fillStyle = '#22303c'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(-3, 0.5, 4, -0.6, 0.6); ctx.stroke();
+      break;
+    }
   }
   ctx.restore();
 }
@@ -698,5 +1231,6 @@ function heart(ctx, x, y, s) {
   ctx.fill();
 }
 
-// bounding box in local units (before dir/scale) — for hit tests
-export const CAT_BBOX = { x: -75, y: -135, w: 155, h: 140 };
+// bounding box in local units (before dir/scale) — for hit tests.
+// Covers the largest body (chubby/panda) + raised paws + emote area.
+export const CAT_BBOX = { x: -88, y: -160, w: 180, h: 165 };
