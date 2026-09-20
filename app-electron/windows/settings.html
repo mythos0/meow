@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<h1>🐱 MeowCat Settings</h1>
+<div class="hint">Changes apply instantly.</div>
+
+<h2>Cat</h2>
+<div class="card">
+  <div class="breeds" id="breeds"></div>
+</div>
+
+<div class="card">
+  <div class="row"><label>Size</label><input type="range" id="size" min="0.5" max="2" step="0.05"><span id="sizeV" class="hint"></span></div>
+  <div class="row"><label>Opacity</label><input type="range" id="opacity" min="0.3" max="1" step="0.05"><span id="opV" class="hint"></span></div>
+  <div class="row"><label>Walk speed</label><input type="range" id="speed" min="20" max="140" step="5"><span id="spV" class="hint"></span></div>
+</div>
+
+<h2>Behaviour</h2>
+<div class="card">
+  <div class="row"><label>Sound effects</label><input type="checkbox" id="sounds"></div>
+  <div class="row"><label>Stay on top of fullscreen apps <span class="hint">(recommended)</span></label><input type="checkbox" id="topmost"></div>
+  <div class="row"><label>Start with Windows</label><input type="checkbox" id="autoStart"></div>
+</div>
+
+<h2>Coin Shop</h2>
+<div class="card">
+  <div class="row"><span>Balance</span><span class="coins" id="coins">🪙 0</span></div>
+  <div class="hint">Earn 1 🪙 every 30s · +2 🪙 every double-click pet</div>
+  <div id="shop" style="margin-top:8px"></div>
+</div>
+
+<div class="row" style="margin-top:14px">
+  <button class="ghost" id="openReminders">⏰ Reminders…</button>
+  <span style="flex:1"></span>
+  <button class="ghost" id="closeBtn">Close</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { drawCat, PALETTES } from '../src/cat-renderer.js';
+import { BREED_PRICES as prices } from '../src/settings-store.js';
+
+const $ = id => document.getElementById(id);
+let S = null;
+
+function toast(msg, ok = true) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.style.color = ok ? 'var(--ok)' : 'var(--err)';
+  t.style.display = 'block';
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.style.display = 'none', 2200);
+}
+
+function save(kv) { return window.meow.setSettings(kv); }
+
+function drawPreview(canvas, breed) {
+  const dpr = 2;
+  canvas.width = 140 * dpr; canvas.height = 84 * dpr;
+  const g = canvas.getContext('2d');
+  g.clearRect(0, 0, canvas.width, canvas.height);
+  g.save();
+  g.translate(canvas.width / 2, canvas.height - 8 * dpr);
+  g.scale(dpr, dpr);
+  drawCat(g, { t: 0.15, state: 'sit', breed, dir: 1, scale: 0.62 });
+  g.restore();
+}
+
+function renderBreeds() {
+  const owned = S.owned || [];
+  const grid = $('breeds');
+  grid.innerHTML = '';
+  for (const [breed, pal] of Object.entries(PALETTES)) {
+    const d = document.createElement('div');
+    d.className = 'breed' + (S.breed === breed ? ' sel' : '') + (!owned.includes(breed) ? ' locked' : '');
+    const cv = document.createElement('canvas');
+    d.appendChild(cv);
+    const nm = document.createElement('div');
+    nm.className = 'nm'; nm.textContent = pal.name || breed;
+    d.appendChild(nm);
+    if (!owned.includes(breed)) {
+      const pr = document.createElement('div');
+      pr.className = 'pr'; pr.textContent = '🔒 ' + (prices[breed] ?? '?') + ' 🪙';
+      d.appendChild(pr);
+    } else if (S.breed === breed) {
+      const own = document.createElement('div');
+      own.className = 'own'; own.textContent = '✓';
+      d.appendChild(own);
+    }
+    drawPreview(cv, breed);
+    d.onclick = async () => {
+      if (!owned.includes(breed)) {
+        const r = await window.meow.buyBreed(breed);
+        if (r.ok) { toast('Unlocked ' + breed + '!'); S = await refresh(); }
+        else toast('Need ' + r.needed + ' more 🪙', false);
+        return;
+      }
+      S.breed = breed;
+      drawSelection();
+      await save({ breed });
+    };
+    grid.appendChild(d);
+  }
+}
+
+function drawSelection() {
+  document.querySelectorAll('.breed').forEach(el => el.classList.remove('sel'));
+  renderBreeds();
+}
+
+function syncControls() {
+  $('size').value = S.size; $('sizeV').textContent = Math.round(S.size * 100) + '%';
+  $('opacity').value = S.opacity; $('opV').textContent = Math.round(S.opacity * 100) + '%';
+  $('speed').value = S.speed; $('spV').textContent = S.speed + ' px/s';
+  $('sounds').checked = !!S.sounds;
+  $('topmost').checked = S.topmost !== false;
+  $('autoStart').checked = !!S.autoStart;
+  $('coins').textContent = '🪙 ' + (S.coins ?? 0);
+}
+
+async function refresh() {
+  S = await window.meow.getSettings();
+  syncControls();
+  renderBreeds();
+  return S;
+}
+
+$('size').oninput = e => { S.size = +e.target.value; $('sizeV').textContent = Math.round(S.size * 100) + '%'; save({ size: S.size }); };
+$('opacity').oninput = e => { S.opacity = +e.target.value; $('opV').textContent = Math.round(S.opacity * 100) + '%'; save({ opacity: S.opacity }); };
+$('speed').oninput = e => { S.speed = +e.target.value; $('spV').textContent = S.speed + ' px/s'; save({ speed: S.speed }); };
+$('sounds').onchange = e => save({ sounds: e.target.checked });
+$('topmost').onchange = e => save({ topmost: e.target.checked });
+$('autoStart').onchange = e => { save({ autoStart: e.target.checked }); toast(e.target.checked ? 'Will start with Windows' : 'Auto-start disabled'); };
+$('openReminders').onclick = () => window.meow.openWindow('reminders');
+$('closeBtn').onclick = () => window.close();
+
+refresh();
+</script>
+</body>
+</html>

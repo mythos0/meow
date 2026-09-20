@@ -39,3 +39,23 @@ Work Log:
 Stage Summary:
 - Deliverable: download/MeowCat-2.0.1-win-x64.exe (105.6MB, runs on any Win10/11 x64, no .NET install / no installer needed, assets self-extract to %TEMP% on first launch)
 - Private repo pushed: 650f7c1
+
+---
+Task ID: 8
+Agent: Super Z (main)
+Task: v3.0 rewrite per user — "which kind of windows app can you test? make it that way; replace frame-based cat with your best 2D canvas"
+
+Work Log:
+- Answered user's question: HTML-canvas apps are fully testable here (headless Chromium) → rebuilt on Electron 33 (same Chromium engine as user's Windows target)
+- Wrote app-electron/src/cat-renderer.js (~700 lines): procedural cat, 10 states, 6 breeds, IK legs, chained tail, radial-gradient shading, rim light, particles; zero frames
+- Visual iteration: harness + Playwright screenshots; fixed tail y-axis bug (drooped to ground), far-leg contrast, siamese points/ears, tuxedo chest
+- Pure modules: cat-brain (seeded state machine), reminder-scheduler, settings-store, topmost-enforcer → 37 node:test unit tests
+- Visual tests: 13 Playwright tests (per-state pixel coverage, bbox/feet position, animation aliveness, breed distinctness, mirror flip)
+- Electron app: screen-sized transparent overlay (no window moves = no jank), click-through with hit-test forwarding, drag + double-click pet, tray, settings window with live breed previews, reminders window, coin economy, auto-start, screen-saver-level topmost re-assert
+- Real-app E2E on Linux: Xvfb + electron --remote-debugging-port + Playwright CDP → 14/14 (boot, render, brain, IPC actions, coins persist, settings persist, reminder fire→dance→consume, settings/reminders windows, UI add reminder)
+- Packaging: wine blocked by seccomp ("bad system call") → signAndEditExecutable:false; NSIS portable target built: dist/MeowCat-3.0.0-portable.exe (75.8MB), asar payload verified (@electron/asar list: all src/windows/sounds/assets)
+- Deliverables in download/: MeowCat-3.0.0-portable.exe + 3 preview PNGs
+
+Stage Summary:
+- v3 portable EXE delivered and fully tested (64 automated checks)
+- Frame-based sprite pipeline superseded by procedural canvas renderer

@@ -96,6 +96,30 @@ src/MeowCat.Core        # brain, economy, catalogs, reminders, jump physics (pur
 src/MeowCat             # WPF overlay host, renderer, store/settings/reminder UIs, platform interop
 tests/MeowCat.Tests     # 56 xunit tests (brain sims, economy, catalogs, reminders, platforms)
 installer/              # MeowCat-2.0.0-x64.msi + WiX sources
+
+
+## v3.0 — Electron Rewrite (procedural 2D-canvas cat, fully tested)
+
+The cat is now **drawn live on a 2D canvas** — no sprite frames, no AI images. Smooth 60fps
+skeletal animation (2-bone IK legs, physics-simulated tail, squash & stretch, gradient
+shading with rim light) in 6 breeds and 10 states: walk, run, idle, sit, sleep, dance,
+scratch, jump, happy, eat.
+
+- `app-electron/` — the app (Electron 33, transparent always-on-top overlay window)
+- `app-electron/src/cat-renderer.js` — the procedural cat (pure module, deterministic)
+- Testability: 37 logic unit tests + 13 Playwright visual tests + 14 real-app E2E tests
+  (`app-electron/tests/`, `app-electron/scripts/e2e-linux.mjs` boots the actual app under
+  Xvfb and verifies rendering, IPC, coins, settings, and the reminder pipeline)
+- Build: `cd app-electron && npm install && npm run dist` → `dist/MeowCat-3.0.0-portable.exe`
+- Features: walking/running across the desktop, drag the cat anywhere, double-click to pet
+  (+coins, purr), tray menu with actions, settings window (6 breeds with live previews,
+  size/opacity/speed, sounds, auto-start), reminders & timers (the cat dances and shows
+  your message), coin economy + breed unlock shop, always-on-top enforcer
+  (re-asserts `screen-saver` level every 2s — fixes "cat under fullscreen tab").
+
+> Note: the exe ships with the default Electron file icon (exe resource editing needs wine,
+> unavailable in the build sandbox); the tray, taskbar and window icons are all the cat.
+
 scripts/                # asset pipeline (AI sheets → keyed frames), MSI build, screenshots
 docs/                   # FEATURES / BUILD / TESTING + screenshots
 art_raw/                # raw AI-generated sprite sheets (green/magenta screens)

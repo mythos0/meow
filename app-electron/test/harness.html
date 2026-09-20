@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:transparent;}
+  #cv{display:block;}
+  #grid{display:block;}
+</style>
+</head>
+<body>
+<canvas id="cv" width="360" height="260"></canvas>
+<canvas id="grid" width="0" height="0" style="display:none"></canvas>
+<script type="module">
+import { drawCat, drawParticles, STATES, PALETTES } from '../src/cat-renderer.js';
+
+// Mode 1: single render — ?state=walk&t=0.3&breed=grey_tabby&dir=1&scale=1
+// Mode 2: contact sheet — ?sheet=1 (all states x timestamps + breed row)
+const q = new URLSearchParams(location.search);
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+
+if (q.get('sheet')) {
+  const states = STATES;
+  const breeds = Object.keys(PALETTES);
+  const times = [0.0, 0.35];
+  const CELL_W = 240, CELL_H = 200;
+  const cols = 5;
+  const stateCells = states.length * times.length;
+  const rows = Math.ceil(stateCells / cols);
+  const grid = document.getElementById('grid');
+  grid.style.display = 'block';
+  grid.width = cols * CELL_W;
+  grid.height = (rows + 2) * CELL_H; // state rows + breed rows (2 rows for 6 breeds)
+  const g = grid.getContext('2d');
+  g.fillStyle = '#e8e8f0'; g.fillRect(0,0,grid.width,grid.height);
+  for (let y = 0; y < grid.height; y += 20)
+    for (let x = 0; x < grid.width; x += 20)
+      if ((x/20 + y/20) % 2 === 0) { g.fillStyle = '#dcdce6'; g.fillRect(x, y, 20, 20); }
+
+  let idx = 0;
+  g.font = '13px sans-serif'; g.fillStyle = '#333';
+  for (const st of states) for (const tt of times) {
+    const col = idx % cols, row = Math.floor(idx / cols);
+    const ox = col * CELL_W, oy = row * CELL_H;
+    g.strokeStyle = '#bbb'; g.strokeRect(ox, oy, CELL_W, CELL_H);
+    g.fillStyle = '#333'; g.fillText(st + ' t=' + tt, ox + 6, oy + 16);
+    g.save();
+    g.translate(ox + CELL_W/2, oy + CELL_H - 34);
+    const opts = { t: tt, state: st, breed: 'grey_tabby', dir: 1, scale: 1, jumpP: 0.5 };
+    drawCat(g, opts);
+    drawParticles(g, opts);
+    g.restore();
+    idx++;
+  }
+  breeds.forEach((br, i) => {
+    const col = i % cols, row = rows + Math.floor(i / cols);
+    const ox = col * CELL_W, oy = row * CELL_H;
+    g.strokeStyle = '#bbb'; g.strokeRect(ox, oy, CELL_W, CELL_H);
+    g.fillStyle = '#333'; g.fillText(br, ox + 6, oy + 16);
+    g.save();
+    g.translate(ox + CELL_W/2, oy + CELL_H - 34);
+    drawCat(g, { t: 0.15, state: 'walk', breed: br, dir: 1, scale: 1 });
+    g.restore();
+  });
+
+  document.title = 'sheet-ready';
+} else {
+  const state = q.get('state') || 'walk';
+  const t = parseFloat(q.get('t') || '0');
+  const breed = q.get('breed') || 'grey_tabby';
+  const dir = parseInt(q.get('dir') || '1');
+  const scale = parseFloat(q.get('scale') || '1');
+  const jumpP = parseFloat(q.get('jumpP') || '0.5');
+  const W = cv.width, H = cv.height;
+  ctx.fillStyle = '#eceff4'; ctx.fillRect(0,0,W,H);
+  for (let y = 0; y < H; y += 16)
+    for (let x = 0; x < W; x += 16)
+      if ((x/16 + y/16) % 2 === 0) { ctx.fillStyle = '#e0e4ec'; ctx.fillRect(x, y, 16, 16); }
+  ctx.save();
+  ctx.translate(W/2, H - 40);
+  const opts = { t, state, breed, dir, scale, jumpP };
+  drawCat(ctx, opts);
+  drawParticles(ctx, opts);
+  ctx.restore();
+  document.title = 'single-ready:' + state;
+}
+window.__ready = true;
+</script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="ui.css">
+<style>
+  html, body { background: transparent; overflow: hidden; }
+  #cv { position: fixed; inset: 0; }
+  #bubble {
+    position: fixed; display: none; max-width: 260px;
+    background: rgba(22,24,30,0.92); color: #ffe9c8; border: 1px solid #3a3f4b;
+    border-radius: 14px; padding: 10px 14px; font: 14px/1.4 system-ui, sans-serif;
+    box-shadow: 0 6px 24px rgba(0,0,0,.4); z-index: 10;
+  }
+  #bubble:after {
+    content: ''; position: absolute; left: 24px; bottom: -8px;
+    border: 8px solid transparent; border-top-color: #3a3f4b; border-bottom: 0;
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="bubble"></div>
+<script type="module">
+import { drawCat, drawParticles, CAT_BBOX } from '../src/cat-renderer.js';
+import { CatBrain } from '../src/cat-brain.js';
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const bubble = document.getElementById('bubble');
+
+let S = { breed: 'grey_tabby', size: 1.0, opacity: 1.0, sounds: true, speed: 55, workArea: null };
+let brain = null;
+let audio = {};
+let bubbleTimer = null;
+
+// ---------------------------------------------------------- audio
+function loadSounds() {
+  const names = ['meow_real', 'meow_real2', 'meow_real3', 'purr_real', 'purr', 'patter', 'run_patter', 'whoosh', 'land', 'scratch', 'coin', 'chirp', 'dance_loop'];
+  for (const n of names) {
+    const a = new Audio(`../sounds/${n}.wav`);
+    a.preload = 'auto';
+    audio[n] = a;
+  }
+}
+function play(name, vol = 0.9) {
+  if (!S.sounds || !audio[name]) return;
+  try {
+    const a = audio[name].cloneNode();
+    a.volume = vol;
+    a.play().catch(() => {});
+  } catch {}
+}
+
+// ---------------------------------------------------------- init
+async function init() {
+  loadSounds();
+  S = { ...S, ...await window.meow.getSettings() };
+  const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
+  resize(wa);
+  brain = new CatBrain({
+    bounds: { x: wa.x, y: wa.y, w: wa.width, h: wa.height },
+    groundY: wa.y + wa.height - 8,
+    speed: S.speed,
+  });
+  window.meow.on('settings-changed', applySettings);
+  window.meow.on('do-action', doAction);
+  window.meow.on('reminder-fired', showReminder);
+  window.meow.on('workarea-changed', async () => {
+    const s2 = await window.meow.getSettings();
+    S = { ...S, ...s2 };
+    resize(s2.workArea);
+    brain.bounds = { x: s2.workArea.x, y: s2.workArea.y, w: s2.workArea.width, h: s2.workArea.height };
+    brain.groundY = s2.workArea.y + s2.workArea.height - 8;
+  });
+  requestAnimationFrame(loop);
+}
+
+function resize(wa) {
+  cv.width = window.innerWidth = wa.width;
+  cv.height = window.innerHeight = wa.height;
+  cv.style.width = wa.width + 'px';
+  cv.style.height = wa.height + 'px';
+}
+
+function applySettings(kv) {
+  S = { ...S, ...kv };
+  if (kv.speed && brain) brain.speed = kv.speed;
+}
+
+function doAction(act) {
+  if (!brain) return;
+  if (act === 'sleep') brain.sleepNow();
+  else if (act === 'eat') brain.feed();
+  else if (act === 'dance') { brain.dance(); play('dance_loop', 0.5); }
+  else if (act === 'happy') brain.pet();
+}
+
+function showReminder(item) {
+  if (!brain) return;
+  (window.__firedReminders = window.__firedReminders || []).push(item.label);
+  brain.dance();
+  const p = brain.pose;
+  const scale = S.size;
+  const bx = p.x - 20, by = p.y - 150 * scale - 70;
+  bubble.textContent = '⏰ ' + item.label;
+  bubble.style.left = Math.max(10, bx - 110) + 'px';
+  bubble.style.top = Math.max(10, by) + 'px';
+  bubble.style.display = 'block';
+  play('chirp', 0.8);
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => { bubble.style.display = 'none'; }, 8000);
+}
+
+// ---------------------------------------------------------- mouse / click-through
+let overCat = false;
+let dragging = false;
+let dragDX = 0, dragDY = 0;
+let lastPat = 0;
+
+function catHit(mx, my) {
+  if (!brain) return false;
+  const p = brain.pose;
+  const s = S.size;
+  const cx = p.x, cy = p.y;
+  const b = CAT_BBOX;
+  const x0 = cx + b.x * s, x1 = cx + (b.x + b.w) * s;
+  const y0 = cy + b.y * s, y1 = cy + b.h * s;
+  return mx >= x0 && mx <= x1 && my >= y0 && my <= y1;
+}
+
+window.addEventListener('mousemove', e => {
+  const hit = dragging || catHit(e.clientX, e.clientY);
+  if (hit !== overCat) { overCat = hit; window.meow.hitTest(hit); }
+  if (dragging) {
+    brain.x = Math.max(brain.bounds.x + 60, Math.min(brain.bounds.x + brain.bounds.w - 60, e.clientX - dragDX));
+    brain.y = Math.max(brain.bounds.y + 120, Math.min(brain.bounds.y + brain.bounds.h - 8, e.clientY - dragDY));
+    brain.groundY = brain.y; // dragged baseline
+  }
+});
+window.addEventListener('mousedown', e => {
+  if (!catHit(e.clientX, e.clientY)) return;
+  if (e.button === 2) return; // context menu handled by main? keep simple
+  dragging = true;
+  dragDX = e.clientX - brain.x;
+  dragDY = e.clientY - brain.y;
+  const now = Date.now();
+  if (now - lastPat < 400) { // double-click = pet
+    brain.pet(); play('purr_real', 0.9); window.meow.addCoins(2);
+    lastPat = 0;
+  } else {
+    play('meow_real' + (1 + Math.floor(Math.random() * 3)), 0.7);
+    lastPat = now;
+  }
+});
+window.addEventListener('mouseup', () => { dragging = false; });
+window.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  window.meow.openWindow('settings');
+});
+
+// footsteps sound on walk
+let lastStepPhase = 0;
+function stepSounds() {
+  if (!brain) return;
+  if (brain.state === 'walk') {
+    const ph = Math.floor(brain.t * 7 * 2);
+    if (ph !== lastStepPhase) { lastStepPhase = ph; play('patter', 0.12); }
+  } else if (brain.state === 'run') {
+    const ph = Math.floor(brain.t * 12.5 * 2);
+    if (ph !== lastStepPhase) { lastStepPhase = ph; play('run_patter', 0.15); }
+  } else if (brain.state === 'scratch') {
+    const ph = Math.floor(brain.t * 10.5);
+    if (ph !== lastStepPhase) { lastStepPhase = ph; play('scratch', 0.35); }
+  } else lastStepPhase = -1;
+  if (brain.state === 'jump' && brain.jumpP > 0.9) { /* landing sound once */ }
+}
+
+// ---------------------------------------------------------- main loop
+let lastTs = performance.now();
+function loop(ts) {
+  const dt = (ts - lastTs) / 1000;
+  lastTs = ts;
+  if (brain) {
+    brain.speed = S.speed;
+    brain.tick(dt);
+    stepSounds();
+    const p = brain.pose;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    const opts = {
+      t: p.t, state: p.state, dir: p.dir, breed: S.breed,
+      scale: S.size, alpha: S.opacity, jumpP: p.jumpP,
+    };
+    drawCat(ctx, opts);
+    drawParticles(ctx, opts);
+    ctx.restore();
+  }
+  requestAnimationFrame(loop);
+}
+
+init();
+
+// test instrumentation (harmless in production)
+window.__catBooted = true;
+window.__pose = () => brain ? JSON.parse(JSON.stringify(brain.pose)) : null;
+window.__doAction = act => doAction(act);
+</script>
+</body>
+</html>

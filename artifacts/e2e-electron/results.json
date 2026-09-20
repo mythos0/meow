@@ -1,0 +1,72 @@
+[
+  {
+    "name": "cat window booted",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "cat paints opaque pixels on canvas",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "brain pose advances (animation clock)",
+    "pass": true,
+    "extra": "t 0.39 → 2.22"
+  },
+  {
+    "name": "cat state machine runs",
+    "pass": true,
+    "extra": "idle@800 → sit@800"
+  },
+  {
+    "name": "tray-style action (dance) reaches the cat",
+    "pass": true,
+    "extra": "dance"
+  },
+  {
+    "name": "coins persist through IPC+store",
+    "pass": true,
+    "extra": "80 → 90"
+  },
+  {
+    "name": "settings round-trip",
+    "pass": true,
+    "extra": "size=1.25"
+  },
+  {
+    "name": "reminder fires → main→renderer IPC → cat notified",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "one-shot reminder consumed after firing",
+    "pass": true,
+    "extra": "0 left"
+  },
+  {
+    "name": "settings window opens",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "settings shows 6 breed cards",
+    "pass": true,
+    "extra": "6"
+  },
+  {
+    "name": "reminders window opens",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "reminder added from real UI",
+    "pass": true,
+    "extra": "1 rows"
+  },
+  {
+    "name": "e2e screenshots saved",
+    "pass": true,
+    "extra": "/home/z/my-project/meow/artifacts/e2e-electron"
+  }
+]

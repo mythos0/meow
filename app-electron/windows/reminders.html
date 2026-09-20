@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<h1>⏰ Reminders & Timers</h1>
+<div class="hint">When a reminder fires, your cat dances and shows the message.</div>
+
+<h2>New reminder</h2>
+<div class="card">
+  <div class="row" style="margin-bottom:8px">
+    <label style="flex:0 0 74px">Message</label>
+    <input type="text" id="label" placeholder="Drink water!" maxlength="80">
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <label style="flex:0 0 74px">When</label>
+    <input type="datetime-local" id="when">
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <label style="flex:0 0 74px">Repeat</label>
+    <select id="repeat">
+      <option value="once">Once</option>
+      <option value="hourly">Every hour</option>
+      <option value="daily">Every day</option>
+      <option value="weekly">Every week</option>
+    </select>
+  </div>
+  <div class="row" style="margin-bottom:10px">
+    <label style="flex:0 0 74px">Cat does</label>
+    <select id="anim">
+      <option value="dance">Dance 💃</option>
+      <option value="happy">Happy bounce 💗</option>
+      <option value="jump">Jump 🐾</option>
+      <option value="eat">Snack 🍽</option>
+      <option value="sleep">Sleep 😴</option>
+    </select>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="sound" checked> Play a meow</label>
+    <span style="flex:1"></span>
+    <button id="addBtn">Add reminder</button>
+  </div>
+</div>
+
+<h2>Upcoming</h2>
+<div class="card" id="list"><div class="empty">No reminders yet.</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+
+function toast(msg, ok = true) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.style.color = ok ? 'var(--ok)' : 'var(--err)';
+  t.style.display = 'block';
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.style.display = 'none', 2200);
+}
+
+function fmtWhen(ms) {
+  const d = new Date(ms);
+  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+const REP_LABEL = { once: '', hourly: '· hourly', daily: '· daily', weekly: '· weekly' };
+
+async function renderList() {
+  const items = await window.meow.listReminders();
+  const box = $('list');
+  box.innerHTML = '';
+  if (!items.length) { box.innerHTML = '<div class="empty">No reminders yet.</div>'; return; }
+  for (const it of items) {
+    const row = document.createElement('div');
+    row.className = 'rem';
+    row.innerHTML = `<span class="when">${fmtWhen(it.at)}</span>
+      <span class="what">${escapeHtml(it.label)} <span class="rep">${REP_LABEL[it.repeat] || ''}</span></span>`;
+    const del = document.createElement('button');
+    del.className = 'ghost small';
+    del.textContent = '✕';
+    del.onclick = async () => { await window.meow.removeReminder(it.id); renderList(); };
+    row.appendChild(del);
+    box.appendChild(row);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// default "when" = 5 minutes from now, rounded to minute
+function defaultWhen() {
+  const d = new Date(Date.now() + 5 * 60000);
+  d.setSeconds(0, 0);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+$('addBtn').onclick = async () => {
+  const label = $('label').value.trim() || 'Reminder';
+  const whenVal = $('when').value;
+  if (!whenVal) { toast('Pick a date & time first', false); return; }
+  const at = new Date(whenVal).getTime();
+  if (!(at > Date.now() - 60000)) { toast('That time is in the past', false); return; }
+  await window.meow.addReminder({
+    label, at,
+    repeat: $('repeat').value,
+    anim: $('anim').value,
+    sound: $('sound').checked,
+  });
+  $('label').value = '';
+  toast('Reminder added — your cat is on it! 🐾');
+  renderList();
+};
+
+$('when').value = defaultWhen();
+renderList();
+</script>
+</body>
+</html>
