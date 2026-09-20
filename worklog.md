@@ -121,3 +121,25 @@ Stage Summary:
 - v3.2.0 shipped: download/MeowCat-3.2.0-portable.exe
 - All user asks addressed: no random walking, emote distance fixed, real fish-biting/chewing eat, 7 fully new designed cats + photo-matched Mochi, panda researched online and rebuilt (not cat-like), memory diet ~5 procs on Windows
 - 164 automated checks green (140 test + 24 e2e)
+
+---
+Task ID: 10
+Agent: Super Z (main)
+Task: "now make c# version exe from it. electron takes so much ram" — port the Electron v3.2 app to C# WPF and ship a single-file EXE (v4.0.0)
+
+Work Log:
+- Extracted the user's running v3.2.0 portable exe (NSIS -> app-64.7z -> app.asar) to recover the exact Electron source and port from it 1:1
+- Web research re-verified the panda build (black ears/eye-patches/muzzle/legs/shoulder band, waddling gait, sit-up bamboo feeding with pseudo-thumb grip, rolling play, sprawled naps) before porting panda actions
+- New Core layout (pure, no WPF): Data/Catalog.cs (21 palettes + 8 bodies), Render/Pose.cs (20-state poseFor + solveIK + tail chain), Render/Canvas.cs + DrawOps.cs (display list), Render/CatArt.cs (full drawCat/drawHead/drawTail/drawLeg/drawBamboo/drawFish/drawEmote/drawParticles port), Brain/CatBrain.cs (v3.2 behaviour, no open-field roaming), Store/SettingsStore.cs (Electron-compatible camelCase JSON) + ReminderScheduler.cs, Scan/ScanPure.cs
+- NEW lucky_tabby breed reproducing the user's reference picture: grey tabby, white chest/muzzle/socks, big amber eyes, red collar + gold paw-print tag (new collar/tag rendering)
+- WPF host: full-workarea transparent overlay with WS_EX_TRANSPARENT click-through toggle, drag/pet(280ms)/double-click/right-click, walk-run-scratch footstep sounds, reminder bubble; WpfReplay replays the display list with frozen-brush caches; native EnumWindows scanner (no PowerShell children); tray menu + reminder balloons; lazy warm-hidden settings window (store grid with live previews, sliders, reminders editor, about); auto-start via HKCU Run
+- RAM diet: 1 process, frozen Freezables, bounded brush cache, 30fps DispatcherTimer, lazy pooled MediaPlayers, one-time SetProcessWorkingSetSize trim after startup
+- Visual QA on Linux: scripts/RenderProof replays the same display list via SkiaSharp -> proof sheets (21 breeds, all cat actions x4 frames, panda action set, lucky_tabby sheet, 11 emotes) + 10 pixel-sample assertions; fixed 2 real bugs found by proofs (Skia concentric two-point-conical gradient degenerate; SKMatrix Persp0=1 perspective warp)
+- Tests rewritten for the new architecture: 84/84 green (pose/IK invariants, emote-anchor hug, collar pixels, eat bite/chew cycle, brain 10k-tick sim + no-roaming panda invariants, store promo + Electron file adoption, reminder recurrence/grace, scan filters)
+- Deleted legacy sprite pipeline (126 PNGs + SpriteCatalog/SpriteRenderer/etc.) — exe shrank 105MB -> 70.9MB
+- Published MeowCat-4.0.0-win-x64.exe (70.9MB, single-file, self-contained), bundle signature + sound/ico payload verified; rebased onto remote main (v3.2.0 history) and pushed
+
+Stage Summary:
+- C# WPF edition shipped: 1 process / target ~60-110MB working set (vs Electron 7 processes / ~400MB); settings carry over from the Electron install
+- Deliverables: download/MeowCat-4.0.0-win-x64.exe + download/proofs/meowcat_v4_*.png; commit 381df96 on mythos0/meow main
+- README rewritten: full renderer documentation, CJS-vs-Electron comparison table, panda research notes
