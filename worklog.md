@@ -22,3 +22,20 @@ Stage Summary:
 - Desktop shortcut added to Product.wxs + wixl generator (default on install, per-machine Public Desktop)
 - Deliverables: artifacts/MeowCat-2.0.1-x64.msi; proof image in /home/z/my-project/download/
 - Frame interpolation (more-frames) task CANCELLED per user; vector-art path abandoned per user
+
+---
+Task ID: 7
+Agent: Super Z (main)
+Task: Deliver portable EXE ("give me exe file") — self-contained single-file build + integrity verification
+
+Work Log:
+- Verified all 122 sprite frames non-empty (alpha coverage check: 0 suspicious frames) — "no cat" root cause remained the v2.0.0 MSI missing payloads, already fixed in 66016b8
+- Sandbox reset wiped .NET SDK → reinstalled 8.0.425 via dotnet-install.sh
+- dotnet build Release: 0 errors, 0 warnings; dotnet test: 56/56 passed
+- dotnet publish self-contained win-x64 single-file: PublishSingleFile + IncludeAllContentForSelfExtract + IncludeNativeLibrariesForSelfExtract + EnableCompressionInSingleFile, PDBs stripped
+- Verified EXE: MZ header OK; .NET bundle signature found (offset 7953968, header offset 105587118); bundle manifest contains all 126 sprite paths + 17 wav paths; size 105.6MB confirms bundled runtime
+- Cleaned git file-mode noise (core.fileMode=false), ignored artifacts/exe-release/, pushed to private repo
+
+Stage Summary:
+- Deliverable: download/MeowCat-2.0.1-win-x64.exe (105.6MB, runs on any Win10/11 x64, no .NET install / no installer needed, assets self-extract to %TEMP% on first launch)
+- Private repo pushed: 650f7c1
