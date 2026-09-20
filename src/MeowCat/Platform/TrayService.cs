@@ -1,16 +1,30 @@
-using System;
-using System.Windows.Forms;
-using MeowCat.Windows;
+// TrayService.cs — system tray icon + menu (WinForms NotifyIcon).
+// Menu mirrors the Electron v3.2 tray: Dance / Feed / Sleep, Reminders,
+// Settings, Quit + reminder balloon notifications.
 
 namespace MeowCat.Platform;
 
-/// <summary>System tray icon (WinForms NotifyIcon + native ContextMenuStrip — rock solid).</summary>
+using System.Windows.Forms;
+
+public interface ICatTrayHost
+{
+    void Dance();
+    void Feed();
+    void SleepNow();
+    void OpenSettings();
+    void OpenReminders();
+    void Quit();
+    bool SoundOn { get; }
+    void ToggleSound();
+    string BreedName { get; }
+}
+
 public sealed class TrayService : IDisposable
 {
     private readonly NotifyIcon _icon;
-    private readonly ICatCommandHost _host;
+    private readonly ICatTrayHost _host;
 
-    public TrayService(ICatCommandHost host, string iconPath)
+    public TrayService(ICatTrayHost host, string iconPath)
     {
         _host = host;
         _icon = new NotifyIcon
@@ -19,91 +33,51 @@ public sealed class TrayService : IDisposable
             Visible = true,
         };
         try { _icon.Icon = new System.Drawing.Icon(iconPath); }
-        catch (Exception) { /* icon optional */ }
+        catch { /* icon optional */ }
 
-        _icon.DoubleClick += (_, _) => _host.DoStore();
+        _icon.DoubleClick += (_, _) => _host.OpenSettings();
         _icon.ContextMenuStrip = BuildMenu();
     }
 
     private ContextMenuStrip BuildMenu()
     {
         var m = new ContextMenuStrip();
-        m.Items.Add($"🐱 {_host.CatName} — MeowCat").Enabled = false;
+        m.Items.Add($"🐱 {_host.BreedName} — MeowCat").Enabled = false;
         m.Items.Add(new ToolStripSeparator());
-        m.Items.Add($"{(_host.IsAngryVisible ? "😠 angry mode" : "😺 happy mode")}").Enabled = false;
+        m.Items.Add(Item("💃 Dance!", _host.Dance));
+        m.Items.Add(Item("🍖 Feed", _host.Feed));
+        m.Items.Add(Item("💤 Sleep now", _host.SleepNow));
         m.Items.Add(new ToolStripSeparator());
-
-        m.Items.Add(Item("Feed a treat", _host.DoFeed));
-        m.Items.Add(Item("Dance for me", _host.DoDance));
-        m.Items.Add(Item("Take a nap", _host.DoSleep));
-        m.Items.Add(Item("Play with yarn", _host.DoPlay));
-        m.Items.Add(Item(_host.IsAngryVisible ? "Calm down 😺" : "Make angry 😠", _host.DoMakeAngry));
-
-        var jump = (ToolStripMenuItem)m.Items.Add("Jump to window");
-        var targets = _host.GetJumpTargets();
-        if (targets.Count == 0)
-        {
-            jump.DropDownItems.Add("(no windows found)").Enabled = false;
-        }
-        else
-        {
-            foreach (var w in targets)
-            {
-                var target = w;
-                jump.DropDownItems.Add(Truncate(w.Title, 44), null, (_, _) => _host.JumpTo(target));
-            }
-        }
-
-        m.Items.Add(new ToolStripSeparator());
+        m.Items.Add(Item("⏰ Reminders…", _host.OpenReminders));
+        m.Items.Add(Item("⚙ Settings…", _host.OpenSettings));
         m.Items.Add(Item($"Sound: {(_host.SoundOn ? "On" : "Off")}", _host.ToggleSound));
-        var size = (ToolStripMenuItem)m.Items.Add("Size");
-        foreach (var (label, val) in new[] { ("Tiny (0.6x)", 0.6), ("Small (0.8x)", 0.8), ("Normal (1x)", 1.0), ("Big (1.4x)", 1.4), ("Giant (2x)", 2.0) })
-        {
-            var v = val;
-            var item = (ToolStripMenuItem)size.DropDownItems.Add($"{label}{(Math.Abs(_host.CurrentSize - v) < 0.01 ? "  ✓" : "")}");
-            item.Click += (_, _) => { _host.SetSize(v); RefreshMenu(); };
-        }
-        size.DropDownOpening += (_, _) => { };
-
         m.Items.Add(new ToolStripSeparator());
-        m.Items.Add(Item("Cat Store…", _host.DoStore));
-        m.Items.Add(Item("Reminders…", _host.DoReminders));
-        m.Items.Add(Item("Settings…", _host.DoSettings));
-        m.Items.Add(Item("Exit", _host.DoExit));
+        m.Items.Add(Item("Quit", _host.Quit));
         return m;
     }
 
-    /// <summary>Shows a toast/balloon from the tray icon (backup notification for reminders).</summary>
-    public void ShowBalloon(string title, string message)
+    private static ToolStripItem Item(string label, Action onClick)
     {
-        try
-        {
-            _icon.BalloonTipTitle = string.IsNullOrWhiteSpace(title) ? "MeowCat" : title;
-            _icon.BalloonTipText = string.IsNullOrWhiteSpace(message) ? "MeowCat reminder" : message;
-            _icon.ShowBalloonTip(5000);
-        }
-        catch (Exception) { /* balloon optional */ }
-    }
-
-    private void RefreshMenu()
-    {
-        var old = _icon.ContextMenuStrip;
-        _icon.ContextMenuStrip = BuildMenu();
-        old?.Dispose();
-    }
-
-    private static ToolStripMenuItem Item(string text, Action onClick)
-    {
-        var it = new ToolStripMenuItem(text);
+        var it = new ToolStripMenuItem(label);
         it.Click += (_, _) => onClick();
         return it;
     }
 
-    private static string Truncate(string s, int n) => s.Length <= n ? s : s[..(n - 1)] + "…";
+    /// <summary>Reminder balloon (replaces Electron's toast Notification — no extra process).</summary>
+    public void Balloon(string title, string body, Action? onClick = null)
+    {
+        try
+        {
+            _icon.BalloonTipTitle = title;
+            _icon.BalloonTipText = body;
+            if (onClick != null) _icon.BalloonTipClicked += (_, _) => onClick();
+            _icon.ShowBalloonTip(6000);
+        }
+        catch { /* balloon optional */ }
+    }
 
     public void Dispose()
     {
-        _icon.Visible = false;
-        _icon.Dispose();
+        try { _icon.Visible = false; _icon.Dispose(); } catch { }
     }
 }

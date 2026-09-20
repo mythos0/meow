@@ -27,7 +27,7 @@ public sealed class SoundService
 
     public bool FileExists(string name) => File.Exists(Path.Combine(BaseDir, name));
 
-    public void Play(string name)
+    public void Play(string name, double? volumeOverride = null)
     {
         if (!Enabled || !OperatingSystem.IsWindows() || string.IsNullOrEmpty(name)) return;
         lock (_gate)
@@ -42,14 +42,21 @@ public sealed class SoundService
                     p = new MediaPlayer();
                     _players[name] = p;
                 }
-                p.Volume = Volume;
-                p.Open(new Uri(Path.Combine(BaseDir, name)));
-                p.Position = TimeSpan.Zero;
+                p.Volume = Math.Clamp(volumeOverride ?? Volume, 0, 1);
+                if (_uris.TryGetValue(name, out var u)) p.Position = TimeSpan.Zero;
+                else
+                {
+                    u = new Uri(Path.Combine(BaseDir, name));
+                    _uris[name] = u;
+                    p.Open(u);
+                }
                 p.Play();
             }
             catch (Exception) { /* never crash the cat over audio */ }
         }
     }
+
+    private readonly Dictionary<string, Uri> _uris = new();
 
     public void SetVolume(double v)
     {
