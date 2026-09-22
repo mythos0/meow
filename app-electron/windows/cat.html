@@ -7,7 +7,7 @@
 <style>
   html, body { background: transparent; overflow: hidden; }
   #cv { position: fixed; inset: 0; }
-  #bubble {
+  #bubble, #badge {
     position: fixed; display: none; max-width: 260px;
     background: rgba(22,24,30,0.92); color: #ffe9c8; border: 1px solid #3a3f4b;
     border-radius: 14px; padding: 10px 14px; font: 14px/1.4 system-ui, sans-serif;
@@ -17,38 +17,57 @@
     content: ''; position: absolute; left: 24px; bottom: -8px;
     border: 8px solid transparent; border-top-color: #3a3f4b; border-bottom: 0;
   }
+  #badge { padding: 4px 10px; font: 600 12px/1.5 system-ui, sans-serif; border-radius: 10px; }
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
 <div id="bubble"></div>
+<div id="badge"></div>
 <script type="module">
-import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAnchor, CAT_BBOX } from '../src/cat-renderer.js';
+import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAnchor, CAT_BBOX, registerSkin } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
 import { computeRegionSize, initialOrigin, slideIfNeeded } from '../src/region.js';
+import { batteryCrisis } from '../src/system-reactions.js';
+import { zonesToScreen } from '../src/no-walk.js';
 
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d', { alpha: true });
 const bubble = document.getElementById('bubble');
+const badge = document.getElementById('badge');
 
 let S = { breed: 'grey_tabby', size: 1.0, opacity: 1.0, sounds: true, speed: 55, workArea: null };
 let brain = null;
 let audio = {};
 let bubbleTimer = null;
-// v3.5 funny pack: laser-pointer toy + ambient butterfly
-let laser = null;        // { x, y, vx, vy } in screen coords (cat.html owns it)
-let butterfly = null;    // { x, y, vx, hue, born } in screen coords
+let volumeMul = 1;            // v3.6: ducked during calls
+let frozen = false;           // v3.6: photo mode
+let flashUntil = 0;           // v3.6: photo flash
+let currentHat = null;        // v3.6: seasonal / skin hat
+// v3.5 toys
+let laser = null;
+let butterfly = null;
 let butterflyTimer = null;
-let prevState = null;    // for one-shot gag sounds + laser catch resolution
-// v3.3 region window: the overlay covers only a small region around the cat
-// (RAM diet). O = region origin in SCREEN coords; the brain keeps working in
-// full screen coords and the canvas just translates by -O.
+let prevState = null;
+// v3.6 companion + party
+let companion = null;         // { brain, breed }
+let companionCd = 8;
+let partyCats = null;         // [{brain, breed, alpha}] screensaver dance party
+let partyUntil = 0;
+let stalkWasCursor = false;
+let lastCursor = null;
+let pomoState = null;         // {mode, remaining, ...}
+// v3.6 battery (injectable for tests)
+let battery = null;
+// v3.6 perks (from achievements)
+let perks = { rainbowPet: false, sparkleLand: false, heartRain: false };
+// v3.3 region window state
 let O = { x: 0, y: 0 };
 let REGION = { w: 480, h: 434 };
 
 // ---------------------------------------------------------- audio
 function loadSounds() {
-  const names = ['meow_real', 'meow_real2', 'meow_real3', 'purr_real', 'purr', 'patter', 'run_patter', 'whoosh', 'land', 'scratch', 'coin', 'chirp', 'dance_loop'];
+  const names = ['meow_real', 'meow_real2', 'meow_real3', 'purr_real', 'purr', 'patter', 'run_patter', 'whoosh', 'land', 'scratch', 'coin', 'chirp', 'dance_loop', 'glass_real', 'squeak'];
   for (const n of names) {
     const a = new Audio(`../sounds/${n}.wav`);
     a.preload = 'auto';
@@ -59,7 +78,7 @@ function play(name, vol = 0.9) {
   if (!S.sounds || !audio[name]) return;
   try {
     const a = audio[name].cloneNode();
-    a.volume = vol;
+    a.volume = Math.max(0, Math.min(1, vol * volumeMul));
     a.play().catch(() => {});
   } catch {}
 }
@@ -68,6 +87,7 @@ function play(name, vol = 0.9) {
 async function init() {
   loadSounds();
   S = { ...S, ...await window.meow.getSettings() };
+  registerCustomSkins(S.customSkins);
   const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
   brain = new CatBrain({
     bounds: { x: wa.x, y: wa.y, w: wa.width, h: wa.height },
@@ -75,26 +95,276 @@ async function init() {
     speed: S.speed,
     breed: S.breed,
   });
+  brain.setScale(S.size);
+  brain.onEvent(onBrainEvent);
   syncRegion(wa, true);
   window.meow.on('settings-changed', applySettings);
   window.meow.on('do-action', doAction);
   window.meow.on('reminder-fired', showReminder);
   window.meow.on('laser-start', spawnLaser);
   window.meow.on('platforms', list => { if (brain) brain.setPlatforms(list); });
+  // ---------------- v3.6 living-on-your-machine channels ----------------
+  window.meow.on('system-event', onSystemEvent);
+  window.meow.on('music', onMusic);
+  window.meow.on('typing', onTyping);
+  window.meow.on('cursor-idle', onCursorIdle);
+  window.meow.on('cursor-busy', onCursorBusy);
+  window.meow.on('new-window', onNewWindow);
+  window.meow.on('app-focus', onAppFocus);
+  window.meow.on('duck', on => { volumeMul = on ? 0.22 : 1; });
+  window.meow.on('pomodoro', onPomodoro);
+  window.meow.on('achievement', showAchievement);
+  window.meow.on('no-walk-zones', zones => {
+    if (brain) brain.setNoWalkZones(zonesToScreen(zones, brain.bounds));
+  });
+  window.meow.on('photo-mode', () => photoMode());
+  window.meow.on('dance-party', startDanceParty);
+  window.meow.on('time-bias', mode => { if (!S.timeOfDayMood) return; brain?.setTimeBias(mode); });
+  window.meow.on('boot-greet', () => brain?.greet());
   window.meow.on('workarea-changed', async () => {
     const s2 = await window.meow.getSettings();
     S = { ...S, ...s2 };
     const wa2 = s2.workArea || wa;
     brain.bounds = { x: wa2.x, y: wa2.y, w: wa2.width, h: wa2.height };
     brain.groundY = wa2.y + wa2.height - 8;
+    if (companion) { companion.brain.bounds = { ...brain.bounds }; companion.brain.groundY = brain.groundY; }
     syncRegion(wa2, false);
   });
-  scheduleButterfly();   // v3.5: ambient butterfly visits
+  applyHat();
+  applyCompanion(S.companionCat);
+  applyTimeBias();
+  setInterval(applyTimeBias, 60_000);
+  pollBattery();
+  scheduleButterfly();
+  if (S.timeOfDayMood) brain.setTimeBias((new Date().getHours() >= 22 || new Date().getHours() < 7) ? 'night' : 'day');
   requestAnimationFrame(loop);
 }
 
-// recompute the region size + origin (size slider / workArea changes) and
-// push the full rect to main — only happens on real resizes, not strolls
+function registerCustomSkins(list) {
+  for (const sk of list || []) {
+    const r = registerSkin(sk.def, sk.id);
+    if (r.ok && S.breed === 'custom:' + sk.id) applyHat();
+  }
+}
+
+function onBrainEvent(ev) {
+  // wired for future side-effects; stats are handled via state transitions below
+  void ev;
+}
+
+// ---------------------------------------------------------- hats / skins
+function applyHat() {
+  let hat = null;
+  if (S.seasonalSkins && S.season) hat = S.season;
+  const sk = (S.customSkins || []).find(s => 'custom:' + s.id === S.breed);
+  if (!hat && sk && sk.def && sk.def.hat) hat = sk.def.hat;   // skin's own hat
+  currentHat = hat;
+  if (companion) companion.hat = hat;
+}
+
+// ---------------------------------------------------------- time of day
+function applyTimeBias() {
+  if (!brain) return;
+  if (!S.timeOfDayMood) { brain.setTimeBias('day'); return; }
+  const h = new Date().getHours();
+  brain.setTimeBias((h >= 22 || h < 7) ? 'night' : 'day');
+}
+
+// ---------------------------------------------------------- battery
+async function pollBattery() {
+  try {
+    if (!battery) {
+      const b = await navigator.getBattery?.();
+      if (b) battery = { level: b.level, charging: b.charging };
+    }
+  } catch { /* no battery API — desktop PC */ }
+  if (battery && brain && S.reactLowBattery) {
+    const crisis = batteryCrisis(battery.level, battery.charging);
+    if (crisis && brain.state !== 'curl') {
+      brain.curlUp();
+      brain.emote = { kind: 'battery', t0: brain.t };
+      showBubble('🔋 Low battery — saving energy with you', 4000);
+    } else if (!crisis && brain.state === 'curl') {
+      brain.setBatteryLow(false);
+      brain.emote = { kind: 'star', t0: brain.t };
+    }
+  }
+  setTimeout(pollBattery, 45_000);
+}
+
+// ---------------------------------------------------------- v3.6 events
+function onSystemEvent(ev) {
+  if (!brain) return;
+  if (ev.type === 'stress') {
+    brain.setStress(true, 12_000);
+    brain.emote = { kind: 'exclaim', t0: brain.t };
+  } else if (ev.type === 'build-ok') {
+    brain.celebrate();
+    play('chirp', 0.6);
+    showBubble('✅ build green — the cat approves', 3600);
+  } else if (ev.type === 'build-bad') {
+    brain.mopeNow();
+    play('growl_real', 0.18);
+    showBubble('❌ build red — the cat is not amused', 3600);
+  }
+}
+
+function onMusic(m) {
+  if (!brain) return;
+  if (m.action === 'bop') { brain.setMusic(true); play('dance_loop', 0.18); }
+  else if (m.action === 'excited') { brain.emote = { kind: 'star', t0: brain.t }; }
+  else if (m.action === 'stop') { brain.setMusic(false); }
+}
+
+function onTyping(t) {
+  if (!brain) return;
+  if (t.action === 'pounce') {
+    // pounce toward the "keyboard" — bottom center of the screen
+    const wa = S.workArea || brain.bounds;
+    const kx = wa.x + wa.width / 2 + (Math.random() - 0.5) * 200;
+    const ky = wa.y + wa.height - 30;
+    if (['idle', 'sit', 'loaf', 'groom', 'walk'].includes(brain.state)) {
+      brain.startStalk(kx, ky);
+      stalkWasCursor = true;
+    }
+  } else if (t.action === 'nap') {
+    if (['idle', 'sit', 'loaf'].includes(brain.state)) brain.sleepNow();
+  }
+}
+
+function onCursorIdle(p) {
+  lastCursor = p;
+  if (!brain || !S.stalkCursor) return;
+  const d = Math.hypot(p.x - brain.x, p.y - brain.baseY);
+  if (d < 340 && ['idle', 'sit', 'loaf', 'groom', 'walk'].includes(brain.state)) {
+    brain.startStalk(p.x, p.y);
+    stalkWasCursor = true;
+  }
+}
+function onCursorBusy(p) {
+  lastCursor = p;
+  if (brain && brain.state === 'stalk') brain.stopStalk();   // "it moved!"
+}
+
+function onNewWindow(w) {
+  if (brain && S.reactNewWindows) brain.investigate(w.x);
+}
+
+function onAppFocus(ev) {
+  if (!brain || !S.reactApps) return;
+  if (ev.kind === 'editor') {
+    // curl up on top of the editor while you code
+    if (['walk', 'idle', 'sit', 'loaf'].includes(brain.state)) {
+      brain.goToPlatform(ev.rect);
+    }
+  } else if (ev.kind === 'game') {
+    brain.celebrate();
+    setTimeout(() => { if (brain) { brain._enter('zoomies', 2); } }, 1800);
+  }
+}
+
+function onPomodoro(p) {
+  pomoState = p;
+  if (!brain) return;
+  if (p.event === 'focus-done') {
+    brain.celebrate();
+    play('coin', 0.7);
+    setTimeout(() => play('chirp', 0.7), 350);
+  } else if (p.event === 'break-done') {
+    showBubble('☕ break over — the cat is watching 👀', 4000);
+  } else if (p.event === 'start' && p.mode === 'focus') {
+    showBubble('🍅 focus time — the cat is supervising', 4000);
+  }
+}
+
+function showAchievement(a) {
+  showBubble(`${a.icon} Achievement: ${a.name} — ${a.desc}`, 5200);
+  play('coin', 0.8);
+}
+
+function startDanceParty() {
+  if (!brain) return;
+  const wa = brain.bounds;
+  partyCats = [];
+  for (let i = 0; i < 2; i++) {
+    const b = new CatBrain({
+      bounds: { ...wa }, groundY: brain.groundY, speed: 70,
+      breed: i === 0 ? 'ginger_kitten' : (S.breed === 'panda' ? 'grey_tabby' : 'panda'),
+    });
+    b.x = Math.max(wa.x + 60, Math.min(wa.x + wa.width - 60, brain.x + (i === 0 ? -125 : 125)));
+    b._enter('dance', 22);
+    partyCats.push({ brain: b, breed: b.breed, alpha: 0.85 });
+  }
+  partyUntil = performance.now() / 1000 + 24;
+  play('dance_loop', 0.3);
+}
+
+// ---------------------------------------------------------- photo mode
+async function photoMode() {
+  if (!S.photoMode || frozen || !brain) return;
+  frozen = true;
+  try {
+    await new Promise(r => setTimeout(r, 140));         // let the pose settle
+    const dataUrl = cv.toDataURL('image/png');
+    const r = await window.meow.savePhoto(dataUrl);
+    if (r && r.ok) showBubble('📸 Saved to ' + (r.path.split(/[\\/]/).pop()), 4200);
+    else showBubble('📸 could not save the photo', 3600);
+  } catch { showBubble('📸 photo failed', 3000); }
+  flashUntil = performance.now() / 1000 + 0.28;
+  setTimeout(() => { frozen = false; }, 950);
+}
+
+// ---------------------------------------------------------- companion cat
+function applyCompanion(on) {
+  if (on && !companion && brain) {
+    const b = new CatBrain({
+      bounds: { ...brain.bounds }, groundY: brain.groundY, speed: 62,
+      breed: 'ginger_kitten',
+    });
+    b.x = Math.max(brain.bounds.x + 80, Math.min(brain.bounds.x + brain.bounds.w - 80, brain.x - 150));
+    b.setScale(S.size * 0.62);
+    companion = { brain: b, breed: 'ginger_kitten', hat: currentHat };
+  } else if (!on) companion = null;
+}
+
+function companionBreedTick(dt) {
+  if (!companion || !brain) return;
+  const c = companion.brain;
+  c.tick(dt);
+  // stick close to the big cat
+  const dx = brain.x - c.x;
+  if (Math.abs(dx) > 420 && ['walk', 'idle'].includes(c.state)) {
+    c.dir = dx > 0 ? 1 : -1;
+    c._enter('run', 1.2);
+  }
+  // nuzzle / play-fight when close and both are calm
+  companionCd -= dt;
+  if (companionCd <= 0) {
+    companionCd = 8 + Math.random() * 9;
+    const dist = Math.abs(c.x - brain.x);
+    const calm = ['idle', 'sit', 'loaf'].includes(brain.state) && ['idle', 'sit', 'loaf'].includes(c.state);
+    if (dist < 130 && calm) {
+      const doPlayFight = Math.random() < 0.4;
+      if (doPlayFight) {
+        // play-fight: companion pounces at the big cat
+        c._enter('pounce', 1.9);
+        c.dir = dx > 0 ? 1 : -1;
+        brain.poke();
+        playSfxSafe('chirp', 0.35);
+      } else {
+        // nuzzle: both face each other, hearts fly, affection grows
+        c.nuzzleNow(dx > 0 ? 1 : -1);
+        brain.nuzzleNow(dx > 0 ? -1 : 1);
+        window.meow.bumpStat('nuzzles', 1);
+        window.meow.petAffection();
+        playSfxSafe('purr_real', 0.25);
+      }
+    }
+  }
+}
+function playSfxSafe(n, v) { play(n, v); }
+
+// ---------------------------------------------------------- region sync
 function syncRegion(wa, recenter = false) {
   REGION = computeRegionSize(S.size, wa);
   const feet = brain ? brain.baseY + brain.jumpY : wa.y + wa.height - 8;
@@ -109,10 +379,22 @@ function syncRegion(wa, recenter = false) {
 function applySettings(kv) {
   S = { ...S, ...kv };
   if (kv.speed && brain) brain.speed = kv.speed;
-  if (kv.breed && brain) brain.breed = kv.breed;
+  if (kv.breed && brain) { brain.breed = kv.breed; applyHat(); }
   if (kv.size != null) {
+    if (brain) brain.setScale(kv.size);
+    if (companion) companion.brain.setScale(kv.size * 0.62);
     const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
     syncRegion(wa, false);
+  }
+  if (kv.seasonalSkins !== undefined || kv.customSkins !== undefined) {
+    registerCustomSkins(S.customSkins);
+    applyHat();
+  }
+  if (kv.companionCat !== undefined) applyCompanion(!!kv.companionCat);
+  if (kv.timeOfDayMood !== undefined) applyTimeBias();
+  if ((kv.noWalkZoneList !== undefined || kv.noWalkZones !== undefined) && brain) {
+    const zones = S.noWalkZones === false ? [] : (S.noWalkZoneList || []);
+    brain.setNoWalkZones(zonesToScreen(zones, brain.bounds));
   }
 }
 
@@ -124,13 +406,10 @@ function doAction(act) {
   else if (act === 'happy') brain.pet();
 }
 
-// ---------------------------------------------------- v3.5 funny pack
-// LASER: cat.html owns the red dot (spawn / drift / catch-or-escape), the
-// brain only chases the coordinates it is fed each frame.
+// ---------------------------------------------------- v3.5 laser toy
 function spawnLaser() {
   if (!brain) return;
   const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
-  // spawn the dot a good dash away from the cat, near the ground, on-screen
   const ang = Math.random() * Math.PI * 2;
   const dist = 220 + Math.random() * 160;
   const x = Math.max(wa.x + 40, Math.min(wa.x + wa.width - 40, brain.x + Math.cos(ang) * dist));
@@ -146,27 +425,23 @@ function killLaser() {
   if (brain) brain.stopLaser();
 }
 
-function tickLaser(dt, now) {
+function tickLaser(dt) {
   if (!laser || !brain) return;
-  if (!brain.laser) { laser = null; return; }   // chase timed out in the brain
+  if (!brain.laser) { laser = null; return; }
   const catX = brain.x, catY = brain.baseY;
   const dx = laser.x - catX, dy = laser.y - catY;
   const dist = Math.hypot(dx, dy);
-  // wander drift
   laser.vx += (Math.random() - 0.5) * 46 * dt;
   laser.vy += (Math.random() - 0.5) * 30 * dt;
-  // flee when the cat gets close (until the pounce resolves it)
   if (dist < 95 && brain.state !== 'pounce') {
     laser.vx += (dx / (dist || 1)) * 190 * dt;
     laser.vy += (dy / (dist || 1)) * 130 * dt;
   }
-  // keep the dot near the cat so the chase stays on-screen and lively
   const spd = Math.hypot(laser.vx, laser.vy);
   const MAX = 130;
   if (spd > MAX) { laser.vx *= MAX / spd; laser.vy *= MAX / spd; }
   laser.x += laser.vx * dt;
   laser.y += laser.vy * dt;
-  // clamp: stay on the workArea, near the ground, within dash distance of the cat
   const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
   const groundY = brain.bounds.y + brain.bounds.h - 8;
   laser.x = Math.max(wa.x + 30, Math.min(wa.x + wa.width - 30, laser.x));
@@ -175,25 +450,23 @@ function tickLaser(dt, now) {
   brain.moveLaser(laser.x, laser.y);
 }
 
-// one-shot gag sounds for the new states — flags reset on every state change,
-// so each gag sound fires exactly once per state entry
 let _gagFlags = {};
 function gagSounds() {
   if (!brain) return;
   const st = brain.state;
   if (_gagFlags.state !== st) _gagFlags = { state: st };
   if (st === 'sneeze' && !_gagFlags.blast && brain.stateT >= 0.72) {
-    _gagFlags.blast = true; play('whoosh', 0.55);   // the blast
+    _gagFlags.blast = true; play('whoosh', 0.55);
   }
   if (st === 'hairball' && !_gagFlags.growl) {
     _gagFlags.growl = true; play('growl_real', 0.22);
   }
   if (st === 'zoomies' && !_gagFlags.chirp) {
-    _gagFlags.chirp = true; play('chirp', 0.5);     // excitement!
+    _gagFlags.chirp = true; play('chirp', 0.5);
   }
 }
 
-// BUTTERFLY: ambient — drifts across every once in a while; idle-ish cats pounce
+// ---------------------------------------------------- v3.5 butterfly
 function scheduleButterfly() {
   clearTimeout(butterflyTimer);
   butterflyTimer = setTimeout(() => {
@@ -221,7 +494,6 @@ function tickButterfly(dt, now) {
   if (!butterfly || !brain) return;
   butterfly.x += butterfly.vx * dt;
   butterfly.y += Math.sin(now - butterfly.born) * 14 * dt;
-  // idle cats notice it and pounce — the butterfly then speeds away
   if (Math.hypot(butterfly.x - brain.x, butterfly.y - (brain.baseY - 40)) < 150) {
     if (brain.noticeButterfly(butterfly.x, butterfly.y)) {
       butterfly.vx = (butterfly.vx >= 0 ? 1 : -1) * (150 + Math.random() * 60);
@@ -232,9 +504,23 @@ function tickButterfly(dt, now) {
   if (butterfly.x < wa.x - 60 || butterfly.x > wa.x + wa.width + 60) butterfly = null;
 }
 
+// ---------------------------------------------------------- bubbles
+function showBubble(text, ms = 5000) {
+  if (!brain) return;
+  const p = brain.pose;
+  const scale = S.size;
+  bubble.textContent = text;
+  bubble.style.left = Math.max(10, p.x - 20 - 110 - O.x) + 'px';
+  bubble.style.top = Math.max(10, p.y - 150 * scale - 78 - O.y) + 'px';
+  bubble.style.display = 'block';
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => { bubble.style.display = 'none'; }, ms);
+}
+
 function showReminder(item) {
   if (!brain) return;
   (window.__firedReminders = window.__firedReminders || []).push(item.label);
+  window.meow.bumpStat('reminders', 1);
   brain.dance();
   const p = brain.pose;
   const scale = S.size;
@@ -253,9 +539,8 @@ let overCat = false;
 let dragging = false;
 let dragDX = 0, dragDY = 0;
 let downX = 0, downY = 0;
-let pendingPet = null;   // delayed so a double-click can cancel it → settings
+let pendingPet = null;
 
-// screen coords = window-local + region origin O
 function toScreen(cx, cy) { return { x: cx + O.x, y: cy + O.y }; }
 
 function catHit(mx, my) {
@@ -275,7 +560,7 @@ window.addEventListener('mousemove', e => {
   if (hit !== overCat) { overCat = hit; window.meow.hitTest(hit); }
   if (dragging) {
     const moved = Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY);
-    if (moved > 6 && pendingPet) { clearTimeout(pendingPet); pendingPet = null; } // it's a drag, not a tap
+    if (moved > 6 && pendingPet) { clearTimeout(pendingPet); pendingPet = null; }
     brain.x = Math.max(brain.bounds.x + 60, Math.min(brain.bounds.x + brain.bounds.w - 60, m.x - dragDX));
     brain.baseY = Math.max(brain.bounds.y + 120, Math.min(brain.bounds.y + brain.bounds.h - 8, m.y - dragDY));
     brain.jumpY = 0;
@@ -284,17 +569,24 @@ window.addEventListener('mousemove', e => {
 window.addEventListener('mousedown', e => {
   const m = toScreen(e.clientX, e.clientY);
   if (!catHit(m.x, m.y)) return;
-  if (e.button !== 0) return;      // right button opens the context menu
+  if (e.button !== 0) return;
   downX = e.clientX; downY = e.clientY;
   dragDX = m.x - brain.x;
   dragDY = m.y - brain.baseY;
   dragging = true;
-  // no sound here: drag/drop must be silent — the purr plays only when a
-  // quick tap is confirmed as a pet (pendingPet below)
   if (pendingPet) clearTimeout(pendingPet);
-  pendingPet = setTimeout(() => {
+  pendingPet = setTimeout(async () => {
     pendingPet = null;
-    brain.pet(); play('purr_real', 0.9); window.meow.addCoins(2);
+    brain.pet();
+    play('purr_real', 0.9);
+    window.meow.addCoins(2);
+    // v3.6: affection meter + petting achievements
+    const r = await window.meow.petAffection();
+    if (r && perks.rainbowPet && Math.random() < 0.3) {
+      brain.emote = { kind: 'rainbow', t0: brain.t };
+    } else if (r && r.progress && r.progress.next && Math.random() < 0.25) {
+      brain.emote = { kind: 'heart', t0: brain.t };
+    }
   }, 280);
 });
 window.addEventListener('dblclick', e => {
@@ -302,10 +594,10 @@ window.addEventListener('dblclick', e => {
   if (!catHit(m.x, m.y)) return;
   if (pendingPet) { clearTimeout(pendingPet); pendingPet = null; }
   dragging = false;
-  window.meow.openWindow('settings');  // v3.1: double-click opens Settings popup
+  window.meow.openWindow('settings');
 });
 window.addEventListener('mouseup', () => {
-  if (dragging) brain.dropAt(brain.x, brain.baseY); // snap to a window top or the ground
+  if (dragging) brain.dropAt(brain.x, brain.baseY);
   dragging = false;
 });
 window.addEventListener('contextmenu', e => {
@@ -313,13 +605,18 @@ window.addEventListener('contextmenu', e => {
   window.meow.contextMenu({ x: e.clientX, y: e.clientY });
 });
 
-// footsteps sound on walk
+// footsteps / contextual sounds
 let lastStepPhase = 0;
 function stepSounds() {
   if (!brain) return;
   if (brain.state === 'walk') {
     const ph = Math.floor(brain.t * 7 * 2);
-    if (ph !== lastStepPhase) { lastStepPhase = ph; play('patter', 0.12); }
+    if (ph !== lastStepPhase) {
+      lastStepPhase = ph;
+      // v3.6: paws on a window edge tap the glass
+      if (brain.onPlatform && S.contextualSounds) play('glass_real', 0.16);
+      else play('patter', 0.12);
+    }
   } else if (brain.state === 'run') {
     const ph = Math.floor(brain.t * 12.5 * 2);
     if (ph !== lastStepPhase) { lastStepPhase = ph; play('run_patter', 0.15); }
@@ -333,58 +630,78 @@ function stepSounds() {
     const ph = Math.floor(brain.t * 10.5);
     if (ph !== lastStepPhase) { lastStepPhase = ph; play('scratch', 0.35); }
   } else lastStepPhase = -1;
-  if (brain.state === 'jump' && brain.jumpP > 0.9) { /* landing sound once */ }
 }
 
 // ---------------------------------------------------------- main loop
 let lastTs = performance.now();
-// v3.3 idle throttle: when the cat is in a stationary state, paint at ~15fps
-// instead of 60 (cut CPU + raster churn; instant full-rate on any movement)
-const IDLE_STATES = new Set(['idle', 'sit', 'sleep', 'loaf', 'knead', 'groom', 'eat', 'bamboo']);
+const IDLE_STATES = new Set(['idle', 'sit', 'sleep', 'loaf', 'knead', 'groom', 'eat', 'bamboo', 'sniff', 'mope', 'nuzzle', 'curl']);
 let idleFrameSkip = 0;
 function loop(ts) {
   const dt = (ts - lastTs) / 1000;
-  const throttle = brain && IDLE_STATES.has(brain.state) && !dragging;
-  if (throttle && idleFrameSkip < 3) {   // ~60 -> ~15fps: skip 3 of 4 frames
+  const throttle = brain && !frozen && IDLE_STATES.has(brain.state) && !dragging;
+  if (throttle && idleFrameSkip < 3) {
     idleFrameSkip++;
-    // keep lastTs untouched so the painted frame gets the full accumulated dt
     requestAnimationFrame(loop);
     return;
   }
   idleFrameSkip = 0;
   lastTs = ts;
   if (brain) {
-    brain.speed = S.speed;
-    brain.tick(dt);
-    stepSounds();
-    gagSounds();
-    // v3.5 toys
-    const nowS = performance.now() / 1000;
-    tickLaser(dt, nowS);
-    tickButterfly(dt, nowS);
-    // laser resolution: when a pounce lands, catch the dot if it is close,
-    // otherwise it escapes (teleports away) and the chase continues
-    if (laser && prevState === 'pounce' && brain.state !== 'pounce' && brain.laser) {
-      const d = Math.hypot(laser.x - brain.x, laser.y - brain.baseY);
-      if (d < 95) {
-        // CAUGHT! sparkle, reward, happy cat
-        play('coin', 0.8);
-        brain.emote = { kind: 'star', t0: brain.t };
-        window.meow.addCoins(3);
-        killLaser();
-        brain.pet();
-      } else {
-        // escaped: the dot hops away, chase resumes
-        const ang = Math.random() * Math.PI * 2;
-        laser.x = brain.x + Math.cos(ang) * (140 + Math.random() * 120);
-        laser.y = Math.max(brain.bounds.y + 140, brain.baseY - Math.abs(Math.sin(ang)) * 60) - 20 * Math.random();
-        brain.moveLaser(laser.x, laser.y);
+    if (!frozen) {
+      brain.speed = S.speed;
+      // v3.6: feed the live cursor position into an active stalk
+      if (brain.state === 'stalk' && brain.stalk && lastCursor) brain.moveStalk(lastCursor.x, lastCursor.y);
+      const before = brain.state;
+      brain.tick(dt);
+      // ------- state-transition bookkeeping (stats + contextual sfx) -------
+      if (before !== brain.state) {
+        if (brain.state === 'jump' && S.contextualSounds) play('squeak', 0.42);   // boing!
+        if (before === 'jump' && brain.jumpP === 0) {
+          window.meow.bumpStat('jumps', 1);
+          if (perks.sparkleLand) play('land', 0.5); else play('land', 0.35);
+        }
+        if (before === 'eat') window.meow.bumpStat('fish', 1);
+        if (before === 'pounce' && stalkWasCursor) {
+          // the cursor-stalk pounce landed: happy cat, tiny affection boost
+          stalkWasCursor = false;
+          brain.stopStalk();
+          brain.pet();
+          play('purr_real', 0.5);
+          window.meow.petAffection();
+        }
+      }
+      stepSounds();
+      gagSounds();
+      const nowS = performance.now() / 1000;
+      tickLaser(dt);
+      tickButterfly(dt, nowS);
+      companionBreedTick(dt);
+      // laser resolution
+      if (laser && prevState === 'pounce' && brain.state !== 'pounce' && brain.laser) {
+        const d = Math.hypot(laser.x - brain.x, laser.y - brain.baseY);
+        if (d < 95) {
+          play('coin', 0.8);
+          brain.emote = { kind: 'star', t0: brain.t };
+          window.meow.addCoins(3);
+          window.meow.bumpStat('lasers', 1);
+          killLaser();
+          brain.pet();
+        } else {
+          const ang = Math.random() * Math.PI * 2;
+          laser.x = brain.x + Math.cos(ang) * (140 + Math.random() * 120);
+          laser.y = Math.max(brain.bounds.y + 140, brain.baseY - Math.abs(Math.sin(ang)) * 60) - 20 * Math.random();
+          brain.moveLaser(laser.x, laser.y);
+        }
+      }
+      prevState = brain.state;
+      // dance party lifetime
+      if (partyCats && nowS > partyUntil) partyCats = null;
+      if (partyCats) for (const pc of partyCats) {
+        pc.brain.tick(dt);
+        if (pc.brain.state !== 'dance') pc.brain._enter('dance', 4);
       }
     }
-    prevState = brain.state;
     const p = brain.pose;
-    // v3.3: keep the cat inside the region — slide the window (cheap native
-    // move, same pixel size) only when the comfort band is breached
     const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
     const cand = slideIfNeeded(O, REGION, p.x, p.y, wa, S.size);
     if (cand) {
@@ -396,11 +713,10 @@ function loop(ts) {
     ctx.translate(p.x - O.x, p.y - O.y);
     const opts = {
       t: p.t, state: p.state, dir: p.dir, breed: S.breed,
-      scale: S.size, alpha: S.opacity, jumpP: p.jumpP,
+      scale: S.size, alpha: S.opacity, jumpP: p.jumpP, hat: currentHat,
     };
     drawCat(ctx, opts);
     drawParticles(ctx, opts);
-    // contextual emote floating just above the head (v3.2 anchor fix)
     if (brain.emote && brain.emote.kind) {
       const age = brain.t - brain.emote.t0;
       if (age < 2) {
@@ -412,7 +728,26 @@ function loop(ts) {
       } else brain.emote = null;
     }
     ctx.restore();
-    // v3.5 toys: butterfly behind the cat, laser dot in front (world coords)
+    // companion cat
+    if (companion) {
+      const cp = companion.brain.pose;
+      ctx.save();
+      ctx.translate(cp.x - O.x, cp.y - O.y);
+      drawCat(ctx, { t: cp.t, state: cp.state, dir: cp.dir, breed: companion.breed, scale: S.size * 0.62, alpha: S.opacity, jumpP: cp.jumpP, hat: companion.hat });
+      drawParticles(ctx, { t: cp.t, state: cp.state, breed: companion.breed, scale: S.size * 0.62 });
+      ctx.restore();
+    }
+    // dance party ghosts
+    if (partyCats) {
+      for (const pc of partyCats) {
+        const pp = pc.brain.pose;
+        ctx.save();
+        ctx.translate(pp.x - O.x, pp.y - O.y);
+        drawCat(ctx, { t: pp.t, state: pp.state, dir: pp.dir, breed: pc.breed, scale: S.size * 0.7, alpha: 0.8 * S.opacity, jumpP: pp.jumpP });
+        ctx.restore();
+      }
+    }
+    // v3.5 toys
     if (butterfly) {
       ctx.save();
       ctx.translate(butterfly.x - O.x, butterfly.y - O.y);
@@ -425,8 +760,28 @@ function loop(ts) {
       drawLaser(ctx, { t: p.t, scale: S.size });
       ctx.restore();
     }
+    // photo flash
+    const nowS2 = performance.now() / 1000;
+    if (nowS2 < flashUntil) {
+      ctx.fillStyle = `rgba(255,255,255,${(flashUntil - nowS2) / 0.28 * 0.85})`;
+      ctx.fillRect(0, 0, cv.width, cv.height);
+    }
+    // pomodoro badge
+    if (pomoState && pomoState.mode && pomoState.mode !== 'idle') {
+      const mm = Math.max(0, pomoState.remaining);
+      const label = (pomoState.mode === 'focus' ? '🍅 ' : '☕ ') + fmtRemaining(mm);
+      badge.textContent = label;
+      badge.style.left = Math.max(10, p.x - 30 - O.x) + 'px';
+      badge.style.top = Math.max(10, p.y - 150 * S.size - 46 - O.y) + 'px';
+      badge.style.display = 'block';
+    } else badge.style.display = 'none';
   }
   requestAnimationFrame(loop);
+}
+
+function fmtRemaining(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
 init();
@@ -435,18 +790,51 @@ init();
 window.__catBooted = true;
 window.__pose = () => brain ? JSON.parse(JSON.stringify(brain.pose)) : null;
 window.__doAction = act => doAction(act);
-window.__brain = () => brain;                 // live object access for e2e
+window.__brain = () => brain;
 window.__setPlatforms = list => { if (brain) brain.setPlatforms(list); };
-window.__catLocal = () => {                   // cat position in window-local coords (for real clicks)
+window.__catLocal = () => {
   const p = brain ? brain.pose : { x: O.x, y: O.y };
   return { x: p.x - O.x, y: p.y - O.y };
 };
 window.__region = () => ({ ...O, w: REGION.w, h: REGION.h });
-window.__spawnLaser = () => spawnLaser();     // e2e: force the laser toy
+window.__spawnLaser = () => spawnLaser();
 window.__laser = () => laser && { x: laser.x, y: laser.y };
 window.__setLaser = (x, y) => { if (laser) { laser.x = x; laser.y = y; if (brain) brain.moveLaser(x, y); } };
-window.__spawnButterfly = () => spawnButterfly();  // e2e: force the butterfly
+window.__spawnButterfly = () => spawnButterfly();
 window.__butterfly = () => butterfly && { x: butterfly.x, y: butterfly.y, hue: butterfly.hue };
+// ---------------- v3.6 test hooks ----------------
+window.__setBattery = (level, charging) => { battery = { level, charging }; };
+window.__battery = () => battery;
+window.__pollBattery = () => pollBattery();
+window.__setCursor = (x, y) => { lastCursor = { x, y }; };
+window.__companion = () => companion && { x: companion.brain.x, state: companion.brain.state };
+window.__companionBrain = () => companion && companion.brain;
+window.__forceCompanionCd = v => { companionCd = v; };
+window.__partyCats = () => partyCats && partyCats.length;
+window.__hat = () => currentHat;
+window.__perks = () => perks;
+window.__setPerks = p => { perks = { ...perks, ...p }; };
+window.__photoMode = () => photoMode();
+window.__frozen = () => frozen;
+window.__volumeMul = () => volumeMul;
+window.__settings = () => S;
+// e2e: dispatch a main-process event through the real handlers
+window.__testEvent = (channel, data) => {
+  const map = {
+    'system-event': onSystemEvent, 'music': onMusic, 'typing': onTyping,
+    'cursor-idle': onCursorIdle, 'cursor-busy': onCursorBusy,
+    'new-window': onNewWindow, 'app-focus': onAppFocus,
+    'duck': on => { volumeMul = on ? 0.22 : 1; },
+    'pomodoro': onPomodoro, 'achievement': showAchievement,
+    'no-walk-zones': zones => { if (brain) brain.setNoWalkZones(zonesToScreen(zones, brain.bounds)); },
+    'photo-mode': () => photoMode(), 'dance-party': startDanceParty,
+    'time-bias': mode => { if (!S.timeOfDayMood) return; brain?.setTimeBias(mode); },
+    'boot-greet': () => brain?.greet(),
+  };
+  const fn = map[channel];
+  if (fn) { fn(data); return true; }
+  return false;
+};
 </script>
 </body>
 </html>

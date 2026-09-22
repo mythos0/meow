@@ -1,4 +1,4 @@
-# MeowCat v3.2 — Feature Reference
+# MeowCat v3.6 — Feature Reference
 
 A procedural desktop pet for Windows 11. Everything about the cat is drawn by code
 (see [RENDERING.md](RENDERING.md)); this page lists the product-level features.
@@ -13,7 +13,7 @@ A procedural desktop pet for Windows 11. Everything about the cat is drawn by co
   **Snow Angora** (all-white, odd eyes: blue + green), **Somali** (russet brush tail),
   **British Plush** (dense blue-cream teddy), **Choco Munchkin** (chocolate sausage cat),
   **Sakura** (pale cream-pink chibi).
-* **24 actions** — walk, run, idle, sit, sleep, dance, scratch, jump, happy,
+* **31 actions** — walk, run, idle, sit, sleep, dance, scratch, jump, happy,
   **eat (v3.2: real fish-biting — a fish lies on the ground, each cycle the cat bites a
   chunk off, the fish visibly shrinks, then side-to-side chewing with a working cheek and
   closed blissful eyes, ×3 + a gulp)**, stretch (downward-dog), groom (lick paw), pounce
@@ -23,10 +23,10 @@ A procedural desktop pet for Windows 11. Everything about the cat is drawn by co
   **v3.5 funny pack: sneeze (wind-up → droplet-blast "AH-CHOO!"), hairball (cough-heaves →
   a fuzzy souvenir drops out), zoomies (the mad after-meal sprint — dust trail, pinned
   ears, 1.7× run speed; 45 % chance right after eating), laser (low stalk chasing the red
-  dot → pounce → catch pays +3 coins; interactive via tray / right-click menu)**.
-* **12 emotes** pop just above the cat's head (v3.2 anchor fix — no more icons hovering
+  dot → pounce → catch pays +3 coins; interactive via tray / right-click menu) + **v3.6: stalk (crouch-wiggle → slinky creep → pounce on an idle cursor), bop (sways to playing music), investigate → sniff (walks to a newly opened app and interrogates it with a "?"), nuzzle (companion head-rub), mope (red-build depression), curl (battery-saving ball)**.
+* **16 emotes** pop just above the cat's head (v3.2 anchor fix — no more icons hovering
   far away) — heart, love, note, question, exclaim, sweat, angry, laugh, star, zzz, fish,
-  **bread (v3.5: a tiny steaming loaf for the loaf pose)** — spring pop-in, bob, fade.
+  **bread (v3.5), + v3.6: sad (broken heart for red builds), battery (low-power pill with bolt), rainbow (rare pet reward), cookie (celebration treat)** — spring pop-in, bob, fade.
   Triggered by state entries (dance→♪, sleep→Zz, startle→!, zoomies→!, hairball→sweat,
   loaf→bread) and interactions (pet→love, feed→fish, laser catch→star).
 * **Realistic movement** — IK legs whose knees follow the feet, chained pendulum tail
@@ -111,3 +111,65 @@ The portable exe is resource-patched after build (`scripts/patch-exe.mjs`, pure-
 `resedit`): FileDescription "MeowCat — your desktop cat", ProductName MeowCat,
 OriginalFilename MeowCat.exe, version 3.2.0.0, MIT copyright and the app icon —
 Task Manager shows **MeowCat**, not "electron".
+
+## 11. v3.6 — the "living on your machine" pack
+
+Every feature ships with an **on/off toggle** in the new Windows 11 Fluent settings app
+(left nav pane, cards, real toggle switches). Reaction pollers only run while enabled —
+switching a feature off genuinely stops its CPU cost.
+
+**System-aware reactions** (all toggleable, Reactions page):
+
+* **CPU/RAM spikes** — a 5 s system sampler (Linux: `/proc`, Windows: one PowerShell CIM
+  one-shot) feeds a hysteresis detector (2 hot samples, 90 s cooldown). The cat jumps, then
+  prowls 30 % faster and 12× more likely to zoom until the machine calms down.
+* **Low battery** — under 20 % and unplugged, the cat curls into a ball (battery emote + a
+  bubble). Plugging in releases it. Percentage comes from the renderer Battery API.
+* **Time-of-day mood** — 22:00–07:00: sleep ×3, yawn ×4, loaf ×2, run/zoomies heavily damped,
+  walk speed −15 %. Daytime: pounce/zoomies/run boosted. Applied as weight multipliers.
+* **New-window investigator** — the window scanner diffs platform lists; a new window ≥220×140
+  sends its centre to the cat, which walks over and sniffs (question emote).
+* **Music bops** — Windows: one long-lived PowerShell child polls the Modern Media Transport
+  (SMTC — the same session the volume flyout shows) and prints one JSON line per change;
+  Linux: `playerctl`. Playing → `bop` state (sustained sway + note emotes); track change →
+  excited star; stop → finishes the current bop.
+* **Editor loaf & game hype** — the scanner now attaches owner process names (one extra
+  `Get-Process` call per scan). Foreground editor (Code/idea/notepad/vim/…) → the cat jumps
+  onto its top border and loafs there (cozy bias). Game processes → celebratory zoomies.
+* **Typing pounce** — a global keyboard hook (`uiohook-napi`, bundled win32/linux prebuilds)
+  feeds a rolling WPM meter; ≥62 WPM → the cat pounces toward the keyboard (45 s cooldown).
+  12 idle minutes → it naps instead.
+* **Cursor stalking** — main polls `screen.getCursorScreenPoint()`; an idle cursor (≤4 px for
+  2.5 s) near the cat triggers a stalk: crouch-wiggle, slinky creep, pounce → "caught" → purr
+  + affection. Move the mouse and the cat loses interest.
+
+**Interaction & progression**
+
+* **Affection meter** — every pet tap feeds a persisted meter (Lv.2 at 30, Lv.3 at 100,
+  Lv.4 at 250 = boot-time greeting). Settings Home shows the bar + lifetime stats.
+* **Achievements** — 8 unlockables (First Contact, Purring Machine, Parkour Cat, Regular at
+  the Diner, Dot Exterminator, Zen Household, Night Owl, On Schedule) with toasts and a grid
+  in Settings; some unlock cosmetic perks (rainbow pet emote, landing sparkles…).
+* **Companion cat** — a second, 62 %-size kitten joins: wanders near the big cat, nuzzles
+  (hearts + nuzzle stat + affection) or play-fights, and competes for the cursor.
+* **Photo mode** — Ctrl+Alt+P / tray / context menu: freezes the pose mid-animation, exports
+  the transparent canvas to Pictures as `MeowCat-YYYYMMDD-HHMMSS.png`, flash effect, resume.
+
+**Sound design** — contextual glass paw-taps while walking window edges + toy squeaks on jumps
+(toggle), and **call ducking**: when OBS/Zoom/Teams/Discord/Slack/Skype/WebEx processes are
+detected, cat volume drops to 22 % (and the cat fully auto-hides if "Hide during calls" is on).
+
+**Founder extras** — **Pomodoro companion** (tray/settings, 25/5, the cat supervises with a
+countdown badge and celebrates completed rounds; a focus session past 10 PM earns the Night Owl
+achievement); **build/test reactions** (watch any status file — green words → happy dance,
+red words → mope); **idle dance party** (10 idle minutes → two ghost cats join for a 24 s party).
+
+**Customization** — **seasonal hats** (pumpkin Oct, santa Dec, flower crown Mar–Apr, shades
+Jun–Aug; opt-in) drawn in head-space so they follow head rotation; **community skins** — a
+validated JSON def (base breed + colors + body + pattern + hat) imports at runtime into the
+Cat Store as a first-class breed.
+
+**Quality-of-life** — global hotkeys (Ctrl+Alt+C summon/hide, Ctrl+Alt+P photo), **no-walk
+zones** (work-area-relative rects the cat's body never enters, and whose window tops it never
+lands on), **auto-hide in fullscreen** (window-covering detection from the scanner), plus the
+existing reminders, auto-start, topmost enforcement and warm-pool settings.

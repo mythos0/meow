@@ -230,6 +230,8 @@ export const STATES = [
   'waddle', 'bamboo', 'roll',
   // v3.5 funny pack
   'sneeze', 'hairball', 'zoomies', 'laser',
+  // v3.6 living-on-your-machine pack
+  'stalk', 'bop', 'mope', 'nuzzle', 'investigate', 'sniff', 'curl',
 ];
 
 const TAU = Math.PI * 2;
@@ -462,7 +464,128 @@ export function drawCat(ctx, opts) {
   // ---------------- head
   drawHead(ctx, headC, P, pal, t, state, B);
 
+  // v3.6: seasonal / skin hat, drawn in head-local space so it follows
+  // head rotation and bob
+  if (opts.hat && HATS.includes(opts.hat)) drawHat(ctx, opts.hat, headC);
+
   ctx.restore();
+}
+
+// ---------------------------------------------------------------- hats
+// v3.6 seasonal accessories. Drawn around the head center (headC = {x,y,r,rot}).
+export function drawHat(ctx, kind, headC) {
+  const r = headC.r;
+  ctx.save();
+  ctx.translate(headC.x, headC.y);
+  ctx.rotate(headC.rot || 0);
+  if (kind === 'pumpkin') {
+    // jack-o'-lantern perched between the ears
+    ctx.save();
+    ctx.translate(0, -r - 7);
+    ctx.rotate(-0.14);
+    ell(ctx, 0, 0, 13, 10); ctx.fillStyle = '#e07818'; ctx.fill();
+    ctx.lineWidth = 1.3; ctx.strokeStyle = 'rgba(120,60,10,0.55)';
+    for (const sx of [-6, 0, 6]) {
+      ctx.beginPath(); ctx.ellipse(sx, 0, 4.4, 9.4, 0, 0, TAU); ctx.stroke();
+    }
+    rr(ctx, -2, -14.5, 4, 6, 1.6); ctx.fillStyle = '#5a7a2e'; ctx.fill();
+    // carved face
+    ctx.fillStyle = '#7a3c08';
+    ell(ctx, -4.6, -1.4, 2.1, 2.7); ctx.fill();
+    ell(ctx, 4.6, -1.4, 2.1, 2.7); ctx.fill();
+    ctx.strokeStyle = '#7a3c08'; ctx.lineWidth = 1.7; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-5.5, 4.2); ctx.lineTo(-2.5, 6.6); ctx.lineTo(0.5, 4.2); ctx.lineTo(3.5, 6.6); ctx.lineTo(5.5, 4.6);
+    ctx.stroke();
+    ctx.restore();
+  } else if (kind === 'santa') {
+    // red cap with white trim + pompom, flopping to one side
+    ctx.save();
+    ctx.translate(0, -r - 1);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.92, 2);
+    ctx.quadraticCurveTo(-r * 0.42, -r * 1.18, r * 0.55, -r * 0.88);
+    ctx.quadraticCurveTo(r * 0.98, -r * 0.72, r * 0.92, -r * 0.26);
+    ctx.closePath();
+    ctx.fillStyle = '#d8342c'; ctx.fill();
+    rr(ctx, -r * 1.0, -2.5, r * 2.0, 7.5, 3.6);
+    ctx.fillStyle = '#f6f4f0'; ctx.fill();
+    ell(ctx, r * 0.94, -r * 0.3, 4.8, 4.8);
+    ctx.fillStyle = '#f6f4f0'; ctx.fill();
+    ctx.restore();
+  } else if (kind === 'flower') {
+    // spring flower crown: five little blossoms along the skull
+    for (let i = -2; i <= 2; i++) {
+      const a = -1.35 + i * 0.33;
+      const fx = Math.cos(a) * (r * 0.92), fy = Math.sin(a) * (r * 0.92) - r * 0.34;
+      ctx.save();
+      ctx.translate(fx, fy);
+      for (let p = 0; p < 5; p++) {
+        const pa = (p / 5) * TAU;
+        ell(ctx, Math.cos(pa) * 3.2, Math.sin(pa) * 3.2, 2.2, 2.2);
+        ctx.fillStyle = i % 2 ? '#f0a8c8' : '#f4d05a'; ctx.fill();
+      }
+      ell(ctx, 0, 0, 1.8, 1.8); ctx.fillStyle = '#fff6e0'; ctx.fill();
+      ctx.restore();
+    }
+  } else if (kind === 'shades') {
+    // summer mode: sunglasses over the eyes
+    ctx.save();
+    ctx.translate(0, -r * 0.16);
+    ctx.fillStyle = '#1c1f26';
+    rr(ctx, -r * 0.78, -4.6, r * 0.64, 9.2, 4.2); ctx.fill();
+    rr(ctx, r * 0.14, -4.6, r * 0.64, 9.2, 4.2); ctx.fill();
+    ctx.fillRect(-r * 0.17, -3.2, r * 0.34, 2.4);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ell(ctx, -r * 0.55, -1.6, 2.7, 1.4, -0.4); ctx.fill();
+    ell(ctx, r * 0.37, -1.6, 2.7, 1.4, -0.4); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- custom skins
+// v3.6 community skins: a plain JSON file describing colors (and optionally a
+// body type + pattern) on top of any built-in breed. registerSkin() folds the
+// def into PALETTES under `custom:<id>` so the rest of the pipeline (store,
+// brain, renderer, save file) treats it like any other breed.
+export const CUSTOM_PREFIX = 'custom:';
+
+export function validateSkinDef(def) {
+  if (!def || typeof def !== 'object') return 'not an object';
+  if (typeof def.name !== 'string' || !def.name.trim()) return 'missing name';
+  if (def.base && !(def.base in PALETTES)) return 'unknown base breed';
+  if (def.body && !(def.body in BODIES)) return 'unknown body type';
+  if (def.colors) {
+    for (const [k, v] of Object.entries(def.colors)) {
+      if (!['fur', 'dark', 'belly', 'stripe', 'earIn', 'nose', 'eye', 'pupil'].includes(k)) return 'unknown color key ' + k;
+      if (typeof v !== 'string' || !/^#[0-9a-f]{6}$/i.test(v)) return 'bad color ' + k;
+    }
+  }
+  if (def.pattern && !['none', 'spots'].includes(def.pattern)) return 'unknown pattern';
+  if (def.hat && !HATS.includes(def.hat)) return 'unknown hat';
+  return null;
+}
+
+export function registerSkin(def, id) {
+  const err = validateSkinDef(def);
+  if (err) return { ok: false, reason: err };
+  const pid = CUSTOM_PREFIX + id;
+  const base = PALETTES[def.base] || PALETTES.grey_tabby;
+  const pal = { ...structuredClone(base), name: String(def.name).slice(0, 32), custom: true };
+  const c = def.colors || {};
+  for (const k of ['fur', 'dark', 'belly', 'stripe', 'earIn', 'nose', 'eye', 'pupil']) {
+    if (typeof c[k] === 'string') pal[k] = c[k];
+  }
+  if (def.body) pal.body = def.body;
+  if (def.pattern === 'spots' && !pal.spots) {
+    pal.spots = [[-16, -18, 6.8, 5.2, 0.4], [4, -23, 6.2, 4.8, -0.3], [23, -13, 5.8, 4.6, 0.5],
+                 [-30, 1, 5.6, 4.4, 0.2], [12, 1, 5.2, 4.2, -0.4]];
+  }
+  if (def.pattern === 'none') { pal.spots = null; pal.patches = null; }
+  if (def.stripe === false) pal.stripe = null;
+  PALETTES[pid] = pal;
+  return { ok: true, id: pid, hat: def.hat || null };
 }
 
 // ---------------------------------------------------------------- pose
@@ -803,6 +926,89 @@ function poseFor(state, t, jumpP, B, pal) {
       P.headY = 3; P.headRot = -0.05;
       P.tailMode = 'spiral';
       P.eyeState = 'open';
+      break;
+    }
+    // ---------------- v3.6 living-on-your-machine actions ----------------
+    case 'stalk': {     // crouched creep toward the idle cursor
+      const f = 7.5;
+      P.bodyY = 9; P.bodyRot = -0.10;
+      P.sqx = -0.05; P.sqy = 0.07;
+      if (t < 0.8) {    // aim phase: butt-wiggle
+        const wig = Math.sin(t * 24) * 0.05;
+        P.sqx = -0.06 + wig; P.sqy = 0.08;
+        P.headY = 4; P.headRot = -0.06 + wig * 2;
+        P.tailMode = 'spiral';
+      } else {          // slinky creep
+        P.legs[0].fx = F[0] + W(f, 0) * A * 0.75; P.legs[0].fy = -Math.max(0, Math.sin(t * f + Math.PI / 2)) * 4;
+        P.legs[1].fx = F[1] + W(f, Math.PI) * A * 0.75; P.legs[1].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.5)) * 4;
+        P.legs[2].fx = F[2] + W(f, Math.PI * 1.15) * A * 0.9; P.legs[2].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.65)) * 3;
+        P.legs[3].fx = F[3] + W(f, Math.PI * 0.15) * A * 0.9; P.legs[3].fy = -Math.max(0, Math.sin(t * f + Math.PI * 0.65)) * 3;
+        P.headY = 4; P.headRot = -0.08;
+        P.tailMode = 'spiral';
+      }
+      P.eyeState = 'open';
+      break;
+    }
+    case 'bop': {       // music playing: sway to the beat
+      const f = 4.6;
+      P.bodyRot = W(f, 0) * 0.09;
+      P.sqx = W(f, 1) * 0.04; P.sqy = -P.sqx;
+      P.bobY = -Math.abs(W(f, 0)) * 3;
+      P.headRot = W(f, 0.7) * 0.12;
+      P.headX = W(f, 0) * 2.2;
+      P.eyeState = 'happy';
+      break;
+    }
+    case 'mope': {      // red build: sad loaf, ears back, head down
+      P.bodyY = 14; P.bodyRot = 0.02;
+      P.sqx = 0.07; P.sqy = -0.17;
+      P.hideLegs = true;
+      P.headX = -5; P.headY = 11; P.headRot = 0.26;
+      P.earFlat = 1;
+      P.tailMode = 'wrap';
+      P.eyeState = 'blink';
+      P.bobY = Math.sin(t * 1.2) * 0.4;
+      break;
+    }
+    case 'nuzzle': {    // companion head-rub: leaning in, rubbing cheeks
+      const s = Math.sin(t * 6);
+      P.bodyY = 4; P.bodyRot = 0.10;
+      P.sqx = -0.04; P.sqy = 0.05;
+      P.legs[2].fx = F[2] + 8; P.legs[2].fy = -2;
+      P.legs[3].fx = F[3] + 10; P.legs[3].fy = -2;
+      P.headX = 6 + s * 2; P.headY = 2 + Math.cos(t * 6) * 1.5; P.headRot = -0.12 + s * 0.08;
+      P.eyeState = 'happy';
+      P.tailMode = 'curl';
+      break;
+    }
+    case 'investigate': { // purposeful walk, head up, on a mission
+      const f = 7.0;
+      P.legs[0].fx = F[0] + W(f, 0) * A; P.legs[0].fy = -Math.max(0, Math.sin(t * f + Math.PI / 2)) * 6;
+      P.legs[1].fx = F[1] + W(f, Math.PI) * A; P.legs[1].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.5)) * 6;
+      P.legs[2].fx = F[2] + W(f, Math.PI * 1.15) * (A + 1); P.legs[2].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.65)) * 6;
+      P.legs[3].fx = F[3] + W(f, Math.PI * 0.15) * (A + 1); P.legs[3].fy = -Math.max(0, Math.sin(t * f + Math.PI * 0.65)) * 6;
+      P.bobY = -Math.abs(W(f, 0)) * 2.2;
+      P.headY = -2; P.headRot = -0.06;
+      break;
+    }
+    case 'sniff': {     // arrived at the new thing: sit, nose down, "?"
+      P.bodyY = 4; P.bodyRot = 0.10;
+      P.sqx = -0.04; P.sqy = 0.05;
+      P.legs[2].fx = F[2] + 8; P.legs[2].fy = -2;
+      P.legs[3].fx = F[3] + 10; P.legs[3].fy = -2;
+      P.headX = 7; P.headY = 8 + Math.sin(t * 5) * 1.2; P.headRot = 0.34;
+      P.eyeState = 'open';
+      P.tailMode = 'curl';
+      break;
+    }
+    case 'curl': {      // low battery: curled up saving energy
+      P.bodyY = 14; P.bodyRot = 0.04;
+      P.sqx = 0.08; P.sqy = -0.18;
+      P.hideLegs = true;
+      P.headX = -4; P.headY = 9; P.headRot = 0.18;
+      P.tailMode = 'wrap';
+      P.eyeState = 'closed';
+      P.bobY = Math.sin(t * 1.1) * 0.8;
       break;
     }
     // ---------------- panda-specific actions ----------------
@@ -1471,7 +1677,19 @@ function drawHairball(ctx, P, t, B) {
 export const EMOTES = [
   'heart', 'love', 'note', 'question', 'exclaim', 'sweat',
   'angry', 'laugh', 'star', 'zzz', 'fish', 'bread',
+  // v3.6
+  'sad', 'battery', 'rainbow', 'cookie',
 ];
+
+// v3.6 seasonal hats (opt-in via Settings → "Seasonal skins")
+export const HATS = ['pumpkin', 'santa', 'flower', 'shades'];
+export function seasonHat(month) {
+  if (month === 9) return 'pumpkin';                 // October — jack-o'-lantern hours
+  if (month === 11) return 'santa';                  // December — festive mode
+  if (month === 2 || month === 3) return 'flower';   // Mar–Apr — spring bloom
+  if (month >= 5 && month <= 7) return 'shades';     // Jun–Aug — too cool for summer
+  return null;
+}
 
 // Anchor (local units, unscaled) where emotes hover: just above the head,
 // centered. v3.2 fixes the "icons show up far above the cat" bug — the old
@@ -1652,6 +1870,64 @@ export function drawEmote(ctx, opts) {
         ctx.moveTo(sx, -5);
         ctx.bezierCurveTo(sx - 3, -9, sx + 3, -11, sx, -15);
         ctx.stroke();
+      }
+      break;
+    }
+    case 'sad': {
+      // broken heart — for red builds and other tragedies
+      ctx.fillStyle = '#8a94c8';
+      heart(ctx, 0, 1, 9);
+      // crack
+      ctx.strokeStyle = '#3a4468';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -7.5);
+      ctx.lineTo(-2.5, -3);
+      ctx.lineTo(1.5, -0.5);
+      ctx.lineTo(-1, 4.5);
+      ctx.stroke();
+      break;
+    }
+    case 'battery': {
+      // low battery pill with a lightning bolt
+      rr(ctx, -12, -7, 22, 14, 3.5);
+      ctx.fillStyle = 'rgba(255,255,255,0.94)'; ctx.fill();
+      ctx.lineWidth = 1.6; ctx.strokeStyle = 'rgba(60,70,90,0.4)'; ctx.stroke();
+      rr(ctx, 10.5, -3, 3.4, 6, 1.2); ctx.fillStyle = 'rgba(60,70,90,0.55)'; ctx.fill();
+      rr(ctx, -9.6, -4.6, 8, 9.2, 1.6); ctx.fillStyle = '#e0483e'; ctx.fill();
+      ctx.fillStyle = '#e8a11c';
+      ctx.beginPath();
+      ctx.moveTo(2.4, -5.6); ctx.lineTo(-2.6, 0.8); ctx.lineTo(0.4, 0.8); ctx.lineTo(-1, 5.6); ctx.lineTo(4, -1.2); ctx.lineTo(0.8, -1.2);
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'rainbow': {
+      // arcs of joy — the rare pet reward
+      ctx.lineCap = 'round';
+      const cols = ['#e85a5a', '#f0a83c', '#f2d94e', '#68c46a', '#5a9de0'];
+      for (let i = 0; i < cols.length; i++) {
+        ctx.strokeStyle = cols[i];
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.arc(0, 6, 12.5 - i * 2.6, Math.PI, TAU);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'cookie': {
+      // a celebratory chocolate-chip cookie (with a bite, obviously)
+      ell(ctx, 0, 0, 11, 10.2, -0.15);
+      ctx.fillStyle = '#d9a45c'; ctx.fill();
+      ctx.lineWidth = 1.4; ctx.strokeStyle = '#a87838'; ctx.stroke();
+      // bite
+      ctx.globalCompositeOperation = 'destination-out';
+      ell(ctx, 9, -6, 4.6, 4.2); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      // chips
+      ctx.fillStyle = '#5a3a1e';
+      for (const [cx2, cy2, r2] of [[-4, -2, 1.7], [2, 2.5, 1.9], [-1.5, 5.5, 1.4], [4, -2.5, 1.5]]) {
+        ell(ctx, cx2, cy2, r2, r2); ctx.fill();
       }
       break;
     }

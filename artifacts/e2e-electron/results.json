@@ -42,12 +42,12 @@
   {
     "name": "brain pose advances (animation clock)",
     "pass": true,
-    "extra": "t 0.19 → 1.99"
+    "extra": "t 0.19 → 2.03"
   },
   {
     "name": "cat state machine runs",
     "pass": true,
-    "extra": "idle@800 → idle@800"
+    "extra": "idle@800 → dance@800"
   },
   {
     "name": "tray-style action (dance) reaches the cat",
@@ -57,7 +57,7 @@
   {
     "name": "coins persist through IPC+store",
     "pass": true,
-    "extra": "1000014 → 1000024"
+    "extra": "1000042 → 1000052"
   },
   {
     "name": "settings round-trip",
@@ -82,7 +82,7 @@
   {
     "name": "settings open (warm) is fast (<300ms)",
     "pass": true,
-    "extra": "19ms"
+    "extra": "14ms"
   },
   {
     "name": "close keeps the window warm (page target alive)",
@@ -132,12 +132,12 @@
   {
     "name": "about page shows version + developer link",
     "pass": true,
-    "extra": "{\"ver\":\"v3.5.0\",\"dev\":true}"
+    "extra": "{\"ver\":\"v3.6.0\",\"dev\":true}"
   },
   {
     "name": "panda unlocks free (unlimited coins promo)",
     "pass": true,
-    "extra": "{\"ok\":true,\"alreadyOwned\":true,\"coins\":1000024}"
+    "extra": "{\"ok\":true,\"alreadyOwned\":true,\"coins\":1000052}"
   },
   {
     "name": "settings window opens for reminders UI",
@@ -152,7 +152,7 @@
   {
     "name": "live: cat jumps onto a nearby window top border",
     "pass": true,
-    "extra": "{\"ok\":true,\"state\":\"walk\",\"baseY\":640,\"x\":534}"
+    "extra": "{\"ok\":true,\"state\":\"sleep\",\"baseY\":640,\"x\":534}"
   },
   {
     "name": "live: region window slides to follow the walking cat",
@@ -177,7 +177,7 @@
   {
     "name": "live: ambient butterfly spawns and drifts",
     "pass": true,
-    "extra": "{\"ok\":true,\"bf\":{\"x\":-30,\"y\":851.8893376094378,\"hue\":200},\"state\":\"idle\"}"
+    "extra": "{\"ok\":true,\"bf\":{\"x\":1630,\"y\":790.0364275152964,\"hue\":320},\"state\":\"idle\"}"
   },
   {
     "name": "cat window <title> is MeowCat",
@@ -187,12 +187,12 @@
   {
     "name": "AppUserModelID is com.mythos0.meowcat",
     "pass": true,
-    "extra": "{\"version\":\"3.5.0\",\"electron\":\"33.4.11\",\"platform\":\"linux\",\"aumid\":\"com.mythos0.meowcat\"}"
+    "extra": "{\"version\":\"3.6.0\",\"electron\":\"33.4.11\",\"platform\":\"linux\",\"aumid\":\"com.mythos0.meowcat\"}"
   },
   {
-    "name": "app version reported as 3.5.0",
+    "name": "app version reported as 3.6.0",
     "pass": true,
-    "extra": "3.5.0"
+    "extra": "3.6.0"
   },
   {
     "name": "settings reopened for idle-destroy test",
@@ -207,7 +207,7 @@
   {
     "name": "settings reopens after idle destroy (cold start ok, <1500ms)",
     "pass": true,
-    "extra": "12ms"
+    "extra": "18ms"
   },
   {
     "name": "e2e screenshots saved",

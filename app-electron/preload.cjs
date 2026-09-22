@@ -18,8 +18,26 @@ contextBridge.exposeInMainWorld('meow', {
   appInfo: () => ipcRenderer.invoke('app-info'),
   openExternal: url => ipcRenderer.invoke('open-external', url),
   moveRegion: rect => ipcRenderer.invoke('region:move', rect),
+  // v3.6
+  savePhoto: dataUrl => ipcRenderer.invoke('photo:save', dataUrl),
+  petAffection: () => ipcRenderer.invoke('affection:pet'),
+  bumpStat: (key, n) => ipcRenderer.invoke('stat:inc', key, n),
+  startPomodoro: kind => ipcRenderer.invoke('pomodoro:start', kind),
+  stopPomodoro: () => ipcRenderer.invoke('pomodoro:stop'),
+  pomodoroState: () => ipcRenderer.invoke('pomodoro:state'),
+  listZones: () => ipcRenderer.invoke('zones:list'),
+  importSkin: jsonText => ipcRenderer.invoke('skins:import', jsonText),
+  injectKeys: n => ipcRenderer.invoke('keys:inject', n),
+  quickAction: act => ipcRenderer.invoke('quick-action', act),
   on: (channel, fn) => {
-    const allowed = ['do-action', 'reminder-fired', 'settings-changed', 'workarea-changed', 'platforms', 'focus-reminders', 'laser-start'];
+    const allowed = [
+      'do-action', 'reminder-fired', 'settings-changed', 'workarea-changed',
+      'platforms', 'focus-reminders', 'laser-start',
+      // v3.6 living-machine channels
+      'system-event', 'music', 'typing', 'cursor-idle', 'cursor-busy',
+      'new-window', 'app-focus', 'duck', 'pomodoro', 'achievement',
+      'no-walk-zones', 'photo-mode', 'dance-party', 'time-bias', 'boot-greet',
+    ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));
   },

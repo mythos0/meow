@@ -18,6 +18,7 @@ public class MeowWinEnum {
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int a, out int v, int n);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L; public int T; public int R; public int B; }
 }
@@ -37,10 +38,26 @@ $cb = [MeowWinEnum+EnumProc]{ param($h, $l)
   [MeowWinEnum]::GetWindowRect($h, [ref]$r) | Out-Null
   $w = $r.R - $r.L; $hh = $r.B - $r.T
   if ($w -lt 120 -or $hh -lt 80) { return $true }
-  [void]$out.Add(@{ t = $title; x = $r.L; y = $r.T; w = $w; h = $hh })
+  $pid2 = [uint32]0
+  [MeowWinEnum]::GetWindowThreadProcessId($h, [ref]$pid2) | Out-Null
+  [void]$out.Add(@{ t = $title; x = $r.L; y = $r.T; w = $w; h = $hh; p = $pid2 })
   return $true
 }
 [MeowWinEnum]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
+# attach owner process names in ONE extra call (v3.6: app-specific reactions)
+try {
+  $ids = @($out | ForEach-Object { $_.p } | Select-Object -Unique)
+  if ($ids.Count -gt 0) {
+    $procs = Get-Process -Id $ids -ErrorAction SilentlyContinue
+    $map = @{}
+    foreach ($pr in $procs) { $map[[uint32]$pr.Id] = $pr.ProcessName }
+    foreach ($w in $out) { $w.n = $map[$w.p]; $w.Remove('p') }
+  } else {
+    foreach ($w in $out) { $w.Remove('p') }
+  }
+} catch {
+  foreach ($w in $out) { try { $w.Remove('p') } catch {} }
+}
 $out | ConvertTo-Json -Compress -Depth 3
 `.trim();
 
@@ -55,10 +72,12 @@ export function parseWindowsJson(raw) {
   return arr
     .filter(w => w && Number.isFinite(w.x) && Number.isFinite(w.y) &&
                  Number.isFinite(w.w) && Number.isFinite(w.h) && w.w > 0 && w.h > 0)
-    .map(w => ({ title: String(w.t ?? ''), x: w.x, y: w.y, w: w.w, h: w.h }));
+    .map(w => ({ title: String(w.t ?? ''), x: w.x, y: w.y, w: w.w, h: w.h,
+                 proc: typeof w.n === 'string' && w.n ? w.n : undefined }));
 }
 
-// turn raw windows into platform candidates for the brain
+// turn raw windows into platform candidates for the brain.
+// keepProc: v3.6 leaves `proc` attached so main can react to apps.
 export function toPlatforms(list, opts = {}) {
   const exclude = opts.excludeRe ||
     /meowcat|program manager|windows (input|shell experience|default lockscreen)|nvidia|geforce|msi afterburner|notification center|nexus/i;

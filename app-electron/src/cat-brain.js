@@ -3,8 +3,13 @@
 // v3.2: open-field roaming REMOVED (user request) — the cat strolls along the
 // ground edge-to-edge, jumps onto nearby window tops, strolls there, hops to
 // the next window or drops back. Pandas waddle and roll forward as they roll.
+// v3.6: living-on-your-machine pack — stalk/bop/mope/nuzzle/investigate/sniff/
+// curl states, time-of-day bias, stress mode, no-walk zones.
 
 'use strict';
+
+import { resolveMove, filterPlatforms as _fp, rectsIntersect } from './no-walk.js';
+const filterPlatforms = _fp;
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -22,6 +27,8 @@ export const ACTIONS = [
   'waddle', 'bamboo', 'roll',
   // v3.5 funny pack
   'sneeze', 'hairball', 'zoomies', 'laser',
+  // v3.6 living-on-your-machine pack
+  'stalk', 'bop', 'mope', 'nuzzle', 'investigate', 'sniff', 'curl',
 ];
 
 // emote shown when entering a state
@@ -31,6 +38,9 @@ export const EMOTE_ON = {
   stretch: 'star', knead: 'love',
   // v3.5 funny pack
   zoomies: 'exclaim', hairball: 'sweat', loaf: 'bread',
+  // v3.6
+  bop: 'note', investigate: 'question', sniff: 'question', nuzzle: 'heart',
+  curl: 'zzz', mope: 'sad', stalk: null,
 };
 
 const CAT_WEIGHTS = {
@@ -39,6 +49,13 @@ const CAT_WEIGHTS = {
   // v3.5 funny pack — rare but delightful gags
   sneeze: 2, hairball: 2, zoomies: 2,
 };
+// v3.6 mood multipliers: time-of-day bias + system-stress panic.
+export const BIAS_MULT = {
+  night: { sleep: 3, yawn: 4, loaf: 2, run: 0.3, zoomies: 0.25, dance: 0.4, pounce: 0.6, walk: 0.8 },
+  day: { pounce: 1.3, zoomies: 1.3, run: 1.2 },
+};
+export const STRESS_MULT = { run: 3, startle: 5, zoomies: 2, walk: 1.4, dance: 0.2, groom: 0.3 };
+
 const PANDA_WEIGHTS = {
   waddle: 24, idle: 13, sit: 6, bamboo: 10, roll: 8, sleep: 4, dance: 3,
   loaf: 5, yawn: 3, startle: 2, happy: 4,
@@ -87,9 +104,115 @@ export class CatBrain {
 
     // action weights (tunable)
     this.weights = this.breed === 'panda' ? { ...PANDA_WEIGHTS } : { ...CAT_WEIGHTS };
+
+    // ---- v3.6 living-on-your-machine state ----
+    this.timeBiasMode = 'day';    // 'day' | 'night'
+    this.stressUntil = 0;         // timestamp while a CPU/RAM scare lasts
+    this.musicOn = false;         // music playing -> bop
+    this.stalk = null;            // { x, y } cursor being stalked
+    this._inv = null;             // { x } new-window investigation target
+    this._batteryLow = false;     // low battery -> curl up to save energy
+    this._zones = [];             // no-walk zones (screen coords)
+    this._scale = 1;
   }
 
-  _pick(weights = this.weights) {
+  // ---------- v3.6 tuning API (called by cat.html via IPC events) ----------
+  setScale(s) { if (Number.isFinite(s) && s > 0) this._scale = s; }
+  setTimeBias(mode) { this.timeBiasMode = mode === 'night' ? 'night' : 'day'; }
+  setStress(on, ms = 12000) {
+    this.stressUntil = on ? this.t + ms / 1000 : 0;
+    if (on) this._enter('startle', 0.7);   // immediate jump
+    this.onEvent(on ? 'stress:on' : 'stress:off');
+  }
+  get stressed() { return this.stressUntil > this.t; }
+  setMusic(on) {
+    this.musicOn = !!on;
+    if (on && !['bop', 'laser', 'pounce', 'stalk'].includes(this.state)) this._enter('bop', 3);
+  }
+  setBatteryLow(on) {
+    this._batteryLow = !!on;
+    if (on) this._enter('curl', 30 + this.rand() * 20);
+  }
+  startStalk(x, y) {
+    this.stalk = { x, y };
+    this._stalkWig = 0;
+    this._enter('stalk', 7);      // hard cap like the laser chase
+    this.onEvent('stalk:start');
+  }
+  moveStalk(x, y) { if (this.stalk) { this.stalk.x = x; this.stalk.y = y; } }
+  stopStalk() {
+    const had = !!this.stalk;
+    this.stalk = null;
+    if (had) this.onEvent('stalk:stop');
+  }
+  investigate(x) {
+    // only curious-ish cats stop to sniff the new arrival
+    if (!['walk', 'idle', 'sit', 'loaf', 'groom', 'investigate', 'sniff'].includes(this.state)) return false;
+    this._inv = { x: Math.max(this.minX + 40, Math.min(this.maxX - 40, x)) };
+    // enough time to actually walk there at the current speed (capped)
+    const dist = Math.abs(this._inv.x - this.x);
+    const dur = Math.min(14, 2.5 + (dist / Math.max(20, this.speed)) * 1.7);
+    this._enter('investigate', dur);
+    this.onEvent('investigate:start');
+    return true;
+  }
+  curlUp() { this.setBatteryLow(true); }
+  mopeNow() { this._enter('mope', 6 + this.rand() * 2); this.onEvent('mope'); }
+  nuzzleNow(dir) {
+    if (dir) this.dir = dir >= 0 ? 1 : -1;
+    this._enter('nuzzle', 2.8);
+    this.onEvent('nuzzle');
+  }
+  celebrate() {
+    this._enter('happy', 2.6);
+    this.emote = { kind: 'star', t0: this.t };
+    this.onEvent('celebrate');
+  }
+  greet() {
+    this._enter('happy', 2.2);
+    this.emote = { kind: 'heart', t0: this.t };
+    this.onEvent('greet');
+  }
+  setNoWalkZones(screenZones) {
+    this._zones = Array.isArray(screenZones) ? screenZones.filter(z => z && Number.isFinite(z.x)) : [];
+  }
+
+  // v3.6: "go curl up on that window" — used for editor nap reactions.
+  // rect: {x,y,w,h} of the window. Returns false when unreachable.
+  goToPlatform(rect) {
+    const pl = this.platforms.find(p =>
+      Math.abs(p.x - rect.x) < 12 && Math.abs(p.y - rect.y) < 12 && p.w === rect.w);
+    if (!pl || pl === this.onPlatform) return false;
+    this._napRequested = true;
+    this._jumpTo(pl, 0.6 + Math.min(0.85, Math.abs(this.baseY - pl.y) / 460));
+    return true;
+  }
+  // while true, the brain favours cozy states whenever it stands on a window
+  get napRequested() { return !!this._napRequested; }
+  set napRequested(v) { this._napRequested = !!v; }
+
+  // effective weights = base × time-of-day × stress
+  _effWeights() {
+    const base = this.breed === 'panda' ? PANDA_WEIGHTS : CAT_WEIGHTS;
+    const bias = BIAS_MULT[this.timeBiasMode] || {};
+    const stress = this.stressed ? STRESS_MULT : {};
+    const out = {};
+    for (const k in base) {
+      let v = base[k];
+      if (bias[k] != null) v *= bias[k];
+      if (stress[k] != null) v *= stress[k];
+      if (v > 0) out[k] = v;
+    }
+    return out;
+  }
+  _speedFactor() {
+    let f = 1;
+    if (this.timeBiasMode === 'night') f *= 0.85;
+    if (this.stressed) f *= 1.3;
+    return f;
+  }
+
+  _pick(weights = this._effWeights()) {
     let total = 0;
     for (const k in weights) total += weights[k];
     let r = this.rand() * total;
@@ -123,6 +246,19 @@ export class CatBrain {
       if (remain <= 0.3) this.stopLaser();
       else { this._enter('laser', remain); return; }
     }
+    // v3.6: low battery overrides everything except a live laser chase —
+    // the cat is "saving energy" and stays curled until plugged in.
+    if (this._batteryLow && this.state !== 'curl') { this._enter('curl', 25); return; }
+    // v3.6: music -> keep bopping until it stops
+    if (this.musicOn && !['bop', 'laser', 'pounce', 'stalk'].includes(this.state)) {
+      this._enter('bop', 3); return;
+    }
+    // v3.6: cozy bias while napping on a window top (editor-curl feature)
+    if (this._napRequested && this.onPlatform) {
+      this._enter(this.rand() < 0.6 ? 'loaf' : 'sit', 6 + this.rand() * 6);
+      return;
+    }
+    if (this._napRequested && !this.onPlatform) this._napRequested = false;
     // v3.5: post-meal zoomies — a real cat thing ("snack raccs"). The gag lands
     // because it fires right after eating, never at random.
     if ((this.state === 'eat' || this.state === 'bamboo') && this.rand() < 0.45) {
@@ -161,6 +297,8 @@ export class CatBrain {
       case 'sneeze': this._enter('sneeze', 1.6); break;
       case 'hairball': this._enter('hairball', 2.8); break;
       case 'zoomies': this._enter('zoomies', 1.6 + this.rand() * 1.2); break;
+      // ---- v3.6 ----
+      case 'mope': this._enter('mope', 6 + this.rand() * 2); break;
       default: this._enter('idle', 2);
     }
   }
@@ -179,6 +317,7 @@ export class CatBrain {
   // v3.5: laser-pointer toy. cat.html owns the red dot (spawns it, drifts it,
   // decides catch/escape) — the brain only chases the coordinates it is fed.
   startLaser(x, y) {
+    this.stopStalk();             // a laser overrides any cursor stalking
     this.laser = { x, y };
     this._laserAge = 0;
     this._laserCd = 0;
@@ -204,6 +343,12 @@ export class CatBrain {
                    p.w > 90 && p.h > 40 &&
                    p.y >= this.bounds.y - 40 && p.y <= this.bounds.y + this.bounds.h)
       .slice(0, 30);
+    // v3.6: drop window tops that intersect a no-walk zone (top-strip test —
+    // a zone pinned low should not veto a tall window far above it)
+    if (this._zones.length) {
+      this.platforms = this.platforms.filter(pl =>
+        !this._zones.some(z => rectsIntersect({ x: pl.x, y: pl.y, w: pl.w, h: Math.min(pl.h, 24) }, z, 4)));
+    }
     // drop reference to vanished windows
     if (this.onPlatform && !this.platforms.includes(this.onPlatform)) {
       this.onPlatform = null;
@@ -282,6 +427,23 @@ export class CatBrain {
     if (outward || this.platformT > 7 + this.rand() * 7) this._leavePlatform(outward);
   }
 
+  // zone-aware horizontal move: returns true when the move was blocked and
+  // the cat turned around (used by ground strolls)
+  _moveX(dx) {
+    const nx = this.x + dx;
+    let fx = null;
+    if (this._zones.length) {
+      fx = resolveMove(this._zones, this.x, nx, this.baseY, this._scale);
+    }
+    if (fx != null) {
+      this.x = Math.max(this.minX + 20, Math.min(this.maxX - 20, fx));
+      this.dir *= -1;
+      return true;
+    }
+    this.x = nx;
+    return false;
+  }
+
   // ------------------------------------------------------------ tick
   tick(dt) {
     if (!(dt > 0)) return;
@@ -289,16 +451,17 @@ export class CatBrain {
     this.t += dt;
     this.stateT += dt;
     if (this.laser) this._laserAge += dt;   // v3.5: total chase time (incl. pounces)
+    const sf = this._speedFactor();         // v3.6: night slows down, stress speeds up
 
     switch (this.state) {
       case 'walk':
       case 'waddle': {
         if (this.onPlatform) {
-          this.x += this.dir * this.speed * dt;
+          this.x += this.dir * this.speed * sf * dt;
           this._tickPlatformWalk(dt);
           break;
         }
-        this.x += this.dir * this.speed * dt;        // classic edge-to-edge ground stroll
+        this._moveX(this.dir * this.speed * sf * dt); // v3.6: zone-aware stroll
         this._clampAndTurn();
         this._platformCd -= dt;
         if (this._platformCd <= 0) {
@@ -314,11 +477,11 @@ export class CatBrain {
       }
       case 'run': {
         if (this.onPlatform) {
-          this.x += this.dir * this.runSpeed * dt;
+          this.x += this.dir * this.runSpeed * sf * dt;
           this._tickPlatformWalk(dt);
           break;
         }
-        this.x += this.dir * this.runSpeed * dt;
+        this._moveX(this.dir * this.runSpeed * sf * dt);
         this._clampAndTurn(true);
         break;
       }
@@ -331,11 +494,52 @@ export class CatBrain {
       }
       case 'zoomies': {
         // v3.5 funny pack: the mad after-meal sprint — gallop bounce + dust
-        this.x += this.dir * this.runSpeed * 1.7 * dt;
+        this._moveX(this.dir * this.runSpeed * 1.7 * sf * dt);
         this.jumpY = -Math.abs(Math.sin(this.t * 14)) * 9;
         this._clampAndTurn();
         break;
       }
+      // ---------------- v3.6 living-on-your-machine states ----------------
+      case 'stalk': {
+        // crouch-wiggle, then creep toward the idle cursor and pounce it.
+        if (!this.stalk) { this._nextAction(); break; }
+        const dxs = this.stalk.x - this.x;
+        if (Math.abs(dxs) > 480) { this.stopStalk(); this._nextAction(); break; } // lost interest
+        if (dxs !== 0) this.dir = dxs > 0 ? 1 : -1;
+        if (this.stateT < 0.8) {
+          // butt-wiggle aim phase (renderer shows the crouch)
+          this.jumpY = 0;
+        } else if (Math.abs(dxs) > 55) {
+          this._moveX(Math.sign(dxs) * Math.min(Math.abs(dxs), this.speed * 0.55 * sf * dt));
+          this.jumpY = -Math.abs(Math.sin(this.t * 8)) * 1.5;   // slinky low bob
+        } else {
+          this._enter('pounce', 1.9);   // cat.html resolves the "catch"
+        }
+        break;
+      }
+      case 'bop': {
+        // music playing: sway in place to the beat (renderer adds the notes)
+        this.jumpY = -Math.abs(Math.sin(this.t * 4.6)) * 4;
+        break;
+      }
+      case 'investigate': {
+        // walk over to the new window and sniff it
+        if (!this._inv) { this._nextAction(); break; }
+        const dxi = this._inv.x - this.x;
+        if (Math.abs(dxi) <= 42) {
+          this._inv = null;
+          this._enter('sniff', 2.4);
+          this.emote = { kind: 'question', t0: this.t };
+        } else {
+          this.dir = dxi > 0 ? 1 : -1;
+          this._moveX(this.dir * this.speed * sf * dt);
+          this._clampAndTurn();
+        }
+        break;
+      }
+      case 'sniff': case 'mope': case 'nuzzle': case 'curl':
+        // stationary poses — renderer does the work
+        break;
       case 'laser': {
         // v3.5 funny pack: chase the red dot (cat.html feeds its coords).
         // Stalk/run toward it; when close, pounce — cat.html decides catch vs
@@ -393,8 +597,13 @@ export class CatBrain {
         this.jumpY = 0; this.jumpP = 0;
       }
       if (this.state === 'zoomies') this.jumpY = 0;
+      if (this.state === 'bop') this.jumpY = 0;
       if (this.state === 'laser') this.stopLaser();   // chase timed out — dot vanishes
-      this._nextAction();
+      if (this.state === 'stalk') this.stopStalk();   // cursor moved off — interest lost
+      if (this.state === 'pounce' && this.stalk) this.stopStalk();   // cursor pounce resolved
+      if (this.state === 'investigate') this._inv = null;
+      if (this.state === 'bop' && this.musicOn) this._enter('bop', 3);   // keep the beat
+      else this._nextAction();
     }
   }
 

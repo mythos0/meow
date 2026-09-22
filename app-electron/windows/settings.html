@@ -4,104 +4,362 @@
 <meta charset="utf-8">
 <title>MeowCat Settings</title>
 <link rel="stylesheet" href="ui.css">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  body { padding: 0; }
+  section.page { display: none; }
+  section.page.on { display: block; }
+</style>
 </head>
 <body>
-<h1>🐱 MeowCat Settings</h1>
-<div class="hint">Changes apply instantly.</div>
-
-<h2>Cat Store</h2>
-<div class="card store">
-  <div class="store-head">
-    <div class="store-title">Choose your companion</div>
-    <div class="coins-pill" id="coins">🪙 0</div>
-  </div>
-  <div class="store-hint" id="shopHint">🎁 Unlimited-coins promo — every breed unlocks free!</div>
-  <div class="breeds" id="breeds"></div>
-</div>
-
-<div class="card">
-  <div class="row"><label>Size</label><input type="range" id="size" min="0.5" max="2" step="0.05"><span id="sizeV" class="hint"></span></div>
-  <div class="row"><label>Opacity</label><input type="range" id="opacity" min="0.3" max="1" step="0.05"><span id="opV" class="hint"></span></div>
-  <div class="row"><label>Walk speed</label><input type="range" id="speed" min="20" max="140" step="5"><span id="spV" class="hint"></span></div>
-</div>
-
-<h2 id="remindersSection">⏰ Reminders &amp; Timers</h2>
-<div class="card">
-  <div class="hint" style="margin-bottom:8px">When a reminder fires, your cat dances and shows the message.</div>
-  <div class="row" style="margin-bottom:8px">
-    <label style="flex:0 0 74px">Message</label>
-    <input type="text" id="remLabel" placeholder="Drink water!" maxlength="80">
-  </div>
-  <div class="row" style="margin-bottom:8px">
-    <label style="flex:0 0 74px">When</label>
-    <input type="datetime-local" id="remWhen">
-  </div>
-  <div class="row" style="margin-bottom:8px">
-    <label style="flex:0 0 74px">Repeat</label>
-    <select id="remRepeat">
-      <option value="once">Once</option>
-      <option value="hourly">Every hour</option>
-      <option value="daily">Every day</option>
-      <option value="weekly">Every week</option>
-    </select>
-  </div>
-  <div class="row" style="margin-bottom:10px">
-    <label style="flex:0 0 74px">Cat does</label>
-    <select id="remAnim">
-      <option value="dance">Dance 💃</option>
-      <option value="happy">Happy bounce 💗</option>
-      <option value="jump">Jump 🐾</option>
-      <option value="eat">Snack 🐟</option>
-      <option value="sleep">Sleep 😴</option>
-    </select>
-  </div>
-  <div class="row">
-    <label><input type="checkbox" id="remSound" checked> Play a meow</label>
-    <span style="flex:1"></span>
-    <button id="addBtn">Add reminder</button>
-  </div>
-</div>
-<div class="card" id="remList"><div class="empty">No reminders yet.</div></div>
-
-<h2>Behaviour</h2>
-<div class="card">
-  <div class="row"><label>Sound effects</label><input type="checkbox" id="sounds"></div>
-  <div class="row"><label>Stay on top of fullscreen apps <span class="hint">(recommended)</span></label><input type="checkbox" id="topmost"></div>
-  <div class="row"><label>Jump onto window tops <span class="hint">(scans open windows — off saves CPU)</span></label><input type="checkbox" id="hopToggle"></div>
-  <div class="row"><label>Start with Windows</label><input type="checkbox" id="autoStart"></div>
-</div>
-
-<div class="row" style="margin-top:14px">
-  <button class="ghost" id="gotoReminders">⏰ Reminders…</button>
-  <span style="flex:1"></span>
-  <button class="ghost" id="closeBtn">Close</button>
-</div>
-
-<h2>About</h2>
-<div class="card about" id="about">
-  <div class="about-head">
-    <img src="../assets/icon.png" width="44" height="44" alt="MeowCat">
-    <div>
-      <div class="about-name">MeowCat <span class="ver" id="ver"></span></div>
-      <div class="hint">A procedurally animated desktop cat — every frame is drawn by code, no sprite frames.</div>
+<div class="fluent">
+  <!-- ================= left nav ================= -->
+  <nav class="fl-nav" id="nav">
+    <div class="fl-logo">
+      <img src="../assets/icon.png" alt="MeowCat">
+      <div class="tt">
+        <div class="t1">MeowCat</div>
+        <div class="t2" id="navVer"></div>
+      </div>
     </div>
-  </div>
-  <div class="about-links">
-    <button class="chip" id="lnkDev">👨‍💻 Developer — github.com/mythos0</button>
-    <button class="chip" id="lnkRepo">🐾 Source &amp; releases</button>
-    <button class="chip" id="lnkIssues">🐛 Report an issue</button>
-  </div>
-  <div class="hint" style="margin-top:8px">
-    Runtime: Electron <span id="verElectron"></span> · Canvas 2D renderer · 20 breeds · 24 actions · 12 emotes<br>
-    Sounds recorded from real cats. MIT License © 2026 mythos0.
-  </div>
-</div>
+    <div class="item on" data-page="home">🏠 <span class="lab">Home</span></div>
+    <div class="item" data-page="store">🛍️ <span class="lab">Cat Store</span></div>
+    <div class="item" data-page="look">🎨 <span class="lab">Look &amp; Feel</span></div>
+    <div class="item" data-page="behavior">🐾 <span class="lab">Behavior</span></div>
+    <div class="item" data-page="reactions">🖥️ <span class="lab">Reactions</span></div>
+    <div class="item" data-page="sounds">🔊 <span class="lab">Sounds</span></div>
+    <div class="item" data-page="focus">🍅 <span class="lab">Focus &amp; Reminders</span></div>
+    <div class="item" data-page="hotkeys">⌨️ <span class="lab">Hotkeys &amp; Privacy</span></div>
+    <div class="item" data-page="achieve">🏆 <span class="lab">Achievements</span></div>
+    <div class="spacer"></div>
+    <div class="item" data-page="about">ℹ️ <span class="lab">About</span></div>
+  </nav>
 
+  <!-- ================= content ================= -->
+  <main class="fl-content" id="content">
+
+    <!-- ============ HOME ============ -->
+    <section class="page on" id="page-home">
+      <h1 class="fl-h1">Welcome home, human</h1>
+      <div class="fl-sub">Everything your cat approves of, at a glance.</div>
+
+      <div class="fl-card" style="display:flex; gap:16px; align-items:center;">
+        <canvas id="homeCat" class="fl-preview" width="180" height="120" style="width:180px;height:120px;"></canvas>
+        <div style="flex:1">
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+            <span class="fl-pill" id="coins">🪙 0</span>
+            <span class="fl-pill" id="affLevel">💗 Lv.1</span>
+          </div>
+          <div class="fl-meter" style="margin-bottom:4px;"><div id="affBar" style="width:0%"></div></div>
+          <div class="hint" id="affPerk">Pet your cat to fill the affection meter.</div>
+        </div>
+      </div>
+
+      <div class="fl-card">
+        <div class="fl-row"><div class="txt"><div class="l1">Quick actions</div><div class="l2">Because typing is effort.</div></div>
+          <button id="qaDance">💃 Dance</button>
+          <button id="qaFeed" class="ghost">🍖 Feed</button>
+          <button id="qaLaser" class="ghost">🔴 Laser</button>
+          <button id="qaPhoto" class="ghost">📸 Photo</button>
+        </div>
+      </div>
+
+      <div class="fl-card">
+        <div class="fl-row"><div class="txt"><div class="l1">Lifetime stats</div><div class="l2">The cat keeps score.</div></div>
+          <span class="hint" id="statLine"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CAT STORE ============ -->
+    <section class="page" id="page-store">
+      <h1 class="fl-h1">Cat Store</h1>
+      <div class="fl-sub">Adopt procedurally. No litter box required.</div>
+
+      <div class="fl-card">
+        <div class="row store-head" style="margin-bottom:8px;">
+          <div class="store-title" style="flex:1">Choose your companion</div>
+          <div class="coins-pill" id="coins2">🪙 0</div>
+        </div>
+        <div class="store-hint hint" id="shopHint" style="margin-bottom:10px;"></div>
+        <div class="breeds" id="breeds"></div>
+      </div>
+
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Community skins</div>
+            <div class="l2">Import a skin.json — colors, body type, pattern, even a default hat. Drop one in, no recompile needed.</div></div>
+          <button id="importSkin">📂 Import…</button>
+          <input type="file" id="skinFile" accept=".json,application/json" style="display:none">
+        </div>
+        <div class="hint" id="customHint" style="margin-top:4px;">No custom skins yet. Make one: <code>{ "name":"Nightsky", "base":"bombay", "body":"chubby", "colors":{ "fur":"#4a4a7a", "eye":"#ffd94d" }, "pattern":"spots" }</code></div>
+      </div>
+    </section>
+
+    <!-- ============ LOOK & FEEL ============ -->
+    <section class="page" id="page-look">
+      <h1 class="fl-h1">Look &amp; Feel</h1>
+      <div class="fl-sub">Resize, dress up, multiply.</div>
+
+      <div class="fl-card">
+        <div class="fl-row"><div class="txt"><div class="l1">Size</div></div><input type="range" id="size" min="0.5" max="2" step="0.05"><span id="sizeV" class="hint"></span></div>
+        <div class="fl-row"><div class="txt"><div class="l1">Opacity</div></div><input type="range" id="opacity" min="0.3" max="1" step="0.05"><span id="opV" class="hint"></span></div>
+        <div class="fl-row"><div class="txt"><div class="l1">Walk speed</div></div><input type="range" id="speed" min="20" max="140" step="5"><span id="spV" class="hint"></span></div>
+      </div>
+
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Seasonal skins</div>
+            <div class="l2" id="seasonHint">Opt-in: a pumpkin hat in October, a santa hat in December, shades all summer.</div></div>
+          <label class="sw"><input type="checkbox" id="seasonalSkins"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Companion cat</div>
+            <div class="l2">A second, smaller cat joins. Expect nuzzling, play-fighting and cursor-related rivalry.</div></div>
+          <label class="sw"><input type="checkbox" id="companionCat"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ BEHAVIOR ============ -->
+    <section class="page" id="page-behavior">
+      <h1 class="fl-h1">Behavior</h1>
+      <div class="fl-sub">Where the cat may go and what it may climb.</div>
+
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Stay on top of fullscreen apps</div><div class="l2">Recommended — the cat claims the whole screen.</div></div>
+          <label class="sw"><input type="checkbox" id="topmost"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Auto-hide in fullscreen</div><div class="l2">Polite mode — when a game or video goes fullscreen, the cat leaves the stage.</div></div>
+          <label class="sw"><input type="checkbox" id="hideInFullscreen"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Jump onto window tops</div><div class="l2">Scans open windows so the cat can hop borders. Off saves CPU.</div></div>
+          <label class="sw"><input type="checkbox" id="hopToggle"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Start with Windows</div></div>
+          <label class="sw"><input type="checkbox" id="autoStart"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+      </div>
+
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">No-walk zones</div>
+            <div class="l2">Screen rectangles (work-area px) the cat refuses to enter — and window tops it won't land on.</div></div>
+          <label class="sw"><input type="checkbox" id="noWalkZones"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div id="zoneList" style="margin-top:6px;"></div>
+        <div class="zone-row">
+          <input type="number" id="zx" placeholder="x" value="0">
+          <input type="number" id="zy" placeholder="y" value="0">
+          <input type="number" id="zw" placeholder="w" value="300">
+          <input type="number" id="zh" placeholder="h" value="120">
+          <button id="zoneAdd" class="ghost small">＋ Add zone</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ REACTIONS ============ -->
+    <section class="page" id="page-reactions">
+      <h1 class="fl-h1">Reactions</h1>
+      <div class="fl-sub">The cat watches your machine. Everything here can be switched off.</div>
+
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">CPU / RAM spikes</div><div class="l2">Heavy load startles the cat — it knows when you compile.</div></div>
+          <label class="sw"><input type="checkbox" id="reactSystemSpikes"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Low battery</div><div class="l2">Under 20% and unplugged, the cat curls up "to save energy". Obviously.</div></div>
+          <label class="sw"><input type="checkbox" id="reactLowBattery"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Time-of-day mood</div><div class="l2">Yawns and naps at night, zoomies by day.</div></div>
+          <label class="sw"><input type="checkbox" id="timeOfDayMood"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">New-window investigator</div><div class="l2">A fresh app opens → the cat strolls over and sniffs it.</div></div>
+          <label class="sw"><input type="checkbox" id="reactNewWindows"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Editor loaf &amp; game hype</div><div class="l2">Curls up on your code editor; gets extra playful over games.</div></div>
+          <label class="sw"><input type="checkbox" id="reactApps"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Typing pounce</div><div class="l2">Fast typing bursts excite the cat; long idle sends it to nap.</div></div>
+          <label class="sw"><input type="checkbox" id="reactTyping"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Cursor stalking</div><div class="l2">Leave the mouse idle near the cat… it remembers the red dot.</div></div>
+          <label class="sw"><input type="checkbox" id="stalkCursor"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Music bops</div><div class="l2">Spotify/YouTube playing → the cat sways to the beat; new track → excited hop.</div></div>
+          <label class="sw"><input type="checkbox" id="reactMusic"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SOUNDS ============ -->
+    <section class="page" id="page-sounds">
+      <h1 class="fl-h1">Sounds</h1>
+      <div class="fl-sub">Recorded from real, opinionated cats.</div>
+
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Sound effects</div><div class="l2">Meows, purrs, paws and gags.</div></div>
+          <label class="sw"><input type="checkbox" id="sounds"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Contextual sounds</div><div class="l2">Glass paw-taps on window edges, toy squeaks on jumps.</div></div>
+          <label class="sw"><input type="checkbox" id="contextualSounds"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Duck during calls</div><div class="l2">Zoom/Teams/OBS detected → cat sounds politely step aside.</div></div>
+          <label class="sw"><input type="checkbox" id="duckDuringCalls"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Hide during calls</div><div class="l2">The cat auto-hides while a call or recording app runs. It will be back.</div></div>
+          <label class="sw"><input type="checkbox" id="hideDuringCalls"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FOCUS & REMINDERS ============ -->
+    <section class="page" id="page-focus">
+      <h1 class="fl-h1" id="remindersSection">Focus &amp; Reminders</h1>
+      <div class="fl-sub">The cat believes in you. Statistically.</div>
+
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Pomodoro companion</div><div class="l2" id="pomoHint">Focus 25 min → the cat supervises. Finish a round → celebration dance.</div></div>
+          <label class="sw"><input type="checkbox" id="pomodoro"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Timer</div><div class="l2" id="pomoState">Not running.</div></div>
+          <button id="pomoFocus">▶ Focus</button>
+          <button id="pomoBreak" class="ghost">☕ Break</button>
+          <button id="pomoStop" class="ghost">⏹</button>
+        </div>
+      </div>
+
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Build / test reactions</div>
+            <div class="l2">Watch a status file — green text → happy dance, red text → moping. Works with CI exporters.</div></div>
+          <label class="sw"><input type="checkbox" id="reactBuildStatus"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Status file</div></div>
+          <input type="text" id="statusFile" placeholder="C:\path\to\status.txt" style="flex:1; min-width:120px;">
+          <button id="statusBrowse" class="ghost small">Browse…</button>
+        </div>
+      </div>
+
+      <div class="fl-card">
+        <div class="hint" style="margin-bottom:8px;">When a reminder fires, your cat dances and shows the message.</div>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="flex:0 0 74px">Message</label>
+          <input type="text" id="remLabel" placeholder="Drink water!" maxlength="80">
+        </div>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="flex:0 0 74px">When</label>
+          <input type="datetime-local" id="remWhen">
+        </div>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="flex:0 0 74px">Repeat</label>
+          <select id="remRepeat">
+            <option value="once">Once</option><option value="hourly">Every hour</option>
+            <option value="daily">Every day</option><option value="weekly">Every week</option>
+          </select>
+        </div>
+        <div class="row" style="margin-bottom:10px;">
+          <label style="flex:0 0 74px">Cat does</label>
+          <select id="remAnim">
+            <option value="dance">Dance 💃</option><option value="happy">Happy bounce 💗</option>
+            <option value="jump">Jump 🐾</option><option value="eat">Snack 🐟</option><option value="sleep">Sleep 😴</option>
+          </select>
+        </div>
+        <div class="row">
+          <label><input type="checkbox" id="remSound" checked> Play a meow</label>
+          <span style="flex:1"></span>
+          <button id="addBtn">Add reminder</button>
+        </div>
+      </div>
+      <div class="fl-card" id="remList"><div class="empty">No reminders yet.</div></div>
+    </section>
+
+    <!-- ============ HOTKEYS & PRIVACY ============ -->
+    <section class="page" id="page-hotkeys">
+      <h1 class="fl-h1">Hotkeys &amp; Privacy</h1>
+      <div class="fl-sub">Summon. Dismiss. Appear innocuous.</div>
+
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Global hotkeys</div>
+            <div class="l2"><b>Ctrl+Alt+C</b> — summon / hide the cat · <b>Ctrl+Alt+P</b> — photo mode</div></div>
+          <label class="sw"><input type="checkbox" id="globalHotkeys"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Photo mode</div><div class="l2">Freezes the cat mid-pose and saves a transparent PNG to your Pictures folder.</div></div>
+          <label class="sw"><input type="checkbox" id="photoMode"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ACHIEVEMENTS ============ -->
+    <section class="page" id="page-achieve">
+      <h1 class="fl-h1">Achievements</h1>
+      <div class="fl-sub">Bragging rights, witnessed only by your cat.</div>
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Unlockables</div><div class="l2">Interactions unlock emotes, sparkles and glory.</div></div>
+          <label class="sw"><input type="checkbox" id="achievements"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+      </div>
+      <div class="ach-grid" id="achGrid"></div>
+    </section>
+
+    <!-- ============ ABOUT ============ -->
+    <section class="page" id="page-about">
+      <h1 class="fl-h1">About</h1>
+      <div class="fl-sub">Made of code and cat sounds.</div>
+      <div class="fl-card about" id="about">
+        <div class="about-head">
+          <img src="../assets/icon.png" width="44" height="44" alt="MeowCat">
+          <div>
+            <div class="about-name">MeowCat <span class="ver" id="ver"></span></div>
+            <div class="hint">A procedurally animated desktop cat — every frame is drawn by code, no sprite frames.</div>
+          </div>
+        </div>
+        <div class="about-links">
+          <button class="chip" id="lnkDev">👨‍💻 Developer — github.com/mythos0</button>
+          <button class="chip" id="lnkRepo">🐾 Source &amp; releases</button>
+          <button class="chip" id="lnkIssues">🐛 Report an issue</button>
+        </div>
+        <div class="hint" style="margin-top:8px;">
+          Runtime: Electron <span id="verElectron"></span> · Canvas 2D renderer · 20+ breeds · 31 actions · 16 emotes<br>
+          Sounds recorded from real cats. MIT License © 2026 mythos0.
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="gotoReminders">⏰ Reminders…</button>
+        <span style="flex:1"></span>
+        <button class="ghost" id="closeBtn">Close</button>
+      </div>
+    </section>
+
+  </main>
+</div>
 <div class="toast" id="toast"></div>
 
 <script type="module">
-import { drawCat, PALETTES, BODIES } from '../src/cat-renderer.js';
+import { drawCat, PALETTES, BODIES, registerSkin } from '../src/cat-renderer.js';
 import { BREED_PRICES as prices } from '../src/settings-store.js';
+import { ACHIEVEMENTS, affectionProgress } from '../src/achievements.js';
 
 const $ = id => document.getElementById(id);
 let S = null;
@@ -114,11 +372,23 @@ function toast(msg, ok = true) {
   t.style.color = ok ? 'var(--ok)' : 'var(--err)';
   t.style.display = 'block';
   clearTimeout(t._h);
-  t._h = setTimeout(() => t.style.display = 'none', 2200);
+  t._h = setTimeout(() => t.style.display = 'none', 2400);
 }
 
 function save(kv) { return window.meow.setSettings(kv); }
 
+// ---------------- nav ----------------
+document.querySelectorAll('#nav .item').forEach(el => {
+  el.onclick = () => {
+    document.querySelectorAll('#nav .item').forEach(x => x.classList.remove('on'));
+    el.classList.add('on');
+    document.querySelectorAll('section.page').forEach(p => p.classList.remove('on'));
+    $('page-' + el.dataset.page).classList.add('on');
+    if (el.dataset.page === 'achieve') renderAchievements();
+  };
+});
+
+// ---------------- previews ----------------
 function drawPreview(canvas, breed) {
   const dpr = 2;
   canvas.width = 150 * dpr; canvas.height = 96 * dpr;
@@ -133,6 +403,29 @@ function drawPreview(canvas, breed) {
   g.restore();
 }
 
+let homeT = 0;
+function homeLoop() {
+  const cv = $('homeCat');
+  if (cv && S) {
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, cv.width, cv.height);
+    homeT += 0.016;
+    g.save();
+    g.translate(cv.width / 2, cv.height - 12);
+    const st = S.companionCat ? 'walk' : 'sit';
+    drawCat(g, { t: homeT, state: st, breed: S.breed, dir: 1, scale: 0.85, hat: currentHat() });
+    g.restore();
+  }
+  requestAnimationFrame(homeLoop);
+}
+function currentHat() {
+  if (S && S.seasonalSkins && S.season) return S.season;
+  const sk = S && (S.customSkins || []).find(s => 'custom:' + s.id === S.breed);
+  return sk && sk.def && sk.def.hat ? sk.def.hat : null;
+}
+requestAnimationFrame(homeLoop);
+
+// ---------------- store ----------------
 function renderBreeds() {
   const owned = S.owned || [];
   const unlimited = !!S.unlimitedCoins;
@@ -162,6 +455,12 @@ function renderBreeds() {
       tag.textContent = breed === 'panda' ? '🐼 new' : 'new';
       d.appendChild(tag);
     }
+    if (breed.startsWith('custom:')) {
+      const tag = document.createElement('div');
+      tag.className = 'tagnew'; tag.style.background = 'rgba(95,159,216,0.2)';
+      tag.textContent = 'community';
+      d.appendChild(tag);
+    }
     drawPreview(cv, breed);
     d.onclick = async () => {
       if (!owned.includes(breed) && !unlimited) {
@@ -171,54 +470,196 @@ function renderBreeds() {
         return;
       }
       if (!owned.includes(breed)) {
-        const r = await window.meow.buyBreed(breed);   // free unlock (unlimited promo)
+        const r = await window.meow.buyBreed(breed);
         if (r.ok) { S = await refresh(); }
       }
       S.breed = breed;
-      drawSelection();
       await save({ breed });
+      S = await refresh();
     };
     grid.appendChild(d);
   }
 }
 
-function drawSelection() {
-  document.querySelectorAll('.breed').forEach(el => el.classList.remove('sel'));
-  renderBreeds();
+// ---------------- skin import ----------------
+$('importSkin').onclick = () => $('skinFile').click();
+$('skinFile').onchange = async e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    const text = await f.text();
+    const r = await window.meow.importSkin(text);
+    if (r.ok) { toast('Skin imported — check the store!'); S = await refresh(); }
+    else toast('Import failed: ' + r.reason, false);
+  } catch { toast('Could not read that file', false); }
+  e.target.value = '';
+};
+
+// ---------------- achievements ----------------
+function renderAchievements() {
+  const grid = $('achGrid');
+  const got = new Set(S.unlocked || []);
+  grid.innerHTML = '';
+  for (const a of ACHIEVEMENTS) {
+    const d = document.createElement('div');
+    d.className = 'ach' + (got.has(a.id) ? ' got' : '');
+    d.innerHTML = `<div class="ic">${a.icon}</div><div><div class="nm">${escapeHtml(a.name)}</div><div class="ds">${escapeHtml(a.desc)}</div></div>`;
+    grid.appendChild(d);
+  }
 }
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ---------------- no-walk zones ----------------
+function renderZones() {
+  const list = S.noWalkZoneList || [];
+  const box = $('zoneList');
+  box.innerHTML = '';
+  list.forEach((z, i) => {
+    const row = document.createElement('div');
+    row.className = 'zone-row';
+    row.innerHTML = `<span class="hint">zone ${i + 1}:</span> x ${z.x} · y ${z.y} · w ${z.w} · h ${z.h}`;
+    const del = document.createElement('button');
+    del.className = 'ghost small'; del.textContent = '✕';
+    del.onclick = async () => {
+      const next = (S.noWalkZoneList || []).filter((_, j) => j !== i);
+      S.noWalkZoneList = next;
+      await save({ noWalkZoneList: next });
+      renderZones();
+    };
+    row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+$('zoneAdd').onclick = async () => {
+  const z = { x: +$('zx').value || 0, y: +$('zy').value || 0, w: +$('zw').value || 100, h: +$('zh').value || 100 };
+  const next = [...(S.noWalkZoneList || []), z].slice(0, 24);
+  S.noWalkZoneList = next;
+  await save({ noWalkZoneList: next });
+  renderZones();
+  toast('Zone added — the cat shall respect it');
+};
+
+// ---------------- pomodoro ----------------
+function renderPomo(p) {
+  if (!p || !p.mode || p.mode === 'idle') { $('pomoState').textContent = 'Not running.'; return; }
+  const s = Math.max(0, Math.ceil(p.remaining / 1000));
+  $('pomoState').textContent = `${p.mode === 'focus' ? '🍅 Focus' : '☕ Break'} — ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} remaining`;
+}
+$('pomoFocus').onclick = async () => { renderPomo(await window.meow.startPomodoro('focus')); };
+$('pomoBreak').onclick = async () => { renderPomo(await window.meow.startPomodoro('break')); };
+$('pomoStop').onclick = async () => { await window.meow.stopPomodoro(); renderPomo(null); };
+window.meow.on('pomodoro', renderPomo);
+
+// ---------------- status file browse ----------------
+$('statusBrowse').onclick = async () => {
+  // Electron file dialog lives in main; reuse settings:set after manual entry.
+  // Simple approach: prompt-style via input focus (portable).
+  $('statusFile').focus();
+  toast('Type the file path the cat should watch', true);
+};
+$('statusFile').onchange = () => save({ statusFile: $('statusFile').value.trim() });
+
+// ---------------- quick actions ----------------
+$('qaDance').onclick = () => window.meow.openWindow && window.meow.quickAction?.('dance');
+$('qaFeed').onclick = () => window.meow.quickAction?.('eat');
+$('qaLaser').onclick = () => window.meow.quickAction?.('laser');
+$('qaPhoto').onclick = () => window.meow.quickAction?.('photo');
+
+// ---------------- sync controls ----------------
+function bindSwitch(id, key, after) {
+  $(id).onchange = e => { save({ [key]: e.target.checked }); if (after) after(e.target.checked); };
+}
+bindSwitch('sounds', 'sounds');
+bindSwitch('topmost', 'topmost');
+bindSwitch('hopToggle', 'windowHopping');
+bindSwitch('autoStart', 'autoStart', v => toast(v ? 'Will start with Windows' : 'Auto-start disabled'));
+bindSwitch('hideInFullscreen', 'hideInFullscreen');
+bindSwitch('noWalkZones', 'noWalkZones');
+bindSwitch('seasonalSkins', 'seasonalSkins');
+bindSwitch('companionCat', 'companionCat', v => toast(v ? 'A friend has arrived 🐾' : 'Companion dismissed'));
+bindSwitch('reactSystemSpikes', 'reactSystemSpikes');
+bindSwitch('reactLowBattery', 'reactLowBattery');
+bindSwitch('timeOfDayMood', 'timeOfDayMood');
+bindSwitch('reactNewWindows', 'reactNewWindows');
+bindSwitch('reactApps', 'reactApps');
+bindSwitch('reactTyping', 'reactTyping');
+bindSwitch('stalkCursor', 'stalkCursor');
+bindSwitch('reactMusic', 'reactMusic');
+bindSwitch('contextualSounds', 'contextualSounds');
+bindSwitch('duckDuringCalls', 'duckDuringCalls');
+bindSwitch('hideDuringCalls', 'hideDuringCalls');
+bindSwitch('pomodoro', 'pomodoro');
+bindSwitch('reactBuildStatus', 'reactBuildStatus');
+bindSwitch('globalHotkeys', 'globalHotkeys');
+bindSwitch('photoMode', 'photoMode');
+bindSwitch('achievements', 'achievements');
 
 function syncControls() {
   $('size').value = S.size; $('sizeV').textContent = Math.round(S.size * 100) + '%';
   $('opacity').value = S.opacity; $('opV').textContent = Math.round(S.opacity * 100) + '%';
   $('speed').value = S.speed; $('spV').textContent = S.speed + ' px/s';
-  $('sounds').checked = !!S.sounds;
-  $('topmost').checked = S.topmost !== false;
-  $('hopToggle').checked = S.windowHopping !== false;
-  $('autoStart').checked = !!S.autoStart;
+  for (const [id, key] of [
+    ['sounds', 'sounds'], ['topmost', 'topmost'], ['hopToggle', 'windowHopping'],
+    ['autoStart', 'autoStart'], ['hideInFullscreen', 'hideInFullscreen'],
+    ['noWalkZones', 'noWalkZones'], ['seasonalSkins', 'seasonalSkins'],
+    ['companionCat', 'companionCat'], ['reactSystemSpikes', 'reactSystemSpikes'],
+    ['reactLowBattery', 'reactLowBattery'], ['timeOfDayMood', 'timeOfDayMood'],
+    ['reactNewWindows', 'reactNewWindows'], ['reactApps', 'reactApps'],
+    ['reactTyping', 'reactTyping'], ['stalkCursor', 'stalkCursor'],
+    ['reactMusic', 'reactMusic'], ['contextualSounds', 'contextualSounds'],
+    ['duckDuringCalls', 'duckDuringCalls'], ['hideDuringCalls', 'hideDuringCalls'],
+    ['pomodoro', 'pomodoro'], ['reactBuildStatus', 'reactBuildStatus'],
+    ['globalHotkeys', 'globalHotkeys'], ['photoMode', 'photoMode'], ['achievements', 'achievements'],
+  ]) $(id).checked = S[key] !== undefined ? !!S[key] : false;
+  $('statusFile').value = S.statusFile || '';
   $('coins').textContent = '🪙 ' + (S.coins ?? 0);
+  $('coins2').textContent = '🪙 ' + (S.coins ?? 0);
   $('shopHint').textContent = S.unlimitedCoins
     ? '🎁 Unlimited-coins promo — every breed unlocks free!'
     : 'Earn 1 🪙 every 30s · +2 🪙 every pet tap';
+  const pr = affectionProgress(S.affection || 0);
+  $('affLevel').textContent = `💗 Lv.${pr.level}`;
+  $('affBar').style.width = pr.pct + '%';
+  $('affPerk').textContent = pr.next
+    ? `${pr.pct}% to Lv.${pr.next.level} (${pr.next.at - (S.affection || 0)} pets to go)`
+    : 'Max level — the cat would die for you. Legally.';
+  const st = S.stats || {};
+  $('statLine').textContent = `🐾 ${st.pets || 0} pets · 🪟 ${st.jumps || 0} jumps · 🐟 ${st.fish || 0} fish · 🔴 ${st.lasers || 0} lasers · 🧘 ${st.nuzzles || 0} nuzzles`;
+  const nCustom = (S.customSkins || []).length;
+  $('customHint').style.display = nCustom ? 'none' : 'block';
+  if (S.season) $('seasonHint').textContent = `Active this month: the ${S.season} hat.`;
 }
 
 async function refresh() {
   S = await window.meow.getSettings();
+  registerCustomSkins();
   syncControls();
   renderBreeds();
+  renderZones();
+  renderAchievements();
   return S;
+}
+
+function registerCustomSkins() {
+  for (const sk of S.customSkins || []) registerSkin(sk.def, sk.id);
 }
 
 $('size').oninput = e => { S.size = +e.target.value; $('sizeV').textContent = Math.round(S.size * 100) + '%'; save({ size: S.size }); };
 $('opacity').oninput = e => { S.opacity = +e.target.value; $('opV').textContent = Math.round(S.opacity * 100) + '%'; save({ opacity: S.opacity }); };
 $('speed').oninput = e => { S.speed = +e.target.value; $('spV').textContent = S.speed + ' px/s'; save({ speed: S.speed }); };
-$('sounds').onchange = e => save({ sounds: e.target.checked });
-$('topmost').onchange = e => save({ topmost: e.target.checked });
-$('hopToggle').onchange = e => save({ windowHopping: e.target.checked });
-$('autoStart').onchange = e => { save({ autoStart: e.target.checked }); toast(e.target.checked ? 'Will start with Windows' : 'Auto-start disabled'); };
-$('gotoReminders').onclick = () => focusReminders();
+
+$('gotoReminders').onclick = () => {
+  document.querySelectorAll('#nav .item').forEach(x => x.classList.remove('on'));
+  document.querySelector('[data-page="focus"]').classList.add('on');
+  document.querySelectorAll('section.page').forEach(p => p.classList.remove('on'));
+  $('page-focus').classList.add('on');
+};
 $('closeBtn').onclick = () => window.meow.closeWindow('settings');
 
-// ---- Reminders (v3.2: merged into Settings — one helper window, less RAM) ----
+// ---------------- reminders ----------------
 function fmtWhen(ms) {
   const d = new Date(ms);
   return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -242,10 +683,6 @@ async function renderReminders() {
     row.appendChild(del);
     box.appendChild(row);
   }
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function defaultWhen() {
@@ -273,17 +710,21 @@ $('addBtn').onclick = async () => {
 };
 
 function focusReminders() {
-  $('remindersSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('#nav .item').forEach(x => x.classList.remove('on'));
+  document.querySelector('[data-page="focus"]').classList.add('on');
+  document.querySelectorAll('section.page').forEach(p => p.classList.remove('on'));
+  $('page-focus').classList.add('on');
 }
 window.meow.on('focus-reminders', focusReminders);
 $('remWhen').value = defaultWhen();
 renderReminders();
 
-// ---- About page ----
+// ---------------- about ----------------
 (async () => {
   try {
     const info = await window.meow.appInfo();
     $('ver').textContent = 'v' + info.version;
+    $('navVer').textContent = 'v' + info.version;
     $('verElectron').textContent = 'v' + info.electron;
   } catch { $('ver').textContent = ''; }
 })();

@@ -1,6 +1,6 @@
 // main.js — MeowCat Electron main process (ESM)
 'use strict';
-import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell, globalShortcut, powerMonitor, dialog } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -11,38 +11,25 @@ import { createTopmostEnforcer } from './src/topmost.js';
 import { createWindowScanner } from './src/window-scan.js';
 import { createFastWindows } from './src/fast-windows.js';
 import { computeRegionSize, initialOrigin } from './src/region.js';
+import { createSysMonitor } from './src/sys-monitor.js';
+import { createMusicWatcher } from './src/music-watcher.js';
+import {
+  createSpikeDetector, createTypingMeter,
+  batteryCrisis, shouldDanceParty, isFullscreenWindow, diffWindows,
+  parseProcessList, findCallApp, findEditorApp, musicReaction, parseStatusFile,
+} from './src/system-reactions.js';
+import { createPomodoro, fmtRemaining } from './src/pomodoro.js';
+import { checkUnlocks, ACHIEVEMENTS, affectionProgress } from './src/achievements.js';
+import { seasonHat, validateSkinDef } from './src/cat-renderer.js';
 
 // ------------------------------------------------------------------ v3.2/v3.4 memory & process diet
-// User-visible goal: fewest possible processes & lowest RAM in Task Manager.
-//  1. no GPU process — the cat is a tiny 2D canvas, Skia software rendering is
-//     plenty and a full GPU process (~50-120MB) is pure waste
-//  2. single helper window: Reminders lives INSIDE Settings (one warm hidden
-//     renderer instead of two), self-destroying after 5 idle minutes (v3.4)
 app.disableHardwareAcceleration();                         // no GPU process (API)
 app.commandLine.appendSwitch('in-process-gpu');            // belt & braces
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=160'); // applies to renderers
-process.title = 'MeowCat';                     // honest name in ps/top (works: comm=MeowCat)
-// v3.5 identity: Windows groups taskbar buttons, names toast notifications and
-// shows the "app" in Task Manager's App section via the AppUserModelID —
-// without this, Windows can fall back to the generic "Electron" identity.
-// (Electron 33 has the setter but no getter — the constant below is also what
-// app-info reports so the e2e can assert it.)
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=160');
+process.title = 'MeowCat';
 const MEOW_AUMID = 'com.mythos0.meowcat';
 app.setAppUserModelId(MEOW_AUMID);
-
-// v3.4 process diet — the honest floor for stock Electron, verified empirically:
-//  * TRUE single-process (--single-process) SIGTRAP-crashes a BLANK Electron 33
-//    app at boot (framework bug in Chromium 130) → unusable, don't ship it.
-//  * Switches appended here never reach the EARLY helper processes (zygotes,
-//    network utility spawn before our JS runs) — verified inert, so the only
-//    way to pass them would be a self-relaunch hack, not worth the fragility.
-//  * Windows has no zygotes and crashpad only starts with crashReporter.start()
-//    (we never start it) → at rest Windows Task Manager shows:
-//        MeowCat.exe  (main)  +  MeowCat.exe (renderer)  +  network helper
-//    = 3 MeowCat entries, all named MeowCat (was 7 "electron" rows pre-v3.2).
-//  * The warm settings renderer now self-destroys after 5 idle minutes
-//    (fast-windows.js), so the at-rest count is what the user measures.
 
 // v3.3 region window: current size + origin (screen coords) of the overlay
 let region = { w: 480, h: 434 };
@@ -55,6 +42,7 @@ let enforcer = null;
 let scanner = null;
 let schedTimer = null;
 let coinTimer = null;
+let quitTimer = null;
 let quitting = false;
 
 // ---------------------------------------------------------------- settings backend (fs)
@@ -78,16 +66,20 @@ function persistReminders() {
   store.set('reminders', sched.list());
 }
 
-// v3.4: window-top platform scanner, created on demand (settings toggle)
+function sendToCat(channel, data) {
+  if (catWin && !catWin.isDestroyed()) {
+    try { catWin.webContents.send(channel, data); } catch { /* window gone */ }
+  }
+}
+
+// v3.4: window-top platform scanner, created on demand
 function ensureScanner() {
   if (process.platform !== 'win32') return;
   if (!scanner) {
     scanner = createWindowScanner({
       spawnFn: spawn,
       intervalMs: 3200,
-      onResult: plats => {
-        if (catWin && !catWin.isDestroyed()) catWin.webContents.send('platforms', plats);
-      },
+      onResult: onWindowScan,
     });
   }
   scanner.start();
@@ -98,7 +90,10 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => { if (catWin) catWin.show(); });
+  app.on('second-instance', () => {
+    if (hiddenByUser) { hiddenByUser = false; updateCatVisibility(); }
+    else if (catWin && !catWin.isDestroyed()) catWin.show();
+  });
 }
 
 // ---------------------------------------------------------------- cat overlay window
@@ -106,8 +101,6 @@ const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
 function createCatWindow() {
   const wa = screen.getPrimaryDisplay().workArea;
-  // v3.3 RAM diet: the overlay is a small region that follows the cat
-  // (fullscreen transparent surface used to dominate renderer RAM).
   const scale = Number(store.get('size')) || 1.0;
   region = computeRegionSize(scale, wa);
   const spawnX = wa.x + wa.width / 2;
@@ -123,12 +116,14 @@ function createCatWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true, nodeIntegration: false,
       backgroundThrottling: false,
-      v8CacheOptions: 'none',   // don't hold code-cache blobs we never reuse
+      v8CacheOptions: 'none',
     },
   });
   catWin.setMenuBarVisibility(false);
   catWin.loadFile(path.join(__dirname, 'windows', 'cat.html'));
-  catWin.once('ready-to-show', () => catWin.show());
+  catWin.once('ready-to-show', () => {
+    if (!hiddenByUser && !hiddenByCall && !hiddenByFullscreen) catWin.show();
+  });
 
   enforcer = createTopmostEnforcer(catWin, { level: 'screen-saver', intervalMs: 2000 });
   enforcer.start();
@@ -153,37 +148,54 @@ function createTray() {
     tray = null;
     return;
   }
+  buildTrayMenu();
+  tray.setToolTip('MeowCat — your desktop cat');
+  tray.on('click', () => openSettings());
+}
+
+function buildTrayMenu() {
+  if (!tray) return;
+  const pomo = pomodoroEngine;
+  const pomoLabel = pomo.mode === 'idle' ? '🍅 Pomodoro' : `🍅 ${pomo.mode === 'focus' ? 'Focus' : 'Break'} ${fmtRemaining(pomo.remaining)}`;
   const menu = Menu.buildFromTemplate([
     { label: 'MeowCat ' + app.getVersion(), enabled: false },
     { type: 'separator' },
-    { label: 'Dance!', click: () => catWin?.webContents.send('do-action', 'dance') },
-    { label: 'Feed', click: () => catWin?.webContents.send('do-action', 'eat') },
-    { label: 'Sleep now', click: () => catWin?.webContents.send('do-action', 'sleep') },
-    { label: 'Laser pointer!', click: () => catWin?.webContents.send('laser-start') },
+    { label: 'Dance!', click: () => sendToCat('do-action', 'dance') },
+    { label: 'Feed', click: () => sendToCat('do-action', 'eat') },
+    { label: 'Sleep now', click: () => sendToCat('do-action', 'sleep') },
+    { label: 'Laser pointer!', click: () => sendToCat('laser-start') },
+    { label: '📸 Photo (PNG)', click: () => sendToCat('photo-mode', {}) },
+    { type: 'separator' },
+    {
+      label: pomoLabel,
+      submenu: [
+        { label: 'Start focus (25 min)', click: () => startPomodoro('focus') },
+        { label: 'Start break (5 min)', click: () => startPomodoro('break') },
+        { label: 'Stop timer', enabled: pomo.mode !== 'idle', click: () => stopPomodoro() },
+      ],
+    },
+    { label: hiddenByUser ? '🐔 Show cat' : '🙈 Hide cat', click: () => { hiddenByUser = !hiddenByUser; updateCatVisibility(); } },
     { type: 'separator' },
     { label: 'Reminders…', click: () => openReminders() },
     { label: 'Settings…', click: () => openSettings() },
     { type: 'separator' },
     { label: 'Quit', click: () => { quitting = true; app.quit(); } },
   ]);
-  tray.setToolTip('MeowCat — your desktop cat');
   tray.setContextMenu(menu);
-  tray.on('click', () => openSettings());
 }
 
 // ---------------------------------------------------------------- helper windows
-// v3.2: ONE warm helper window — Reminders is a section inside Settings now,
-// so there is a single hidden renderer instead of two (RAM diet).
 const WIN_SPECS = {
-  settings: { width: 640, height: 940, title: 'MeowCat Settings' },
+  settings: { width: 920, height: 980, title: 'MeowCat Settings', resizable: true, minW: 780, minH: 620 },
 };
 
 function makeWindow(name) {
   const spec = WIN_SPECS[name];
   const w = new BrowserWindow({
     width: spec.width, height: spec.height, show: false,
-    resizable: false, minimizable: true, autoHideMenuBar: true,
-    title: spec.title, backgroundColor: '#15161c', icon: ICON_PATH,
+    resizable: spec.resizable ?? false, minimizable: true, autoHideMenuBar: true,
+    minWidth: spec.minW, minHeight: spec.minH,
+    title: spec.title, backgroundColor: '#1c1b22', icon: ICON_PATH,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
   });
   w.loadFile(path.join(__dirname, 'windows', name + '.html'));
@@ -200,7 +212,6 @@ function openSettings() {
   try { return fastWins.show('settings'); } catch { fastWins.warm('settings'); return fastWins.show('settings'); }
 }
 
-// 'reminders' opens the same Settings window (the UI scrolls to the section)
 function openReminders() {
   const w = openSettings();
   try { w?.webContents?.send('focus-reminders'); } catch {}
@@ -211,7 +222,7 @@ function startBackgroundJobs() {
   schedTimer = setInterval(() => {
     const due = sched.dueReminders();
     for (const item of due) {
-      if (catWin && !catWin.isDestroyed()) catWin.webContents.send('reminder-fired', item);
+      sendToCat('reminder-fired', item);
       try {
         if (Notification.isSupported()) {
           const n = new Notification({
@@ -219,10 +230,11 @@ function startBackgroundJobs() {
             body: 'Your cat has a message for you!',
             silent: !item.sound,
           });
-          if (item.sound) n.on('click', () => catWin?.webContents.send('do-action', 'dance'));
+          if (item.sound) n.on('click', () => sendToCat('do-action', 'dance'));
           n.show();
         }
       } catch {}
+      bumpStatAndCheck('reminders', 1);
     }
     if (due.length) persistReminders();
   }, 1000);
@@ -231,12 +243,23 @@ function startBackgroundJobs() {
   // passive coin income: +1 / 30s
   coinTimer = setInterval(() => { store.addCoins(1); }, 30000);
   coinTimer.unref?.();
+
+  // v3.6: pomodoro heartbeat (1s while a timer runs)
+  quitTimer = setInterval(() => {
+    const evt = pomodoroEngine.tick();
+    if (evt === 'focus-done') {
+      onPomodoroDone('focus');
+    } else if (evt === 'break-done') {
+      onPomodoroDone('break');
+    } else if (pomodoroEngine.mode !== 'idle') {
+      // live countdown to the settings UI (every 5s is plenty)
+      if (Date.now() % 5000 < 1100) broadcastPomodoro('tick');
+    }
+  }, 1000);
+  quitTimer.unref?.();
 }
 
 // ---------------------------------------------------------------- auto-start
-// v3.4: for the PORTABLE build process.execPath points into the throwaway
-// %TEMP% extraction dir (gone after reboot) — register the original .exe the
-// user actually launched instead, so auto-start survives temp cleanups.
 function autoStartPath() {
   try {
     const dir = process.env.PORTABLE_EXECUTABLE_DIR;
@@ -254,15 +277,338 @@ function applyAutoStart(on) {
   try { app.setLoginItemSettings({ openAtLogin: !!on, path: autoStartPath() }); } catch {}
 }
 
-// ---------------------------------------------------------------- IPC
-ipcMain.handle('settings:get', () => ({ ...store.all, workArea: screen.getPrimaryDisplay().workArea }));
+// ================================================================ v3.6 feature systems
+
+// ---------- visibility (hotkey / call / fullscreen auto-hide) ----------
+let hiddenByUser = false;         // global hotkey or tray "Hide cat"
+let hiddenByCall = false;         // OBS/Zoom/Teams detected
+let hiddenByFullscreen = false;   // fullscreen app has focus
+let lastCallToast = 0;
+
+function updateCatVisibility() {
+  const show = !hiddenByUser && !hiddenByCall && !hiddenByFullscreen;
+  if (catWin && !catWin.isDestroyed()) {
+    try { show ? catWin.show() : catWin.hide(); } catch { /* gone */ }
+  }
+  if (tray) {
+    const why = hiddenByUser ? 'hidden by hotkey' : hiddenByCall ? 'hidden — call detected' : hiddenByFullscreen ? 'hidden — fullscreen app' : 'your desktop cat';
+    try { tray.setToolTip('MeowCat — ' + why); } catch {}
+  }
+  buildTrayMenu();   // refresh Hide/Show label
+}
+
+// ---------- system monitor (CPU/RAM spikes + call-app detection) ----------
+const spikeDetector = createSpikeDetector({});
+let callAppActive = false;
+let duckSent = false;
+
+function onSystemSample({ cpu, ram }) {
+  if (store.get('reactSystemSpikes')) {
+    const verdict = spikeDetector.push({ cpu, ram });
+    if (verdict === 'stress') sendToCat('system-event', { type: 'stress' });
+  }
+}
+
+function onProcessList(raw) {
+  const names = parseProcessList(raw);
+  if (!names.length) return;
+  const callApp = findCallApp(names);
+  // auto-hide during screen share / recording / calls
+  if (store.get('hideDuringCalls')) {
+    if (!!callApp !== hiddenByCall) {
+      hiddenByCall = !!callApp;
+      updateCatVisibility();
+      if (hiddenByCall && Date.now() - lastCallToast > 10 * 60_000 && Notification.isSupported()) {
+        lastCallToast = Date.now();
+        try {
+          new Notification({ title: '🐱 MeowCat is taking cover', body: 'Call or recording detected — the cat will be back when you\u2019re done.' }).show();
+        } catch {}
+      }
+    }
+  }
+  // auto-duck sounds during calls
+  if (store.get('duckDuringCalls')) {
+    if (!!callApp !== duckSent) {
+      duckSent = !!callApp;
+      sendToCat('duck', duckSent);
+    }
+  }
+  void callAppActive;   // reserved for finer-grained logic
+  callAppActive = !!callApp;
+}
+
+const sysMon = createSysMonitor({
+  spawnFn: spawn,
+  readFn: p => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } },
+  intervalMs: 5000,
+  onSample: onSystemSample,
+  onProcesses: onProcessList,
+});
+
+// ---------- music watcher (SMTC / playerctl) ----------
+let prevMusic = null;
+const musicWatcher = createMusicWatcher({
+  spawnFn: spawn,
+  onMusic: parsed => {
+    const action = musicReaction(prevMusic, parsed);
+    prevMusic = parsed;
+    if (action && store.get('reactMusic')) sendToCat('music', { action, ...parsed });
+  },
+});
+
+// ---------- typing meter (global keyboard hook on Windows) ----------
+const typingMeter = createTypingMeter({});
+let typingHook = null;
+let typingHookFailed = false;
+
+async function startTypingHook() {
+  if (typingHook || typingHookFailed || !store.get('reactTyping')) return;
+  try {
+    const mod = await import('uiohook-napi');
+    typingHook = mod.keyboard;
+    typingHook.addListener('keydown', () => typingMeter.key());
+    typingHook.start();
+  } catch {
+    typingHookFailed = true;   // no hook (e.g. dev Linux without X11 libs) — feature degrades
+    typingHook = null;
+  }
+}
+function stopTypingHook() {
+  if (typingHook) { try { typingHook.stop(); } catch {} typingHook = null; }
+}
+
+// ---------- idle ticker: typing pounce/nap, cursor stalking, dance party ----------
+let idleTimer = null;
+let cursorTimer = null;
+let lastCursor = null;
+let cursorIdleSince = 0;
+let cursorIdleSent = false;
+let lastPartyAt = 0;
+let lastNapAt = 0;
+
+function startIdleTicker() {
+  if (idleTimer) return;
+  idleTimer = setInterval(() => {
+    try {
+      // typing bursts -> excited pounce at the keyboard
+      if (store.get('reactTyping')) {
+        const act = typingMeter.tick();
+        if (act === 'pounce') sendToCat('typing', { action: 'pounce' });
+      }
+      // system-wide idle: dance party (screensaver mode) + nap
+      let idleSec = 0;
+      try { idleSec = powerMonitor.getSystemIdleTime(); } catch { idleSec = 0; }
+      if (store.get('reactTyping') && idleSec > 12 * 60 && Date.now() - lastNapAt > 30 * 60_000) {
+        lastNapAt = Date.now();
+        sendToCat('typing', { action: 'nap' });
+      }
+      if (store.get('dancePartyIdle') &&
+          shouldDanceParty(idleSec, { lastPartyAgeSec: (Date.now() - lastPartyAt) / 1000 })) {
+        lastPartyAt = Date.now();
+        sendToCat('dance-party', {});
+      }
+    } catch { /* never die over a ticker */ }
+  }, 3000);
+  idleTimer.unref?.();
+}
+function stopIdleTicker() { if (idleTimer) { clearInterval(idleTimer); idleTimer = null; } }
+
+function startCursorWatch() {
+  if (cursorTimer || !store.get('stalkCursor')) return;
+  cursorTimer = setInterval(() => {
+    try {
+      const p = screen.getCursorScreenPoint();
+      const moved = lastCursor ? Math.hypot(p.x - lastCursor.x, p.y - lastCursor.y) : 999;
+      lastCursor = p;
+      if (moved < 4) {
+        if (!cursorIdleSince) cursorIdleSince = Date.now();
+        if (!cursorIdleSent && Date.now() - cursorIdleSince > 2500) {
+          cursorIdleSent = true;
+          sendToCat('cursor-idle', p);
+        }
+      } else if (cursorIdleSent) {
+        cursorIdleSince = 0; cursorIdleSent = false;
+        sendToCat('cursor-busy', p);
+      }
+    } catch { /* headless dev */ }
+  }, 500);
+  cursorTimer.unref?.();
+}
+function stopCursorWatch() {
+  if (cursorTimer) { clearInterval(cursorTimer); cursorTimer = null; }
+  cursorIdleSent = false; cursorIdleSince = 0;
+}
+
+// ---------- window scan results: platforms + new-window + fullscreen + apps ----------
+let lastPlatSig = '[]';
+let lastGameRoar = 0;
+
+function onWindowScan(plats) {
+  const clean = plats.map(p => ({ x: p.x, y: p.y, w: p.w, h: p.h, title: p.title, proc: p.proc }));
+  sendToCat('platforms', clean);
+
+  // new app opened -> walk over and investigate
+  if (store.get('reactNewWindows')) {
+    const prevParsed = JSON.parse(lastPlatSig);
+    const added = diffWindows(prevParsed, clean);
+    if (added.length) {
+      const w = added[0];
+      sendToCat('new-window', { x: w.x + w.w / 2, y: w.y, title: w.title });
+    }
+  }
+  lastPlatSig = JSON.stringify(clean);
+
+  // fullscreen / exclusive app -> politely leave the stage
+  if (store.get('hideInFullscreen')) {
+    const wa = screen.getPrimaryDisplay().workArea;
+    const fsNow = clean.some(w => isFullscreenWindow(w, wa));
+    if (fsNow !== hiddenByFullscreen) { hiddenByFullscreen = fsNow; updateCatVisibility(); }
+  }
+
+  // app-specific reactions: loaf on editors, get hyped over games
+  if (store.get('reactApps') && clean.length) {
+    const top = clean[0];             // EnumWindows is z-ordered: first ≈ foreground
+    const proc = top.proc || '';
+    if (findEditorApp([proc])) {
+      sendToCat('app-focus', { kind: 'editor', rect: { x: top.x, y: top.y, w: top.w, h: top.h }, proc });
+    } else if (Date.now() - lastGameRoar > 90_000 &&
+               /steam|epic|riot|minecraft|javaw|roblox|league|valorant|unity|unreal|game/i.test(proc)) {
+      lastGameRoar = Date.now();
+      sendToCat('app-focus', { kind: 'game', proc });
+    }
+  }
+}
+
+// ---------- build/test status file watcher ----------
+let statusWatcher = null;
+let statusDebounce = null;
+
+function applyStatusFile(on) {
+  try { statusWatcher?.close(); } catch {}
+  statusWatcher = null;
+  const p = store.get('statusFile');
+  if (!on || !p) return;
+  const readIt = () => {
+    clearTimeout(statusDebounce);
+    statusDebounce = setTimeout(() => {
+      try {
+        const verdict = parseStatusFile(fs.readFileSync(p, 'utf8'));
+        if (verdict === 'good') sendToCat('system-event', { type: 'build-ok' });
+        else if (verdict === 'bad') sendToCat('system-event', { type: 'build-bad' });
+      } catch { /* file vanished mid-write */ }
+    }, 700);
+  };
+  try {
+    statusWatcher = fs.watch(p, { persistent: false }, readIt);
+    readIt();
+  } catch { /* bad path */ }
+}
+
+// ---------- pomodoro ----------
+const pomodoroEngine = createPomodoro();
+
+function startPomodoro(kind) {
+  if (!store.get('pomodoro')) return null;
+  pomodoroEngine.start(kind);
+  buildTrayMenu();
+  broadcastPomodoro('start');
+  return pomodoroEngine.snapshot();
+}
+function stopPomodoro() {
+  pomodoroEngine.stop();
+  buildTrayMenu();
+  broadcastPomodoro('stop');
+}
+function onPomodoroDone(which) {
+  buildTrayMenu();
+  if (which === 'focus') {
+    sendToCat('pomodoro', { event: 'focus-done' });
+    try {
+      if (Notification.isSupported()) {
+        new Notification({ title: '🍅 Focus round done!', body: 'Your cat did a celebration dance. Take 5!' }).show();
+      }
+    } catch {}
+    const hour = new Date().getHours();
+    if (hour >= 22 || hour < 5) bumpStatAndCheck('pomodoroLate', 1);
+  } else {
+    sendToCat('pomodoro', { event: 'break-done' });
+    try {
+      if (Notification.isSupported()) {
+        new Notification({ title: '☕ Break over', body: 'Back to it — your cat is watching.' }).show();
+      }
+    } catch {}
+  }
+  broadcastPomodoro('done');
+}
+function broadcastPomodoro(event) {
+  const snap = pomodoroEngine.snapshot();
+  sendToCat('pomodoro', { event, ...snap });
+  try {
+    const w = fastWins.isAlive('settings') ? fastWins.get('settings') : null;
+    if (w && !w.isDestroyed()) w.webContents.send('pomodoro', { event, ...snap });
+  } catch {}
+}
+
+// ---------- achievements + affection ----------
+function bumpStatAndCheck(key, n = 1) {
+  const v = store.bumpStat(key, n);
+  if (v != null) checkAndSendUnlocks();
+  return v;
+}
+
+function checkAndSendUnlocks() {
+  if (!store.get('achievements')) return;
+  const fresh = checkUnlocks(store.get('stats'), store.get('unlocked'));
+  for (const id of fresh) {
+    if (store.unlock(id)) {
+      const a = ACHIEVEMENTS.find(x => x.id === id);
+      if (a) sendToCat('achievement', { id: a.id, name: a.name, icon: a.icon, desc: a.desc });
+    }
+  }
+}
+
+// ---------- feature flag -> poller orchestration ----------
+function applyFeatureFlags() {
+  const needMonitor = store.get('reactSystemSpikes') || store.get('hideDuringCalls') || store.get('duckDuringCalls');
+  if (needMonitor) sysMon.start(); else { sysMon.stop(); spikeDetector.reset(); }
+  if (store.get('reactMusic')) musicWatcher.start(); else { musicWatcher.stop(); prevMusic = null; }
+  if (store.get('stalkCursor')) startCursorWatch(); else stopCursorWatch();
+  if (store.get('reactTyping') || store.get('dancePartyIdle')) { startIdleTicker(); startTypingHook(); }
+  else { stopIdleTicker(); stopTypingHook(); }
+  applyStatusFile(store.get('reactBuildStatus'));
+  applyHotkeys(store.get('globalHotkeys'));
+  const needScanner = store.get('windowHopping') || store.get('reactApps') ||
+                      store.get('reactNewWindows') || store.get('hideInFullscreen');
+  if (needScanner && process.platform === 'win32') ensureScanner();
+  else scanner?.stop();
+}
+
+// ---------- global hotkeys ----------
+function applyHotkeys(on) {
+  try {
+    if (on) {
+      globalShortcut.register('Control+Alt+C', () => { hiddenByUser = !hiddenByUser; updateCatVisibility(); });
+      globalShortcut.register('Control+Alt+P', () => { if (store.get('photoMode')) sendToCat('photo-mode', {}); });
+    } else {
+      globalShortcut.unregister('Control+Alt+C');
+      globalShortcut.unregister('Control+Alt+P');
+    }
+  } catch { /* hotkeys unavailable (headless) */ }
+}
+
+// ================================================================ IPC
+ipcMain.handle('settings:get', () => ({
+  ...store.all,
+  workArea: screen.getPrimaryDisplay().workArea,
+  season: seasonHat(new Date().getMonth()),
+}));
 ipcMain.handle('settings:set', (_e, kv) => {
   const applied = {};
   for (const [k, v] of Object.entries(kv || {})) {
     if (store.set(k, v)) applied[k] = v;
     if (k === 'autoStart') applyAutoStart(v);
-    if (k === 'windowHopping') { if (v) ensureScanner(); else scanner?.stop(); }
   }
+  applyFeatureFlags();
   if (catWin && !catWin.isDestroyed()) catWin.webContents.send('settings-changed', applied);
   return applied;
 });
@@ -278,9 +624,7 @@ ipcMain.handle('reminders:add', (_e, spec) => {
 });
 ipcMain.handle('reminders:remove', (_e, id) => { const ok = sched.remove(id); persistReminders(); return ok; });
 
-// v3.3: the cat window follows the cat — the renderer asks for origin moves
-// (and, when the size slider / workArea changes, resizes). Pure moves are
-// cheap native repositions; the surface is only reallocated on real resizes.
+// v3.3: the cat window follows the cat
 ipcMain.handle('region:move', (_e, rect) => {
   if (!catWin || catWin.isDestroyed()) return null;
   const wa = screen.getPrimaryDisplay().workArea;
@@ -306,18 +650,15 @@ ipcMain.handle('open-window', (_e, name) => {
   else openSettings();
 });
 
-// in-page Close buttons must hide via IPC: renderer-initiated window.close()
-// destroys the window outright and would bypass the warm-pool close handler
 ipcMain.handle('close-window', (_e, name) => {
   try { fastWins.hide('settings'); } catch { /* ignore */ }
 });
 
-// About page info + whitelisted external links (developer GitHub)
 ipcMain.handle('app-info', () => ({
   version: app.getVersion(),
   electron: process.versions.electron,
   platform: process.platform,
-  aumid: MEOW_AUMID,   // v3.5: e2e asserts this is MeowCat's
+  aumid: MEOW_AUMID,
 }));
 ipcMain.handle('open-external', (_e, url) => {
   try {
@@ -327,16 +668,16 @@ ipcMain.handle('open-external', (_e, url) => {
   } catch { /* ignore */ }
 });
 
-// right-click context menu on the cat, positioned at the cursor
 ipcMain.handle('context-menu', (_e, pos) => {
   const menu = Menu.buildFromTemplate([
     { label: '⚙ Settings…', click: () => openSettings() },
     { label: '⏰ Reminders…', click: () => openReminders() },
     { type: 'separator' },
-    { label: '💃 Dance!', click: () => catWin?.webContents.send('do-action', 'dance') },
-    { label: '🍖 Feed', click: () => catWin?.webContents.send('do-action', 'eat') },
-    { label: '💤 Sleep now', click: () => catWin?.webContents.send('do-action', 'sleep') },
-    { label: '🔴 Laser pointer!', click: () => catWin?.webContents.send('laser-start') },
+    { label: '💃 Dance!', click: () => sendToCat('do-action', 'dance') },
+    { label: '🍖 Feed', click: () => sendToCat('do-action', 'eat') },
+    { label: '💤 Sleep now', click: () => sendToCat('do-action', 'sleep') },
+    { label: '🔴 Laser pointer!', click: () => sendToCat('laser-start') },
+    { label: '📸 Photo (PNG)', click: () => sendToCat('photo-mode', {}) },
     { type: 'separator' },
     { label: 'Quit MeowCat', click: () => { quitting = true; app.quit(); } },
   ]);
@@ -349,23 +690,87 @@ ipcMain.handle('context-menu', (_e, pos) => {
   } catch { menu.popup(); }
 });
 
+// ---------------- v3.6 IPC ----------------
+// photo mode: renderer freezes, snaps its transparent canvas, ships the PNG here
+ipcMain.handle('photo:save', (_e, dataUrl) => {
+  try {
+    const m = /^data:image\/png;base64,(.+)$/.exec(String(dataUrl || ''));
+    if (!m) return { ok: false, reason: 'bad-data' };
+    let dir;
+    try { dir = app.getPath('pictures'); } catch { dir = path.join(app.getPath('userData'), 'photos'); }
+    fs.mkdirSync(dir, { recursive: true });
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const file = path.join(dir, `MeowCat-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.png`);
+    fs.writeFileSync(file, Buffer.from(m[1], 'base64'));
+    return { ok: true, path: file };
+  } catch (e) { return { ok: false, reason: String(e && e.message || e) }; }
+});
+
+// affection + stats + achievements
+ipcMain.handle('affection:pet', () => {
+  if (!store.get('affectionSystem')) return null;
+  const a = store.addAffection(1);
+  bumpStatAndCheck('pets', 1);
+  return { affection: a, progress: affectionProgress(a) };
+});
+ipcMain.handle('stat:inc', (_e, key, n) => bumpStatAndCheck(key, n ?? 1));
+
+// pomodoro controls (settings + tray share the same engine)
+ipcMain.handle('pomodoro:start', (_e, kind) => startPomodoro(kind === 'break' ? 'break' : 'focus'));
+ipcMain.handle('pomodoro:stop', () => stopPomodoro());
+ipcMain.handle('pomodoro:state', () => pomodoroEngine.snapshot());
+
+// no-walk zones: renderer gets the raw list and converts with its workArea
+ipcMain.handle('zones:list', () => store.get('noWalkZoneList'));
+
+// community skins: settings sends the JSON text; main validates + stores
+ipcMain.handle('skins:import', (_e, jsonText) => {
+  try {
+    const def = JSON.parse(String(jsonText || ''));
+    const err = validateSkinDef(def);
+    if (err) return { ok: false, reason: err };
+    const base = String(def.name || 'skin').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'skin';
+    const id = `${base}_${Date.now().toString(36).slice(-4)}`;
+    store.addCustomSkin({ id, name: def.name, def });
+    store.ownBreed('custom:' + id);
+    sendToCat('settings-changed', { customSkins: store.get('customSkins') });
+    return { ok: true, id: 'custom:' + id };
+  } catch (e) { return { ok: false, reason: 'invalid json' }; }
+});
+
+// e2e / accessibility: synthetic keystrokes feed the same typing meter
+ipcMain.handle('keys:inject', (_e, count) => {
+  const now = Date.now();
+  for (let i = 0; i < Math.max(1, Math.min(200, count | 0)); i++) typingMeter.key(now - i * 40);
+  return true;
+});
+
+// settings quick actions -> the cat
+ipcMain.handle('quick-action', (_e, act) => {
+  if (act === 'laser') sendToCat('laser-start');
+  else if (act === 'photo') { if (store.get('photoMode')) sendToCat('photo-mode', {}); }
+  else if (act === 'dance' || act === 'eat' || act === 'sleep') sendToCat('do-action', act);
+  return true;
+});
+
 app.whenReady().then(() => {
   applyAutoStart(store.get('autoStart'));
   createCatWindow();
   createTray();
   startBackgroundJobs();
+  applyFeatureFlags();
 
-  // v3.1: window-top platform scanner (cat hops onto nearby window borders).
-  // v3.2: 3.2s cadence — each scan briefly spawns PowerShell; a slightly
-  // longer beat halves the CPU churn and RAM spikes with no perceptible lag.
-  // v3.4: user-controllable (Behaviour → "Jump on window tops"); each scan is
-  // a transient PowerShell process, so the toggle doubles as a process diet.
-  if (store.get('windowHopping') !== false) ensureScanner();
-
-  // v3.3 RAM diet: no eager warm pool — the hidden settings renderer used to
-  // sit resident (~57MB PSS) while the user measures at-rest RAM in Task
-  // Manager. First open creates it (~150ms, local file), afterwards the pool
-  // keeps it warm exactly as before.
+  // initial pushes once the cat renderer is alive
+  setTimeout(() => {
+    sendToCat('no-walk-zones', store.get('noWalkZoneList'));
+    if (store.get('timeOfDayMood')) {
+      sendToCat('time-bias', timeBiasNow());
+    }
+    if (store.get('achievements') && store.get('affection') >= 250) {
+      sendToCat('boot-greet', {});   // affection lvl 4: the cat greets you
+    }
+  }, 2500);
 
   screen.on('display-metrics-changed', () => {
     if (catWin && !catWin.isDestroyed()) catWin.webContents.send('workarea-changed');
@@ -373,8 +778,12 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (!catWin) createCatWindow(); });
 });
 
+function timeBiasNow() {
+  const h = new Date().getHours();
+  return (h >= 22 || h < 7) ? 'night' : 'day';
+}
+
 app.on('window-all-closed', () => {
-  // keep running in tray; quit only via menu
   if (quitting) app.quit();
 });
 
@@ -382,7 +791,15 @@ app.on('before-quit', () => {
   quitting = true;
   enforcer?.stop();
   scanner?.stop();
+  sysMon.stop();
+  musicWatcher.stop();
+  stopIdleTicker();
+  stopCursorWatch();
+  stopTypingHook();
+  applyHotkeys(false);
+  try { statusWatcher?.close(); } catch {}
   fastWins.closeAll();
   if (schedTimer) clearInterval(schedTimer);
   if (coinTimer) clearInterval(coinTimer);
+  if (quitTimer) clearInterval(quitTimer);
 });

@@ -257,6 +257,13 @@ try {
   ok('settings window opens for reminders UI', !!rem);
   if (rem) {
     await rem.waitForTimeout(600);
+    // v3.6: the reminders editor lives on the "Focus & Reminders" nav page
+    await rem.evaluate(() => {
+      document.querySelectorAll('#nav .item').forEach(x => x.classList.remove('on'));
+      document.querySelector('[data-page="focus"]').classList.add('on');
+      document.querySelectorAll('section.page').forEach(p => p.classList.remove('on'));
+      document.getElementById('page-focus').classList.add('on');
+    });
     await rem.fill('#remLabel', 'drink water');
     await rem.evaluate(() => { document.getElementById('remWhen').value = ''; });
     // set when = now + 60s
@@ -393,7 +400,7 @@ try {
   ok('cat window <title> is MeowCat', catTitle === 'MeowCat', JSON.stringify(catTitle));
   const info = await cat.evaluate(() => (window.meow.appInfo ? window.meow.appInfo() : null));
   ok('AppUserModelID is com.mythos0.meowcat', !!info && info.aumid === 'com.mythos0.meowcat', JSON.stringify(info));
-  ok('app version reported as 3.5.0', !!info && info.version === '3.5.0', info && info.version);
+  ok('app version reported as 3.6.0', !!info && info.version === '3.6.0', info && info.version);
 
   // ------------------------------------------------ 10. v3.4: warm settings window self-destroys when idle
   await cat.evaluate(() => window.meow.openWindow('settings'));

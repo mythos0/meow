@@ -4,15 +4,16 @@
 
 | layer | count | runner | what it proves |
 |---|---|---|---|
-| unit | 166 | `node --test` (no browser) | brain gaits & physics, platform hopping, ground-stroll-only (no roaming), emote anchors, window JSON parsing, scanner lifecycle, warm-window pool, economy (paid + unlimited promo), reminder scheduling, topmost enforcer, breed/body integrity (20 breeds / 8 bodies), **v3.5 funny pack: sneeze/hairball/zoomies states, post-meal zoomies gate, full laser-chase cycle incl. timeout, butterfly notice rules, panda hairball exclusion** |
-| visual | 62 | Playwright + `test/harness.html` | every state/breed/emote paints, feet stay planted, animation is alive (frames differ), breeds are pixel-distinct, mirror flip is symmetric, panda has black+white anatomy, emote life-cycle |
-| E2E | 43 | real Electron under Xvfb + CDP | boot → paint → brain advance → IPC actions → coins persist → reminders fire/consume → settings warm-open <300 ms → close keeps pool warm → 20 store cards → premium UI → double-click popup → about page (version + dev link) → free panda unlock → reminders UI → **live window-top jump** → region follow → tap→love emote → **v3.5: laser toy chase+pounce+catch (+3 coins), ambient butterfly, MeowCat window title, AppUserModelID, version 3.5.0** → idle self-destroy |
+| unit | 270 | `node --test` (no browser) | brain gaits & physics, platform hopping, ground-stroll-only (no roaming), emote anchors, window JSON parsing, scanner lifecycle, warm-window pool, economy (paid + unlimited promo), reminder scheduling, topmost enforcer, breed/body integrity (20 breeds / 8 bodies), **v3.5 funny pack: sneeze/hairball/zoomies states, post-meal zoomies gate, full laser-chase cycle incl. timeout, butterfly notice rules, panda hairball exclusion** |
+| visual | 89 | Playwright + `test/harness.html` | every state/breed/emote paints, feet stay planted, animation is alive (frames differ), breeds are pixel-distinct, mirror flip is symmetric, panda has black+white anatomy, emote life-cycle, **v3.6: 7 new states, 4 new emotes, seasonal hats, custom-skin palettes** |
+| E2E | 129 | real Electron under Xvfb + CDP | boot → paint → brain advance → IPC actions → coins persist → reminders fire/consume → settings warm-open <300 ms → close keeps pool warm → 20 store cards → premium UI → double-click popup → about page (version + dev link) → free panda unlock → reminders UI → **live window-top jump** → region follow → tap→love emote → **v3.5: laser toy chase+pounce+catch (+3 coins), ambient butterfly, MeowCat window title, AppUserModelID, version 3.6.0** → idle self-destroy |
+| E2E v3.6 | 43 | real Electron under Xvfb + CDP (`e2e-v36.mjs`) | **every v3.6 feature live**: 22 toggles round-trip → real CPU-hog stress pulse → music bop sustain/stop → typing burst→pounce (real meter) → cursor stalk+pounce catch (+affection) → cursor-move abort → new-window sniff walk → editor loaf jump → build green/red dance & mope → battery curl/clear → companion nuzzle (+stat) → dance-party ghosts → photo PNG saved to Pictures → affection meter + 2 achievements → pomodoro IPC → no-walk zone respected live → call ducking → community skin import + store card + pumpkin hat → seasonal toggle → time-bias wiring → Win11 settings UI (10 nav pages, 24 switches, 8 achievement cards) |
 
 Run:
 
 ```bash
 cd app-electron
-npm test                        # unit + visual (138 checks)
+npm test                        # unit + visual (359 checks)
 node scripts/e2e-linux.mjs      # real app E2E (needs Xvfb on Linux)
 ```
 

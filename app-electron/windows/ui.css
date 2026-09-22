@@ -120,3 +120,84 @@ button.chip {
   border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600;
 }
 button.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ================================================================
+   v3.6 — Windows 11 Fluent design system for the Settings app
+   ================================================================ */
+.fluent { display: flex; height: 100vh; width: 100%; }
+.fl-nav {
+  width: 218px; flex: 0 0 218px; padding: 14px 10px 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015));
+  border-right: 1px solid rgba(255,255,255,0.06);
+  display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
+}
+.fl-logo { display: flex; align-items: center; gap: 10px; padding: 6px 10px 14px; }
+.fl-logo img { width: 30px; height: 30px; border-radius: 7px; }
+.fl-logo .t1 { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.2; }
+.fl-logo .t2 { font-size: 11px; color: var(--dim); }
+.fl-nav .item {
+  display: flex; align-items: center; gap: 11px; height: 38px; padding: 0 12px;
+  border-radius: 7px; color: var(--text); font-size: 13.5px; cursor: pointer;
+  position: relative; user-select: none;
+}
+.fl-nav .item:hover { background: rgba(255,255,255,0.05); }
+.fl-nav .item.on { background: rgba(255,255,255,0.085); font-weight: 600; }
+.fl-nav .item.on::before {
+  content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
+  border-radius: 3px; background: var(--accent);
+}
+.fl-nav .spacer { flex: 1; }
+.fl-content { flex: 1; overflow-y: auto; padding: 22px 26px 30px; min-width: 0; }
+.fl-h1 { font-size: 21px; font-weight: 600; margin: 0 0 3px; color: var(--text); }
+.fl-sub { color: var(--dim); font-size: 12.5px; margin-bottom: 18px; }
+.fl-card {
+  background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 9px; padding: 13px 16px; margin-bottom: 12px;
+}
+.fl-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; }
+.fl-row + .fl-row { border-top: 1px solid rgba(255,255,255,0.05); }
+.fl-row .txt { flex: 1; min-width: 0; }
+.fl-row .txt .l1 { font-size: 13.5px; color: var(--text); }
+.fl-row .txt .l2 { font-size: 11.5px; color: var(--dim); margin-top: 1px; }
+/* Win11 toggle switch */
+.sw { position: relative; width: 42px; height: 21px; flex: 0 0 42px; cursor: pointer; }
+.sw input { display: none; }
+.sw .tr {
+  position: absolute; inset: 0; border-radius: 20px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.45);
+  transition: background .15s, border-color .15s;
+}
+.sw .kn {
+  position: absolute; top: 50%; left: 4px; width: 13px; height: 13px;
+  margin-top: -6.5px; border-radius: 50%; background: var(--text);
+  transition: left .15s cubic-bezier(.2,.9,.3,1.2), background .15s;
+}
+.sw input:checked + .tr { background: var(--accent); border-color: var(--accent); }
+.sw input:checked + .tr .kn { left: 24px; background: #241a08; }
+/* progress meter */
+.fl-meter { height: 7px; border-radius: 5px; background: rgba(255,255,255,0.09); overflow: hidden; }
+.fl-meter > div { height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .4s; }
+/* chips / pills */
+.fl-pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px;
+  border-radius: 14px; background: rgba(240,180,92,0.14); color: var(--accent);
+  font-size: 12.5px; font-weight: 600;
+}
+.fl-tag { font-size: 10px; padding: 2px 7px; border-radius: 8px; background: rgba(127,196,111,0.16); color: var(--ok); }
+/* achievements */
+.ach-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ach {
+  display: flex; gap: 11px; align-items: flex-start; padding: 11px 12px;
+  background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 9px; opacity: 0.55;
+}
+.ach.got { opacity: 1; border-color: rgba(240,180,92,0.35); }
+.ach .ic { font-size: 21px; }
+.ach .nm { font-size: 13px; font-weight: 600; }
+.ach .ds { font-size: 11.5px; color: var(--dim); }
+/* zone editor */
+.zone-row { display: flex; gap: 6px; align-items: center; padding: 5px 0; }
+.zone-row input { width: 72px; }
+.fl-preview { border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); }
+/* nav responsive */
+@media (max-width: 700px) { .fl-nav { width: 60px; flex-basis: 60px; } .fl-nav .item span.lab, .fl-logo .tt { display: none; } }
