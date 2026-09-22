@@ -121,3 +121,24 @@ Stage Summary:
 - v3.2.0 shipped: download/MeowCat-3.2.0-portable.exe
 - All user asks addressed: no random walking, emote distance fixed, real fish-biting/chewing eat, 7 fully new designed cats + photo-matched Mochi, panda researched online and rebuilt (not cat-like), memory diet ~5 procs on Windows
 - 164 automated checks green (140 test + 24 e2e)
+
+---
+Agent: Super Z (main)
+Task: v3.4.0 — "make it 1 process, rename electron to proper app name in process manager, test all features properly"
+
+Work Log:
+- Empirically disproved TRUE single-process on Electron 33: `--single-process` SIGTRAP-crashes at boot even a BLANK app (probe scripts + blank app test, 5 flag-mitigation variants, with/without CDP) — Chromium 130 framework bug; documented so nobody re-tries it
+- Proved JS-appended switches never reach early helpers (zygotes/network utility spawn before app JS) — the v3.2 `network-service-in-process` append was inert; removed misleading flags, kept verified ones (disableHardwareAcceleration API, js-flags reaches renderers, AudioService disable)
+- Shipped the honest process floor: main + renderer + network helper = 3 MeowCat.exe at rest on Windows (was 7 "electron" rows); no GPU process; no crashpad (never started); `process.title='MeowCat'` verified via comm
+- fast-windows.js: warm Settings now self-destroys after 5 idle minutes (MEOW_WARM_IDLE_MS override, unref'd timer, cancel-on-show) — returns the process count to the at-rest floor; 2 new unit tests
+- New Behaviour toggle "Jump onto window tops" (windowHopping default on): scanner created on demand via ensureScanner(), settings:set start/stop live — off = zero transient PowerShell spawns
+- Auto-start portable fix: registers the ORIGINAL portable exe (PORTABLE_EXECUTABLE_DIR scan) instead of the %TEMP% extraction path that dies on reboot
+- Task-Manager identity: NEW afterPack hook stamps MeowCat name/version/icon into the INNER exe (electron-builder skipped it via signAndEditExecutable:false — the unpatched inner exe said "Electron"; that was the name the user saw); fixed patch-exe.mjs binary FileVersion stuck at 3.1.0.0; new verify-exe.mjs reads PE resources back and asserts identity — PASS on launcher AND inner exe
+- Tests: 147 unit (+2 idle-destroy) / 62 visual / 37 E2E (+10: MeowCat identity, no GPU, no crashpad, 1 renderer at rest, proc-count cap, hopToggle round-trip, idle self-destroy + fast reopen) all green; observer 6/6 (no roam, in-bounds, 10 states, emotes); 60-shot visual proofs regenerated to artifacts/v34-shots
+- Build: MeowCat-3.4.0-portable.exe (76,189,171 B) — afterPack-patched inner + patched launcher, SFX payload verified (7z offset + NSIS marker); delivered to download/ + GitHub Release v3.4.0 (round-trip SHA-256 verified 2f8ab1e0...)
+- README: "Process & memory diet (v3.2 → v3.4)" rewritten with honest single-process findings; identity row; testing pyramid counts updated; pushed main (ce995b8) + tag v3.4.0
+
+Stage Summary:
+- Release: https://github.com/mythos0/meow/releases/tag/v3.4.0
+- Task Manager now shows MeowCat (never "electron"); at-rest = 3 MeowCat.exe on Windows; 1-process is impossible on stock Electron 33 (framework bug, proven) — documented in README + release notes
+- 246 automated checks green (147 unit + 62 visual + 37 E2E)
