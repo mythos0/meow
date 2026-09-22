@@ -10,9 +10,14 @@
     "extra": ""
   },
   {
+    "name": "overlay is a compact region window (<50% of workArea)",
+    "pass": true,
+    "extra": "region 480x384 vs workArea 1600x1000"
+  },
+  {
     "name": "brain pose advances (animation clock)",
     "pass": true,
-    "extra": "t 0.42 → 2.26"
+    "extra": "t 0.19 → 2.04"
   },
   {
     "name": "cat state machine runs",
@@ -52,7 +57,7 @@
   {
     "name": "settings open (warm) is fast (<300ms)",
     "pass": true,
-    "extra": "37ms"
+    "extra": "13ms"
   },
   {
     "name": "close keeps the window warm (page target alive)",
@@ -62,7 +67,7 @@
   {
     "name": "reopen is instant (warm reuse, <300ms)",
     "pass": true,
-    "extra": "27ms"
+    "extra": "2ms"
   },
   {
     "name": "reopened settings window takes focus",
@@ -92,7 +97,7 @@
   {
     "name": "about page shows version + developer link",
     "pass": true,
-    "extra": "{\"ver\":\"v3.2.0\",\"dev\":true}"
+    "extra": "{\"ver\":\"v3.3.0\",\"dev\":true}"
   },
   {
     "name": "panda unlocks free (unlimited coins promo)",
@@ -112,7 +117,17 @@
   {
     "name": "live: cat jumps onto a nearby window top border",
     "pass": true,
-    "extra": "{\"ok\":true,\"state\":\"pounce\",\"baseY\":640,\"x\":534}"
+    "extra": "{\"ok\":true,\"state\":\"loaf\",\"baseY\":640,\"x\":534}"
+  },
+  {
+    "name": "live: region window slides to follow the walking cat",
+    "pass": true,
+    "extra": "{\"ok\":true,\"from\":224,\"to\":123}"
+  },
+  {
+    "name": "live: tapping the cat triggers the love emote on the pet",
+    "pass": true,
+    "extra": "{\"kind\":\"love\",\"state\":\"happy\"}"
   },
   {
     "name": "e2e screenshots saved",

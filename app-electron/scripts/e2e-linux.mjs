@@ -82,6 +82,13 @@ try {
   });
   ok('cat paints opaque pixels on canvas', hasCanvas);
 
+  // v3.3: region window (RAM diet) — overlay must be a small follower, not fullscreen
+  const reg = await cat.evaluate(() => window.__region && window.__region());
+  const waSet = await cat.evaluate(() => window.meow.getSettings());
+  const wa = waSet?.workArea || { width: 1600, height: 1000 };
+  ok('overlay is a compact region window (<50% of workArea)', reg && reg.w * reg.h < wa.width * wa.height * 0.5,
+    `region ${reg?.w}x${reg?.h} vs workArea ${wa.width}x${wa.height}`);
+
   // ------------------------------------------------ 2. brain alive: pose changes over time
   const p1 = await cat.evaluate(() => window.__pose && window.__pose());
   await cat.waitForTimeout(1800);
@@ -172,8 +179,9 @@ try {
   if (set) {
     await set.evaluate(() => window.meow.closeWindow('settings'));   // start hidden
     await cat.waitForTimeout(350);
-    const pos = await cat.evaluate(() => { const p = window.__pose(); return { x: p.x, y: p.y - 40 }; });
-    await cat.mouse.dblclick(pos.x, pos.y);
+    // click in WINDOW-LOCAL coords (the overlay is a small follower now)
+    const pos = await cat.evaluate(() => window.__catLocal());
+    await cat.mouse.dblclick(pos.x, pos.y - 40);
     let dblOk = false;
     const tD = Date.now();
     while (Date.now() - tD < 3000) {
@@ -246,6 +254,39 @@ try {
   ok('live: cat jumps onto a nearby window top border', hop.ok, JSON.stringify(hop));
   // cleanup: remove platforms so later checks run on the ground
   await cat.evaluate(() => window.__setPlatforms([]));
+
+  // ------------------------------------------------ 9b. region window follows the cat (v3.3)
+  const slide = await cat.evaluate(async () => {
+    const b = window.__brain && window.__brain();
+    if (!b) return { ok: false, why: 'no brain' };
+    const r0 = window.__region();
+    if (b.state === 'sleep') b._enter('idle', 0.5);
+    b._jump = null; b.onPlatform = null; b.baseY = b.groundY;
+    b.x = r0.x + 150;                    // near the left comfort-band edge
+    b._platformCd = 999;                 // no hopping during this test
+    b._enter('walk', 4); b.dir = -1;
+    const t0 = Date.now();
+    while (Date.now() - t0 < 5000) {
+      const r1 = window.__region();
+      if (r1.x < r0.x - 40) return { ok: true, from: r0.x, to: r1.x };
+      await new Promise(r => setTimeout(r, 60));
+    }
+    return { ok: false, r0, end: window.__region(), x: Math.round(b.x) };
+  });
+  ok('live: region window slides to follow the walking cat', slide.ok, JSON.stringify(slide));
+
+  // ------------------------------------------------ 9c. tap the cat -> love emote anchored above it (v3.2 fix, live)
+  await cat.waitForTimeout(600);
+  const emote = await cat.evaluate(() => window.__catLocal());
+  await cat.mouse.click(emote.x, emote.y - 40);   // quick tap = pet
+  await cat.waitForTimeout(450);                  // pendingPet delay 280ms
+  const emoteState = await cat.evaluate(() => {
+    const b = window.__brain && window.__brain();
+    return { kind: b?.emote?.kind || null, state: b?.state };
+  });
+  ok('live: tapping the cat triggers the love emote on the pet',
+    emoteState.kind === 'love', JSON.stringify(emoteState));
+  await cat.screenshot({ path: path.join(OUT, 'cat_live_emote.png') });
 
   // topmost enforcer sanity: window has always-on-top state via CDP? (skip on Linux)
   ok('e2e screenshots saved', true, OUT);

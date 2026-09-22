@@ -10,6 +10,7 @@ import { ReminderScheduler } from './src/reminder-scheduler.js';
 import { createTopmostEnforcer } from './src/topmost.js';
 import { createWindowScanner } from './src/window-scan.js';
 import { createFastWindows } from './src/fast-windows.js';
+import { computeRegionSize, initialOrigin } from './src/region.js';
 
 // ------------------------------------------------------------------ v3.2 memory diet
 // User-visible goal: fewest possible processes & lowest RAM in Task Manager.
@@ -24,6 +25,10 @@ app.commandLine.appendSwitch('in-process-gpu');            // no GPU process
 app.commandLine.appendSwitch('network-service-in-process'); // no network utility
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=160');
+
+// v3.3 region window: current size + origin (screen coords) of the overlay
+let region = { w: 480, h: 434 };
+let regionOrigin = { x: 0, y: 0 };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let tray = null;
@@ -68,8 +73,15 @@ const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
 function createCatWindow() {
   const wa = screen.getPrimaryDisplay().workArea;
+  // v3.3 RAM diet: the overlay is a small region that follows the cat
+  // (fullscreen transparent surface used to dominate renderer RAM).
+  const scale = Number(store.get('size')) || 1.0;
+  region = computeRegionSize(scale, wa);
+  const spawnX = wa.x + wa.width / 2;
+  const feetY = wa.y + wa.height - 8;
+  regionOrigin = initialOrigin(wa, region, spawnX, feetY);
   catWin = new BrowserWindow({
-    x: wa.x, y: wa.y, width: wa.width, height: wa.height,
+    x: regionOrigin.x, y: regionOrigin.y, width: region.w, height: region.h,
     transparent: true, frame: false, hasShadow: false,
     skipTaskbar: true, resizable: false, movable: false,
     fullscreenable: false, minimizable: false, maximizable: false,
@@ -215,6 +227,22 @@ ipcMain.handle('reminders:add', (_e, spec) => {
 });
 ipcMain.handle('reminders:remove', (_e, id) => { const ok = sched.remove(id); persistReminders(); return ok; });
 
+// v3.3: the cat window follows the cat — the renderer asks for origin moves
+// (and, when the size slider / workArea changes, resizes). Pure moves are
+// cheap native repositions; the surface is only reallocated on real resizes.
+ipcMain.handle('region:move', (_e, rect) => {
+  if (!catWin || catWin.isDestroyed()) return null;
+  const wa = screen.getPrimaryDisplay().workArea;
+  const w = Math.max(320, Math.min(rect?.w ?? region.w, wa.width));
+  const h = Math.max(280, Math.min(rect?.h ?? region.h, wa.height));
+  const x = Math.max(wa.x, Math.min(wa.x + wa.width - w, rect?.x ?? regionOrigin.x));
+  const y = Math.max(wa.y, Math.min(wa.y + wa.height - h, rect?.y ?? regionOrigin.y));
+  region = { w, h };
+  regionOrigin = { x: Math.round(x), y: Math.round(y) };
+  try { catWin.setBounds({ x: regionOrigin.x, y: regionOrigin.y, width: w, height: h }); } catch {}
+  return { ...regionOrigin, ...region };
+});
+
 ipcMain.handle('hit-test', (_e, overCat) => {
   if (catWin && !catWin.isDestroyed()) {
     try { catWin.setIgnoreMouseEvents(!overCat, { forward: true }); } catch {}
@@ -288,8 +316,10 @@ app.whenReady().then(() => {
     scanner.start();
   }
 
-  // v3.2: pre-warm the single helper window so double-click opens instantly
-  setTimeout(() => { fastWins.warm('settings'); }, 600);
+  // v3.3 RAM diet: no eager warm pool — the hidden settings renderer used to
+  // sit resident (~57MB PSS) while the user measures at-rest RAM in Task
+  // Manager. First open creates it (~150ms, local file), afterwards the pool
+  // keeps it warm exactly as before.
 
   screen.on('display-metrics-changed', () => {
     if (catWin && !catWin.isDestroyed()) catWin.webContents.send('workarea-changed');

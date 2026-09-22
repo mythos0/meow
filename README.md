@@ -201,7 +201,7 @@ from **researched giant-panda facts** (zoo/natural-history sources, June 2022–
 | pandas **roll forward/backward/sideways** — famously tumble | `roll` state somersaults now travel forward (brain adds drift while rolling) |
 | pandas nap **sprawled** on side/belly between feedings | panda `sleep` = flat-out sprawl with the head down, not the cat curl |
 
-## Memory diet (v3.2)
+## Memory diet (v3.2 + v3.3)
 
 Task-Manager footprint was cut hard (user-reported baseline: **7 processes ≈ 400 MB**):
 
@@ -214,10 +214,24 @@ Task-Manager footprint was cut hard (user-reported baseline: **7 processes ≈ 4
 4. `v8CacheOptions: 'none'` on the overlay, `--max-old-space-size=160`, and the PowerShell
    window-scan cadence relaxed 2.2 s → 3.2 s (halves the transient PowerShell spawns).
 
-Result on the dev rig: **10 → 7 Electron processes on Linux** (3 of which are zygotes that
-don't exist on Windows → **~5 processes on Windows**), total RSS 1042 → 863 MB, with the GPU
-process and one renderer eliminated outright. Measured with `scripts/mem-report.mjs`
-(process tree + PSS rollup), kept in the repo for repeatability.
+**v3.3 additions:**
+
+5. **Region window** — the transparent overlay used to span the whole workArea
+   (e.g. 1600×1000); the compositor held a full-screen surface for it and that dominated
+   renderer RAM. The overlay is now a compact region (≈480×384 at 100 % cat size) that
+   *follows* the cat with hysteresis (pure native moves — same pixel size, no surface
+   reallocation; resizes only when the size slider or workArea changes). Pure math in
+   `src/region.js`, unit-tested incl. a 40 s stroll simulation.
+6. **No eager warm pool** — the hidden Settings renderer (~57 MB PSS) is no longer resident
+   at rest; it is created on first open (≈11 ms measured, local file) and kept warm after.
+7. **Idle FPS throttle** — stationary states (idle/sit/sleep/loaf/knead/groom/eat/bamboo)
+   paint at ~15 fps instead of 60; instant full rate on any movement or drag.
+
+Measured on the Linux dev rig (`scripts/mem-report.mjs`, PSS rollup): **7 → 6 processes,
+536 → ~440 MB PSS**, against a **blank-Electron-window baseline of 274 MB / 6 processes**
+on the same box — the app's own overhead is a ~10 MB JS heap plus the small canvas raster.
+(Windows shows less than these Linux figures: no zygotes, private-working-set accounting.)
+Profile tool kept in the repo: `scripts/profile-mem.mjs`.
 
 ## Interactions
 

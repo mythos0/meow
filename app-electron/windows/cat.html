@@ -24,6 +24,7 @@
 <script type="module">
 import { drawCat, drawParticles, drawEmote, emoteAnchor, CAT_BBOX } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
+import { computeRegionSize, initialOrigin, slideIfNeeded } from '../src/region.js';
 
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d', { alpha: true });
@@ -33,6 +34,11 @@ let S = { breed: 'grey_tabby', size: 1.0, opacity: 1.0, sounds: true, speed: 55,
 let brain = null;
 let audio = {};
 let bubbleTimer = null;
+// v3.3 region window: the overlay covers only a small region around the cat
+// (RAM diet). O = region origin in SCREEN coords; the brain keeps working in
+// full screen coords and the canvas just translates by -O.
+let O = { x: 0, y: 0 };
+let REGION = { w: 480, h: 434 };
 
 // ---------------------------------------------------------- audio
 function loadSounds() {
@@ -57,13 +63,13 @@ async function init() {
   loadSounds();
   S = { ...S, ...await window.meow.getSettings() };
   const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
-  resize(wa);
   brain = new CatBrain({
     bounds: { x: wa.x, y: wa.y, w: wa.width, h: wa.height },
     groundY: wa.y + wa.height - 8,
     speed: S.speed,
     breed: S.breed,
   });
+  syncRegion(wa, true);
   window.meow.on('settings-changed', applySettings);
   window.meow.on('do-action', doAction);
   window.meow.on('reminder-fired', showReminder);
@@ -71,24 +77,35 @@ async function init() {
   window.meow.on('workarea-changed', async () => {
     const s2 = await window.meow.getSettings();
     S = { ...S, ...s2 };
-    resize(s2.workArea);
-    brain.bounds = { x: s2.workArea.x, y: s2.workArea.y, w: s2.workArea.width, h: s2.workArea.height };
-    brain.groundY = s2.workArea.y + s2.workArea.height - 8;
+    const wa2 = s2.workArea || wa;
+    brain.bounds = { x: wa2.x, y: wa2.y, w: wa2.width, h: wa2.height };
+    brain.groundY = wa2.y + wa2.height - 8;
+    syncRegion(wa2, false);
   });
   requestAnimationFrame(loop);
 }
 
-function resize(wa) {
-  cv.width = window.innerWidth = wa.width;
-  cv.height = window.innerHeight = wa.height;
-  cv.style.width = wa.width + 'px';
-  cv.style.height = wa.height + 'px';
+// recompute the region size + origin (size slider / workArea changes) and
+// push the full rect to main — only happens on real resizes, not strolls
+function syncRegion(wa, recenter = false) {
+  REGION = computeRegionSize(S.size, wa);
+  const feet = brain ? brain.baseY + brain.jumpY : wa.y + wa.height - 8;
+  const cx = brain ? brain.x : wa.x + wa.width / 2;
+  O = initialOrigin(wa, REGION, cx, feet);
+  cv.width = REGION.w; cv.height = REGION.h;
+  cv.style.width = REGION.w + 'px'; cv.style.height = REGION.h + 'px';
+  window.meow.moveRegion({ x: O.x, y: O.y, w: REGION.w, h: REGION.h });
+  if (recenter) return;
 }
 
 function applySettings(kv) {
   S = { ...S, ...kv };
   if (kv.speed && brain) brain.speed = kv.speed;
   if (kv.breed && brain) brain.breed = kv.breed;
+  if (kv.size != null) {
+    const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
+    syncRegion(wa, false);
+  }
 }
 
 function doAction(act) {
@@ -105,10 +122,10 @@ function showReminder(item) {
   brain.dance();
   const p = brain.pose;
   const scale = S.size;
-  const bx = p.x - 20, by = p.y - 150 * scale - 70;
+  const bx = Math.max(10, p.x - 20 - 110 - O.x), by = Math.max(10, p.y - 150 * scale - 70 - O.y);
   bubble.textContent = '⏰ ' + item.label;
-  bubble.style.left = Math.max(10, bx - 110) + 'px';
-  bubble.style.top = Math.max(10, by) + 'px';
+  bubble.style.left = bx + 'px';
+  bubble.style.top = by + 'px';
   bubble.style.display = 'block';
   play('chirp', 0.8);
   clearTimeout(bubbleTimer);
@@ -122,6 +139,9 @@ let dragDX = 0, dragDY = 0;
 let downX = 0, downY = 0;
 let pendingPet = null;   // delayed so a double-click can cancel it → settings
 
+// screen coords = window-local + region origin O
+function toScreen(cx, cy) { return { x: cx + O.x, y: cy + O.y }; }
+
 function catHit(mx, my) {
   if (!brain) return false;
   const p = brain.pose;
@@ -134,22 +154,24 @@ function catHit(mx, my) {
 }
 
 window.addEventListener('mousemove', e => {
-  const hit = dragging || catHit(e.clientX, e.clientY);
+  const m = toScreen(e.clientX, e.clientY);
+  const hit = dragging || catHit(m.x, m.y);
   if (hit !== overCat) { overCat = hit; window.meow.hitTest(hit); }
   if (dragging) {
     const moved = Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY);
     if (moved > 6 && pendingPet) { clearTimeout(pendingPet); pendingPet = null; } // it's a drag, not a tap
-    brain.x = Math.max(brain.bounds.x + 60, Math.min(brain.bounds.x + brain.bounds.w - 60, e.clientX - dragDX));
-    brain.baseY = Math.max(brain.bounds.y + 120, Math.min(brain.bounds.y + brain.bounds.h - 8, e.clientY - dragDY));
+    brain.x = Math.max(brain.bounds.x + 60, Math.min(brain.bounds.x + brain.bounds.w - 60, m.x - dragDX));
+    brain.baseY = Math.max(brain.bounds.y + 120, Math.min(brain.bounds.y + brain.bounds.h - 8, m.y - dragDY));
     brain.jumpY = 0;
   }
 });
 window.addEventListener('mousedown', e => {
-  if (!catHit(e.clientX, e.clientY)) return;
+  const m = toScreen(e.clientX, e.clientY);
+  if (!catHit(m.x, m.y)) return;
   if (e.button !== 0) return;      // right button opens the context menu
   downX = e.clientX; downY = e.clientY;
-  dragDX = e.clientX - brain.x;
-  dragDY = e.clientY - brain.baseY;
+  dragDX = m.x - brain.x;
+  dragDY = m.y - brain.baseY;
   dragging = true;
   // no sound here: drag/drop must be silent — the purr plays only when a
   // quick tap is confirmed as a pet (pendingPet below)
@@ -160,7 +182,8 @@ window.addEventListener('mousedown', e => {
   }, 280);
 });
 window.addEventListener('dblclick', e => {
-  if (!catHit(e.clientX, e.clientY)) return;
+  const m = toScreen(e.clientX, e.clientY);
+  if (!catHit(m.x, m.y)) return;
   if (pendingPet) { clearTimeout(pendingPet); pendingPet = null; }
   dragging = false;
   window.meow.openWindow('settings');  // v3.1: double-click opens Settings popup
@@ -193,17 +216,37 @@ function stepSounds() {
 
 // ---------------------------------------------------------- main loop
 let lastTs = performance.now();
+// v3.3 idle throttle: when the cat is in a stationary state, paint at ~15fps
+// instead of 60 (cut CPU + raster churn; instant full-rate on any movement)
+const IDLE_STATES = new Set(['idle', 'sit', 'sleep', 'loaf', 'knead', 'groom', 'eat', 'bamboo']);
+let idleFrameSkip = 0;
 function loop(ts) {
   const dt = (ts - lastTs) / 1000;
+  const throttle = brain && IDLE_STATES.has(brain.state) && !dragging;
+  if (throttle && idleFrameSkip < 3) {   // ~60 -> ~15fps: skip 3 of 4 frames
+    idleFrameSkip++;
+    // keep lastTs untouched so the painted frame gets the full accumulated dt
+    requestAnimationFrame(loop);
+    return;
+  }
+  idleFrameSkip = 0;
   lastTs = ts;
   if (brain) {
     brain.speed = S.speed;
     brain.tick(dt);
     stepSounds();
     const p = brain.pose;
+    // v3.3: keep the cat inside the region — slide the window (cheap native
+    // move, same pixel size) only when the comfort band is breached
+    const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
+    const cand = slideIfNeeded(O, REGION, p.x, p.y, wa, S.size);
+    if (cand) {
+      O = cand;
+      window.meow.moveRegion({ x: O.x, y: O.y, w: REGION.w, h: REGION.h });
+    }
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.save();
-    ctx.translate(p.x, p.y);
+    ctx.translate(p.x - O.x, p.y - O.y);
     const opts = {
       t: p.t, state: p.state, dir: p.dir, breed: S.breed,
       scale: S.size, alpha: S.opacity, jumpP: p.jumpP,
@@ -234,6 +277,11 @@ window.__pose = () => brain ? JSON.parse(JSON.stringify(brain.pose)) : null;
 window.__doAction = act => doAction(act);
 window.__brain = () => brain;                 // live object access for e2e
 window.__setPlatforms = list => { if (brain) brain.setPlatforms(list); };
+window.__catLocal = () => {                   // cat position in window-local coords (for real clicks)
+  const p = brain ? brain.pose : { x: O.x, y: O.y };
+  return { x: p.x - O.x, y: p.y - O.y };
+};
+window.__region = () => ({ ...O, w: REGION.w, h: REGION.h });
 </script>
 </body>
 </html>
