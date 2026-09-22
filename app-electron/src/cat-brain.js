@@ -20,6 +20,8 @@ export const ACTIONS = [
   'walk', 'idle', 'sit', 'sleep', 'scratch', 'dance', 'run', 'eat',
   'stretch', 'groom', 'pounce', 'knead', 'loaf', 'yawn', 'startle',
   'waddle', 'bamboo', 'roll',
+  // v3.5 funny pack
+  'sneeze', 'hairball', 'zoomies', 'laser',
 ];
 
 // emote shown when entering a state
@@ -27,15 +29,21 @@ export const EMOTE_ON = {
   startle: 'exclaim', pounce: 'exclaim', dance: 'note', sleep: 'zzz',
   yawn: 'zzz', groom: 'heart', bamboo: 'heart', eat: 'fish', roll: 'laugh',
   stretch: 'star', knead: 'love',
+  // v3.5 funny pack
+  zoomies: 'exclaim', hairball: 'sweat', loaf: 'bread',
 };
 
 const CAT_WEIGHTS = {
   walk: 20, idle: 15, sit: 6, run: 6, scratch: 5, dance: 4, eat: 3, sleep: 3, jump: 7,
   stretch: 5, groom: 5, pounce: 5, knead: 3, loaf: 4, yawn: 3, startle: 2,
+  // v3.5 funny pack — rare but delightful gags
+  sneeze: 2, hairball: 2, zoomies: 2,
 };
 const PANDA_WEIGHTS = {
   waddle: 24, idle: 13, sit: 6, bamboo: 10, roll: 8, sleep: 4, dance: 3,
   loaf: 5, yawn: 3, startle: 2, happy: 4,
+  // v3.5: pandas sneeze too, and get the post-snack zoomies
+  sneeze: 2, hairball: 0, zoomies: 2,
 };
 
 export class CatBrain {
@@ -72,6 +80,11 @@ export class CatBrain {
     // contextual emote: { kind, t0 }
     this.emote = null;
 
+    // v3.5 laser-pointer toy (cat.html owns the dot, brain chases it)
+    this.laser = null;          // { x, y } target while a laser chase is live
+    this._laserAge = 0;         // seconds since laser chase started
+    this._laserCd = 0;          // pounce cooldown inside a laser chase
+
     // action weights (tunable)
     this.weights = this.breed === 'panda' ? { ...PANDA_WEIGHTS } : { ...CAT_WEIGHTS };
   }
@@ -88,7 +101,7 @@ export class CatBrain {
     this.state = state;
     this.stateT = 0;
     this.stateDur = dur;
-    if (state === 'walk' || state === 'run' || state === 'waddle') {
+    if (state === 'walk' || state === 'run' || state === 'waddle' || state === 'zoomies') {
       this.dir = this.rand() < 0.5 ? -1 : 1;
       // bias toward screen center when near edges
       const cx = this.bounds.x + this.bounds.w / 2;
@@ -102,6 +115,20 @@ export class CatBrain {
   }
 
   _nextAction() {
+    // v3.5: resume an active laser chase after any interruption (pounce etc.)
+    // — but the TOTAL chase time (this._laserAge, pounces included) is capped,
+    // so a lucky dot can't keep the cat chasing forever.
+    if (this.laser && this.state !== 'laser') {
+      const remain = 8 - this._laserAge;
+      if (remain <= 0.3) this.stopLaser();
+      else { this._enter('laser', remain); return; }
+    }
+    // v3.5: post-meal zoomies — a real cat thing ("snack raccs"). The gag lands
+    // because it fires right after eating, never at random.
+    if ((this.state === 'eat' || this.state === 'bamboo') && this.rand() < 0.45) {
+      this._enter('zoomies', 1.8 + this.rand() * 1.4);
+      return;
+    }
     if (this.state === 'idle') {
       this.idleStreak++;
       // long idle -> sleep chance grows
@@ -130,6 +157,10 @@ export class CatBrain {
       case 'bamboo': this._enter('bamboo', 4 + this.rand() * 2); break;
       case 'roll': this._enter('roll', 1.5 * (2 + Math.floor(this.rand() * 2))); break;
       case 'happy': this._enter('happy', 1.8 + this.rand() * 1.2); break;
+      // ---- v3.5 funny pack ----
+      case 'sneeze': this._enter('sneeze', 1.6); break;
+      case 'hairball': this._enter('hairball', 2.8); break;
+      case 'zoomies': this._enter('zoomies', 1.6 + this.rand() * 1.2); break;
       default: this._enter('idle', 2);
     }
   }
@@ -144,6 +175,25 @@ export class CatBrain {
   feed() { this._enter(this.breed === 'panda' ? 'bamboo' : 'eat', this.breed === 'panda' ? 5.5 : 4.9); this.onEvent('feed'); }
   dance() { this._enter('dance', 4); this.onEvent('dance'); }
   sleepNow() { this._enter('sleep', 10); }
+
+  // v3.5: laser-pointer toy. cat.html owns the red dot (spawns it, drifts it,
+  // decides catch/escape) — the brain only chases the coordinates it is fed.
+  startLaser(x, y) {
+    this.laser = { x, y };
+    this._laserAge = 0;
+    this._laserCd = 0;
+    this._enter('laser', 8);       // hard cap: a chase never outlives ~8s
+    this.onEvent('laser:start');
+  }
+  moveLaser(x, y) {
+    if (!this.laser) return;
+    this.laser.x = x; this.laser.y = y;
+  }
+  stopLaser() {
+    const had = !!this.laser;
+    this.laser = null;
+    if (had) this.onEvent('laser:stop');
+  }
 
   // ------------------------------------------------------------ platforms
   // platforms: [{ x, y, w, h }] — full window rects in screen coords.
@@ -238,6 +288,7 @@ export class CatBrain {
     dt = Math.min(dt, 0.1); // clamp to survive tab throttling
     this.t += dt;
     this.stateT += dt;
+    if (this.laser) this._laserAge += dt;   // v3.5: total chase time (incl. pounces)
 
     switch (this.state) {
       case 'walk':
@@ -278,6 +329,38 @@ export class CatBrain {
         this._clampAndTurn();
         break;
       }
+      case 'zoomies': {
+        // v3.5 funny pack: the mad after-meal sprint — gallop bounce + dust
+        this.x += this.dir * this.runSpeed * 1.7 * dt;
+        this.jumpY = -Math.abs(Math.sin(this.t * 14)) * 9;
+        this._clampAndTurn();
+        break;
+      }
+      case 'laser': {
+        // v3.5 funny pack: chase the red dot (cat.html feeds its coords).
+        // Stalk/run toward it; when close, pounce — cat.html decides catch vs
+        // escape and either ends the chase (stopLaser) or moves the dot away.
+        if (!this.laser) { this._nextAction(); break; }
+        this._laserCd -= dt;
+        const dx = this.laser.x - this.x;
+        const feet = this.baseY + this.jumpY;
+        const dy = this.laser.y - feet;
+        const dist = Math.hypot(dx, dy);
+        if (dx !== 0) this.dir = dx > 0 ? 1 : -1;
+        const sp = this.runSpeed * 0.85;
+        if (dist > 46) {
+          this.x += Math.sign(dx) * Math.min(Math.abs(dx), sp * dt);
+          if (Math.abs(dy) > 90) {
+            this.baseY += Math.sign(dy) * Math.min(Math.abs(dy), sp * 0.6 * dt);
+            this.baseY = Math.max(this.bounds.y + 120, Math.min(this.groundY, this.baseY));
+          }
+          this.jumpY = -Math.abs(Math.sin(this.t * 12)) * 7;
+        } else if (this._laserCd <= 0 && this.stateT < this.stateDur - 1.2) {
+          this._laserCd = 1.4;
+          this._enter('pounce', 1.9);   // _nextAction resumes the chase (this.laser)
+        }
+        break;
+      }
       case 'jump': {
         const J = this._jump;
         if (J) {
@@ -309,8 +392,20 @@ export class CatBrain {
         }
         this.jumpY = 0; this.jumpP = 0;
       }
+      if (this.state === 'zoomies') this.jumpY = 0;
+      if (this.state === 'laser') this.stopLaser();   // chase timed out — dot vanishes
       this._nextAction();
     }
+  }
+
+  // v3.5: a butterfly drifted close — only idle-ish cats give chase, and the
+  // caller (cat.html) gates frequency. Returns true if the cat noticed it.
+  noticeButterfly(x, y) {
+    if (!['idle', 'sit', 'loaf', 'groom'].includes(this.state)) return false;
+    this.dir = x >= this.x ? 1 : -1;
+    this._enter('pounce', 1.9);
+    this.onEvent('butterfly:pounce');
+    return true;
   }
 
   _clampAndTurn(forceTurn = false) {

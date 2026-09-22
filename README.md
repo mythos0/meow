@@ -8,7 +8,10 @@ breed, and jump onto your windows with no sprite sheets to ship, key, or break.
 It walks along your taskbar, **jumps onto the top border of any nearby window, strolls along it,
 and hops from window to window**, dances, naps, grooms, pounces, kneads, yawns, startles — and if
 you pick the panda it waddles like a real bear, somersaults, and **sits up to munch a bamboo
-stalk** (gait & posture researched from real panda behavior). It has a **Cat Store**
+stalk** (gait & posture researched from real panda behavior). v3.5 adds the **Funny Pack**:
+an interactive **laser-pointer chase** (+3 coins per catch), **zoomies** (the mad after-meal
+sprint), a full **"AH-CHOO!" sneeze**, hairball coughs, an ambient **butterfly friend**, and a
+bread emote for the loaf. It has a **Cat Store**
 (20 breeds · unlimited-coins promo), a **Reminders & Timers system** where the cat announces your
 reminders with a speech bubble, real recorded **cat sounds**, and instant-open **Settings**
 (double-click the cat) that now **share one helper window** to keep RAM low.
@@ -18,7 +21,7 @@ reminders with a speech bubble, real recorded **cat sounds**, and instant-open *
 | **Stack** | Electron 33 (Chromium) · HTML5 Canvas 2D · zero native modules |
 | **Art** | 100% procedural vector drawing — palettes + body skeletons + pose math, no PNGs |
 | **Brain** | Seeded deterministic state machine (weighted actions, window-top platform logic) |
-| **Tests** | 147 unit + 62 visual (Playwright pixel analysis) + 37 E2E (real app under Xvfb) |
+| **Tests** | 166 unit + 62 visual (Playwright pixel analysis) + 43 E2E (real app under Xvfb) |
 | **Identity** | Every process shows as **MeowCat** in Task Manager — never "electron" |
 | **Docs** | [docs/RENDERING.md](docs/RENDERING.md) · [docs/FEATURES.md](docs/FEATURES.md) · [docs/BUILD.md](docs/BUILD.md) · [docs/TESTING.md](docs/TESTING.md) |
 
@@ -134,7 +137,7 @@ mismatched iris colors for heterochromia); blush cheeks; nose; mouth in five mod
 A pose is **pure math**: 4 foot targets, body `bobY/rot/squash`, head offset/tilt, tail mode,
 eye/mouth state, particle spawner. All oscillation is `sin(t·f + phase)`; gaits are 4 legs at
 phase offsets (diagonal pairs), squash-&-stretch on jumps (scale x/y inversely), and a
-smoothstep rotation for the somersault. **20 states**:
+smoothstep rotation for the somersault. **24 states**:
 
 `walk run idle sit sleep dance scratch jump happy` · `eat` — v3.2 redesign: a fish lies on the
 ground and each 1.4 s cycle the cat dips its head, **bites a chunk off** (the fish visibly
@@ -231,9 +234,26 @@ Task-Manager footprint was cut hard (user-reported baseline: **7 processes ≈ 4
 
 7. **Every process is named MeowCat** — both the portable launcher *and* the inner app exe
    carry stamped PE resources (`scripts/patch-exe.mjs` via an `afterPack` hook), so Task
-   Manager shows `MeowCat` + "MeowCat — your desktop cat", never "Electron". The fixed-info
-   binary version is stamped too (it used to stay 3.1.0.0 — found & fixed by reading the
-   PE resources back with `scripts/verify-exe.mjs`).
+   Manager shows `MeowCat` + "MeowCat — your desktop cat", never "Electron".
+
+**v3.5 identity hardening (the "still shows electron" report, investigated):**
+
+We cracked the shipped v3.4.0 EXE open forensically (carved the 7z out of the SFX, parsed
+the PE resources): **every Task-Manager-visible string already said MeowCat** — the sighting
+almost certainly came from an older v3.3.0-or-earlier download. v3.5 closes every remaining
+surface anyway:
+
+- **AppUserModelID** is set (`com.mythos0.meowcat`) so toast notifications and taskbar
+  grouping can never fall back to the generic "Electron" identity.
+- Window **titles** are `MeowCat` (the overlay previously had none — another way
+  "Electron" could surface in Alt-Tab/task managers).
+- The **binary Product/File version** is now actually stamped (v3.4 shipped 0.0.0.0 in the
+  version column — `setFileVersion` was called after resource serialization; found by
+  reading the PE back, fixed by reordering, asserted in CI).
+- A new build gate, `scripts/verify-artifact-identity.mjs`, cracks the **finished portable
+  EXE** open and asserts all identity strings in **all** shipped EXEs say MeowCat and none
+  say Electron — 27 automated assertions, build fails on any leak.
+
 8. **True 1-process mode is impossible on stock Electron 33** — verified empirically:
    `--single-process` SIGTRAP-crashes *a blank Electron app* at boot on Chromium 130.
    Switches appended from `main.js` also never reach the early helpers (zygotes, network
@@ -258,8 +278,28 @@ Profile tool kept in the repo: `scripts/profile-mem.mjs`.
 | **double-click** the cat | opens the **Settings popup instantly** (warm window pool) |
 | single click | pet reaction: purr + love emote + 🪙 |
 | drag & release | carries the cat; it snaps to the nearest window top or the ground |
-| right-click | context menu (Settings, Reminders, Dance, Feed, Sleep, Quit) |
+| right-click | context menu (Settings, Reminders, Dance, Feed, **Laser pointer!**, Sleep, Quit) |
 | tray icon | menu + left-click opens Settings |
+
+## The funny pack (v3.5)
+
+Pure-gag behaviours layered on the same procedural renderer — every one is a real
+state in the brain (weighted, seed-deterministic, unit-tested), not a scripted video:
+
+- **🔴 Laser pointer toy (interactive)** — tray menu or right-click the cat → *"Laser pointer!"*.
+  A pulsing red dot spawns and drifts; the cat drops into a low stalk, runs it down and
+  **pounces**. Catch it (dot underfoot at pounce landing): **+3 🪙**, star burst, proud cat.
+  Miss: the dot teleports away and the chase resumes — a chase never outlives ~8 s.
+- **🤧 Sneeze** — wind-up (nose to the sky), then an "AH-CHOO!" blast: a fan of droplets
+  + shock wedge, then one dazed blink of regret. Pandas sneeze too.
+- **Hairball** — two chest heaves, and a tiny fuzzy souvenir drops out and sits in front
+  of the paws. Embarrassed sweat-drop included.
+- **⚡ Zoomies** — the legendary after-meal sprint: gallop bounce, pinned ears, dust trail,
+  top speed (1.7× run). Fires on its own rarely, and **45 % of the time right after eating**
+  (real "snack raccs" science).
+- **🦋 Butterfly friend** — every 18–42 s a butterfly (5 colour morphs) flutters across;
+  idle/sitting cats notice it and pounce, and it flits away faster.
+- **🍞 Bread emote** — the loaf pose now pops a tiny steaming loaf above the cat's head.
 
 ## Settings performance (v3.1+)
 
@@ -310,11 +350,15 @@ raises a system notification.
 |---|---|
 | ![sheet](app-electron/test/sheet.png) | ![panda](app-electron/test/panda_bamboo.png) |
 
+| v3.5 funny pack: the sneeze | v3.5 funny pack: the hairball |
+|---|---|
+| ![sneeze](docs/screenshots/v35_sneeze.png) | ![hairball](docs/screenshots/v35_hairball.png) |
+
 ---
 
 ## Install (Windows 11)
 
-**Portable (recommended)** — download `MeowCat-3.2.0-portable.exe` and run it. Nothing to
+**Portable (recommended)** — download `MeowCat-3.5.0-portable.exe` and run it. Nothing to
 install; a tray icon appears and the cat starts strolling. Quit from the tray menu.
 
 **From source**
@@ -323,8 +367,8 @@ install; a tray icon appears and the cat starts strolling. Quit from the tray me
 cd app-electron
 npm install
 npm start          # run the cat
-npm test           # 140 unit + 62 visual tests
-npm run dist       # MeowCat-3.2.0-portable.exe (electron-builder)
+npm test           # 166 unit + 62 visual tests
+npm run dist       # MeowCat-3.5.0-portable.exe (electron-builder)
 ```
 
 ## Repository layout
@@ -342,7 +386,7 @@ app-electron/
     reminder-scheduler.js  due-date engine (one-shot/daily/weekly/every-N)
     topmost.js          always-on-top re-assert loop
   windows/              cat.html overlay · settings.html (store + reminders + about)
-  tests/                147 unit tests (node:test, no browser needed)
+  tests/                166 unit tests (node:test, no browser needed)
   test/harness.html     headless render harness for the 62 visual tests
   scripts/              shoot-states.mjs · e2e-linux.mjs · profile-mem.mjs · patch-exe.mjs · verify-exe.mjs
 docs/                   RENDERING / FEATURES / BUILD / TESTING deep-dives
@@ -353,7 +397,7 @@ installer/              legacy v2 WiX materials (C# WPF era)
 
 | layer | count | what it proves |
 |---|---|---|
-| unit (`node:test`) | 147 | brain gaits & platform physics (seeded RNG), ground-stroll-only (no roaming), emote anchors hug every head, breed/body integrity (20/8), window JSON parsing, warm-pool behavior **incl. v3.4 idle self-destroy**, economy incl. unlimited promo, reminder roll-forward, topmost enforcer |
+| unit (`node:test`) | 166 | brain gaits & platform physics (seeded RNG), ground-stroll-only (no roaming), emote anchors hug every head, breed/body integrity (20/8), window JSON parsing, warm-pool behavior **incl. v3.4 idle self-destroy**, economy incl. unlimited promo, reminder roll-forward, topmost enforcer |
 | visual (Playwright) | 62 | every state/breed/emote renders, feet stay planted, animation is alive, breeds pixel-distinct, mirror symmetry, emote life-cycle |
 | E2E (real app, Xvfb) | 37 | boot → paint → **process diet (MeowCat identity, no GPU/crashpad, 1 renderer at rest)** → brain → IPC actions → coins persist → reminders fire → settings warm-open → merged reminders UI → double-click popup → free panda unlock → **live window-top jump** → region slide → tap emote → **idle settings self-destroy + fast reopen** |
 

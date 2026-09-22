@@ -42,12 +42,12 @@
   {
     "name": "brain pose advances (animation clock)",
     "pass": true,
-    "extra": "t 0.25 → 2.05"
+    "extra": "t 0.19 → 1.99"
   },
   {
     "name": "cat state machine runs",
     "pass": true,
-    "extra": "idle@800 → groom@800"
+    "extra": "idle@800 → idle@800"
   },
   {
     "name": "tray-style action (dance) reaches the cat",
@@ -57,7 +57,7 @@
   {
     "name": "coins persist through IPC+store",
     "pass": true,
-    "extra": "1000035 → 1000045"
+    "extra": "1000014 → 1000024"
   },
   {
     "name": "settings round-trip",
@@ -82,7 +82,7 @@
   {
     "name": "settings open (warm) is fast (<300ms)",
     "pass": true,
-    "extra": "11ms"
+    "extra": "19ms"
   },
   {
     "name": "close keeps the window warm (page target alive)",
@@ -92,7 +92,7 @@
   {
     "name": "reopen is instant (warm reuse, <300ms)",
     "pass": true,
-    "extra": "2ms"
+    "extra": "4ms"
   },
   {
     "name": "reopened settings window takes focus",
@@ -132,12 +132,12 @@
   {
     "name": "about page shows version + developer link",
     "pass": true,
-    "extra": "{\"ver\":\"v3.4.0\",\"dev\":true}"
+    "extra": "{\"ver\":\"v3.5.0\",\"dev\":true}"
   },
   {
     "name": "panda unlocks free (unlimited coins promo)",
     "pass": true,
-    "extra": "{\"ok\":true,\"alreadyOwned\":true,\"coins\":1000045}"
+    "extra": "{\"ok\":true,\"alreadyOwned\":true,\"coins\":1000024}"
   },
   {
     "name": "settings window opens for reminders UI",
@@ -152,17 +152,47 @@
   {
     "name": "live: cat jumps onto a nearby window top border",
     "pass": true,
-    "extra": "{\"ok\":true,\"state\":\"idle\",\"baseY\":640,\"x\":534}"
+    "extra": "{\"ok\":true,\"state\":\"walk\",\"baseY\":640,\"x\":534}"
   },
   {
     "name": "live: region window slides to follow the walking cat",
     "pass": true,
-    "extra": "{\"ok\":true,\"from\":223,\"to\":122}"
+    "extra": "{\"ok\":true,\"from\":224,\"to\":123}"
   },
   {
     "name": "live: tapping the cat triggers the love emote on the pet",
     "pass": true,
     "extra": "{\"kind\":\"love\",\"state\":\"happy\"}"
+  },
+  {
+    "name": "live: laser toy spawns, brain chases and pounces",
+    "pass": true,
+    "extra": "{\"ok\":true,\"hadDot\":true,\"st0\":\"laser\",\"pounced\":true,\"state\":\"pounce\"}"
+  },
+  {
+    "name": "live: laser catch pays +3 coins and ends the chase",
+    "pass": true,
+    "extra": "{\"gained\":3,\"state\":\"happy\",\"dotLeft\":false}"
+  },
+  {
+    "name": "live: ambient butterfly spawns and drifts",
+    "pass": true,
+    "extra": "{\"ok\":true,\"bf\":{\"x\":-30,\"y\":851.8893376094378,\"hue\":200},\"state\":\"idle\"}"
+  },
+  {
+    "name": "cat window <title> is MeowCat",
+    "pass": true,
+    "extra": "\"MeowCat\""
+  },
+  {
+    "name": "AppUserModelID is com.mythos0.meowcat",
+    "pass": true,
+    "extra": "{\"version\":\"3.5.0\",\"electron\":\"33.4.11\",\"platform\":\"linux\",\"aumid\":\"com.mythos0.meowcat\"}"
+  },
+  {
+    "name": "app version reported as 3.5.0",
+    "pass": true,
+    "extra": "3.5.0"
   },
   {
     "name": "settings reopened for idle-destroy test",
@@ -177,7 +207,7 @@
   {
     "name": "settings reopens after idle destroy (cold start ok, <1500ms)",
     "pass": true,
-    "extra": "11ms"
+    "extra": "12ms"
   },
   {
     "name": "e2e screenshots saved",

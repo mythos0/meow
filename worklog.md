@@ -142,3 +142,26 @@ Stage Summary:
 - Release: https://github.com/mythos0/meow/releases/tag/v3.4.0
 - Task Manager now shows MeowCat (never "electron"); at-rest = 3 MeowCat.exe on Windows; 1-process is impossible on stock Electron 33 (framework bug, proven) — documented in README + release notes
 - 246 automated checks green (147 unit + 62 visual + 37 E2E)
+
+---
+Task ID: 14
+Agent: Super Z (main)
+Task: v3.5.0 — funny features pack + "still shows electron in process manager" investigation & bulletproof identity
+
+Work Log:
+- FORENSICS on the shipped v3.4.0 EXE (downloaded from the release, carved the 7z out of the SFX, parsed PE resources with pefile/resedit): launcher AND inner MeowCat.exe carry FileDescription "MeowCat — your desktop cat", ProductName MeowCat, OriginalFilename MeowCat.exe, 7-icon group; the only "Electron" UTF-16 strings are internal symbol names in .rdata (window class names) that Windows never displays → the user's sighting almost certainly came from an older v3.3.0-or-earlier download
+- Found & fixed a real bug anyway: inner exe's BINARY VS_FIXEDFILEINFO was 0.0.0.0 (patch-exe.mjs called setFileVersion/setProductVersion AFTER outputToResourceEntries — changes never serialized); fixed order, binary version now 3.5.0.0
+- Identity hardening: app.setAppUserModelId('com.mythos0.meowcat') (Electron 33 has no getter — constant reported via app-info for e2e), <title>MeowCat</title> on cat.html + settings.html, About page relabelled "Runtime: Electron vX"
+- NEW build gate scripts/verify-artifact-identity.mjs: carves 7z from the finished portable EXE (BCJ2 — py7zr can't, uses bundled 7z from /home/z/my-project/tools/7zip), extracts inner exe, asserts 27 identity facts across ALL shipped EXEs (every string MeowCat, none Electron, binary version, icons, launcher too) — run in CI/build, exits 1 on any leak
+- verify-exe.mjs hardened: now also asserts binary fixed version + per-string Electron scan + OriginalFilename
+- Funny pack (brain+renderer+cat.html): 4 new states — sneeze (wind-up → droplet-blast AH-CHOO + shock wedge → dazed recover), hairball (cough heaves → fuzzy souvenir prop drops out, sweat emote), zoomies (1.7× run gallop, pinned ears, dust trail; fires alone rarely AND 45% right after eat/bamboo — "snack raccs"), laser (interactive: stalk → chase → pounce → catch); laser toy lives in cat.html (dot spawn/drift/flee/clamp), brain only chases fed coords, catch = +3 coins + star emote + happy, miss = dot teleports away, total chase capped at 8s incl. pounces (_laserAge accumulates in tick); ambient butterfly (5 hue morphs, 18-42s cadence, idle cats noticeButterfly→pounce, butterfly flees faster); bread emote for loaf
+- main.js/preload: tray + context menu "Laser pointer!" → laser-start IPC (preload allowlist), 24 states / 12 emotes now
+- Tests: NEW tests/funny.test.mjs (10: state registry+emotes, long-sim hits all gags, zoomies speed & bounds, post-meal gate both ways, laser chase→pounce→resume, 8s timeout stops laser, safe no-ops, butterfly rules, panda hairball exclusion) → 166 unit green; E2E +6 (laser live chase+pounce, laser catch +3 coins, butterfly live, window title MeowCat, AUMID, version 3.5.0) → 43/43 green; behavior observer 6/6 (no roaming contract intact, bread emote seen live); mem-report 5 procs / 285MB PSS on Linux (Windows floor 3 × MeowCat.exe)
+- Visual QA: contact sheet + single renders of sneeze (3 phases), hairball (3 phases), zoomies, laser stalk, bread emote, laser dot, butterfly, chase vignettes; harness sheet extended with a toys row; sneeze droplets strengthened for contrast after first render was too faint
+- Build: MeowCat-3.5.0-portable.exe (76,174,330 B) — afterPack stamps inner exe (3.5.0.0 binary version now lands), launcher patched, verify-exe PASS both, verify-artifact-identity PASS 27/27, v3.5 feature strings verified inside app.asar, delivered to download/ + GitHub Release v3.5.0 (round-trip SHA-256 verified 9a36da1c…)
+- Cleanup: deleted the abandoned draft v4.0.0 C# release; docs refreshed (README funny-pack + identity forensics sections, FEATURES 24 actions/12 emotes, TESTING pyramid 166/62/43)
+
+Stage Summary:
+- Release: https://github.com/mythos0/meow/releases/tag/v3.5.0
+- v3.5.0: funny pack (laser/zoomies/sneeze/hairball/butterfly/bread) + every identity surface provably MeowCat (27-assertion artifact gate), 209 automated checks green
+- Task Manager can only show "MeowCat" (3 × MeowCat.exe at rest on Windows); old downloads were the "electron" culprit

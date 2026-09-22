@@ -330,6 +330,71 @@ try {
     emoteState.kind === 'love', JSON.stringify(emoteState));
   await cat.screenshot({ path: path.join(OUT, 'cat_live_emote.png') });
 
+  // ------------------------------------------------ 9d. v3.5 funny pack: laser pointer toy (live)
+  const laserT = await cat.evaluate(async () => {
+    const b = window.__brain && window.__brain();
+    if (!b) return { ok: false, why: 'no brain' };
+    if (b.state === 'sleep') b._enter('idle', 0.5);
+    window.__spawnLaser();
+    const t0 = Date.now();
+    let dot = window.__laser && window.__laser();
+    while (Date.now() - t0 < 1500 && !dot) {
+      await new Promise(r => setTimeout(r, 50));
+      dot = window.__laser && window.__laser();
+    }
+    const st0 = b.state;
+    // keep the dot underfoot → the brain must chase and pounce quickly
+    let pounced = false;
+    const t1 = Date.now();
+    while (Date.now() - t1 < 9000 && !pounced) {
+      if (window.__laser()) window.__setLaser(b.x + 24, b.baseY - 10);
+      if (b.state === 'pounce') pounced = true;
+      await new Promise(r => setTimeout(r, 40));
+    }
+    return { ok: !!dot && st0 === 'laser' && pounced, hadDot: !!dot, st0, pounced, state: b.state };
+  });
+  ok('live: laser toy spawns, brain chases and pounces', laserT.ok, JSON.stringify(laserT));
+
+  // laser catch resolution: dot underfoot at pounce landing → +3 coins + happy
+  const catchT = await cat.evaluate(async () => {
+    const b = window.__brain && window.__brain();
+    const c0 = await window.meow.getCoins();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 9000) {
+      if (window.__laser()) window.__setLaser(b.x + 20, b.baseY - 8);
+      if (!window.__laser() && !b.laser) break;   // chase resolved (caught or timed out)
+      await new Promise(r => setTimeout(r, 40));
+    }
+    const c1 = await window.meow.getCoins();
+    return { gained: c1 - c0, state: b.state, dotLeft: !!window.__laser() };
+  });
+  ok('live: laser catch pays +3 coins and ends the chase', catchT.gained >= 3 && !catchT.dotLeft,
+    JSON.stringify(catchT));
+
+  // ------------------------------------------------ 9e. v3.5: ambient butterfly (live)
+  const bfT = await cat.evaluate(async () => {
+    const b = window.__brain && window.__brain();
+    if (!b) return { ok: false, why: 'no brain' };
+    if (b.state === 'sleep') b._enter('idle', 0.5);
+    else if (!['idle', 'sit', 'loaf', 'groom'].includes(b.state)) b._enter('idle', 2);
+    window.__spawnButterfly();
+    const t0 = Date.now();
+    let bf = window.__butterfly && window.__butterfly();
+    while (Date.now() - t0 < 1500 && !bf) {
+      await new Promise(r => setTimeout(r, 50));
+      bf = window.__butterfly && window.__butterfly();
+    }
+    return { ok: !!bf, bf, state: b.state };
+  });
+  ok('live: ambient butterfly spawns and drifts', bfT.ok, JSON.stringify(bfT));
+
+  // ------------------------------------------------ 9f. v3.5 identity surfaces (never "Electron")
+  const catTitle = await cat.evaluate(() => document.title);
+  ok('cat window <title> is MeowCat', catTitle === 'MeowCat', JSON.stringify(catTitle));
+  const info = await cat.evaluate(() => (window.meow.appInfo ? window.meow.appInfo() : null));
+  ok('AppUserModelID is com.mythos0.meowcat', !!info && info.aumid === 'com.mythos0.meowcat', JSON.stringify(info));
+  ok('app version reported as 3.5.0', !!info && info.version === '3.5.0', info && info.version);
+
   // ------------------------------------------------ 10. v3.4: warm settings window self-destroys when idle
   await cat.evaluate(() => window.meow.openWindow('settings'));
   const set2 = await findPage('settings.html');

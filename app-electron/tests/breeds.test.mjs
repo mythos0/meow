@@ -85,13 +85,17 @@ describe('breeds & bodies (v3.2)', () => {
     assert.ok(BREED_PRICES.panda > BREED_PRICES.grey_tabby);
   });
 
-  test('20 states + 11 emotes are exported for the visual tests', () => {
-    assert.equal(STATES.length, 20);
+  test('24 states + 12 emotes are exported for the visual tests', () => {
+    assert.equal(STATES.length, 24);
     for (const s of ['stretch', 'groom', 'pounce', 'knead', 'loaf', 'yawn', 'startle', 'waddle', 'bamboo', 'roll']) {
       assert.ok(STATES.includes(s), `missing state ${s}`);
     }
+    // v3.5 funny pack
+    for (const s of ['sneeze', 'hairball', 'zoomies', 'laser']) {
+      assert.ok(STATES.includes(s), `missing v3.5 state ${s}`);
+    }
     assert.deepEqual([...EMOTES].sort(),
-      ['angry', 'exclaim', 'fish', 'heart', 'laugh', 'love', 'note', 'question', 'sweat', 'star', 'zzz'].sort());
+      ['angry', 'exclaim', 'fish', 'heart', 'laugh', 'love', 'note', 'question', 'sweat', 'star', 'zzz', 'bread'].sort());
   });
 
   test('hit-test bbox covers the biggest body + emote area', () => {

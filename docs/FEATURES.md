@@ -13,17 +13,22 @@ A procedural desktop pet for Windows 11. Everything about the cat is drawn by co
   **Snow Angora** (all-white, odd eyes: blue + green), **Somali** (russet brush tail),
   **British Plush** (dense blue-cream teddy), **Choco Munchkin** (chocolate sausage cat),
   **Sakura** (pale cream-pink chibi).
-* **20 actions** — walk, run, idle, sit, sleep, dance, scratch, jump, happy,
+* **24 actions** — walk, run, idle, sit, sleep, dance, scratch, jump, happy,
   **eat (v3.2: real fish-biting — a fish lies on the ground, each cycle the cat bites a
   chunk off, the fish visibly shrinks, then side-to-side chewing with a working cheek and
   closed blissful eyes, ×3 + a gulp)**, stretch (downward-dog), groom (lick paw), pounce
   (butt-wiggle → leap), knead (biscuits), loaf, yawn, startle (ears flat + puff) +
   panda-only **waddle (heavy bear roll), bamboo (sits up, hooks the stalk with both paws,
-  gnaw-gnaw-bite), somersault roll that travels forward**.
-* **11 emotes** pop just above the cat's head (v3.2 anchor fix — no more icons hovering
-  far away) — heart, love, note, question, exclaim, sweat, angry, laugh, star, zzz, fish —
-  spring pop-in, bob, fade. Triggered by state entries (dance→♪, sleep→Zz, startle→!…)
-  and interactions (pet→love, feed→fish).
+  gnaw-gnaw-bite), somersault roll that travels forward** +
+  **v3.5 funny pack: sneeze (wind-up → droplet-blast "AH-CHOO!"), hairball (cough-heaves →
+  a fuzzy souvenir drops out), zoomies (the mad after-meal sprint — dust trail, pinned
+  ears, 1.7× run speed; 45 % chance right after eating), laser (low stalk chasing the red
+  dot → pounce → catch pays +3 coins; interactive via tray / right-click menu)**.
+* **12 emotes** pop just above the cat's head (v3.2 anchor fix — no more icons hovering
+  far away) — heart, love, note, question, exclaim, sweat, angry, laugh, star, zzz, fish,
+  **bread (v3.5: a tiny steaming loaf for the loaf pose)** — spring pop-in, bob, fade.
+  Triggered by state entries (dance→♪, sleep→Zz, startle→!, zoomies→!, hairball→sweat,
+  loaf→bread) and interactions (pet→love, feed→fish, laser catch→star).
 * **Realistic movement** — IK legs whose knees follow the feet, chained pendulum tail
   drawn inside the body transform (never floats away from a rotated/squashed torso),
   squash-&-stretch, diagonal-pair gaits, natural blinks, ear twitches.

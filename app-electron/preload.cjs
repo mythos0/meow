@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('meow', {
   openExternal: url => ipcRenderer.invoke('open-external', url),
   moveRegion: rect => ipcRenderer.invoke('region:move', rect),
   on: (channel, fn) => {
-    const allowed = ['do-action', 'reminder-fired', 'settings-changed', 'workarea-changed', 'platforms', 'focus-reminders'];
+    const allowed = ['do-action', 'reminder-fired', 'settings-changed', 'workarea-changed', 'platforms', 'focus-reminders', 'laser-start'];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));
   },

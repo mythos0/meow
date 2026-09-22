@@ -1,16 +1,16 @@
-[9949:0922/084425.449737:ERROR:bus.cc(407)] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
-[9949:0922/084425.616778:ERROR:bus.cc(407)] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
-[9949:0922/084425.617196:ERROR:bus.cc(407)] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
-[9949:0922/084425.618770:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084425.618796:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084425.618805:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084425.618811:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084425.618815:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161837.431660:ERROR:bus.cc(407)] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[5277:0922/161837.592106:ERROR:bus.cc(407)] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[5277:0922/161837.592530:ERROR:bus.cc(407)] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+[5277:0922/161837.593387:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161837.593412:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161837.593421:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161837.593427:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161837.593431:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
 
-DevTools listening on ws://127.0.0.1:9222/devtools/browser/857cc7ae-4e7f-4414-be71-7f597a471985
-[9949:0922/084425.646173:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084425.661279:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084425.665894:ERROR:object_proxy.cc(576)] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+DevTools listening on ws://127.0.0.1:9222/devtools/browser/42c2845f-dcd6-45b9-a3ff-28130ca9c641
+[5277:0922/161837.636200:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161837.646150:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161837.649357:ERROR:object_proxy.cc(576)] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
 ALSA lib confmisc.c:855:(parse_card) cannot find card '0'
 ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_card_inum returned error: No such file or directory
 ALSA lib confmisc.c:422:(snd_func_concat) error evaluating strings
@@ -19,7 +19,7 @@ ALSA lib confmisc.c:1342:(snd_func_refer) error evaluating name
 ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
 ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
 ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM default
-[9949:0922/084425.769760:ERROR:alsa_util.cc(204)] PcmOpen: default,No such file or directory
+[5277:0922/161837.745189:ERROR:alsa_util.cc(204)] PcmOpen: default,No such file or directory
 ALSA lib confmisc.c:855:(parse_card) cannot find card '0'
 ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_card_inum returned error: No such file or directory
 ALSA lib confmisc.c:422:(snd_func_concat) error evaluating strings
@@ -28,10 +28,10 @@ ALSA lib confmisc.c:1342:(snd_func_refer) error evaluating name
 ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
 ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
 ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM default
-[9949:0922/084425.769822:ERROR:alsa_util.cc(204)] PcmOpen: plug:default,No such file or directory
-[9949:0922/084428.703542:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084428.703568:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084430.750438:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084434.067276:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084434.067306:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
-[9949:0922/084441.912528:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161837.745261:ERROR:alsa_util.cc(204)] PcmOpen: plug:default,No such file or directory
+[5277:0922/161840.671069:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161840.671089:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161842.722194:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161847.358088:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161847.358111:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[5277:0922/161854.954194:ERROR:bus.cc(407)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")

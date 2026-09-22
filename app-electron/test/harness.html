@@ -12,7 +12,7 @@
 <canvas id="cv" width="360" height="260"></canvas>
 <canvas id="grid" width="0" height="0" style="display:none"></canvas>
 <script type="module">
-import { drawCat, drawParticles, drawEmote, emoteAnchor, STATES, PALETTES, EMOTES } from '../src/cat-renderer.js';
+import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAnchor, STATES, PALETTES, EMOTES } from '../src/cat-renderer.js';
 
 // Mode 1: single render — ?state=walk&t=0.3&breed=grey_tabby&dir=1&scale=1[&emote=heart]
 // Mode 2: contact sheet — ?sheet=1 (all states x timestamps + breed rows + emote row)
@@ -31,10 +31,11 @@ if (q.get('sheet')) {
   const breedRows = Math.ceil(breeds.length / cols);
   const emoteCells = EMOTES.length;
   const emoteRows = Math.ceil(emoteCells / cols);
+  const toyRows = 1;   // v3.5: laser dot, butterfly, chase vignette
   const grid = document.getElementById('grid');
   grid.style.display = 'block';
   grid.width = cols * CELL_W;
-  grid.height = (rows + breedRows + emoteRows) * CELL_H;
+  grid.height = (rows + breedRows + emoteRows + toyRows) * CELL_H;
   const g = grid.getContext('2d');
   g.fillStyle = '#e8e8f0'; g.fillRect(0,0,grid.width,grid.height);
   for (let y = 0; y < grid.height; y += 20)
@@ -75,6 +76,30 @@ if (q.get('sheet')) {
     g.translate(ox + CELL_W/2, oy + CELL_H - 34);
     drawCat(g, { t: 0.15, state: 'sit', breed: 'grey_tabby', dir: 1, scale: 1 });
     drawEmote(g, { kind: em, t: 0.5, x: 46, y: -150, scale: 1 });
+    g.restore();
+  });
+
+  // v3.5 funny pack toys
+  const toyRow = rows + breedRows + emoteRows;
+  const toys = [
+    ['toy: laser dot', (gg) => drawLaser(gg, { t: 0.4, scale: 1, r: 8 })],
+    ['toy: butterfly', (gg) => drawButterfly(gg, { t: 0.4, scale: 2.2, hue: 28 })],
+    ['toy: laser chase', (gg) => {
+      drawCat(gg, { t: 0.2, state: 'laser', breed: 'grey_tabby', dir: 1, scale: 1 });
+      gg.save(); gg.translate(96, -30); drawLaser(gg, { t: 0.4, scale: 1 }); gg.restore();
+    }],
+    ['toy: butterfly hunt', (gg) => {
+      drawCat(gg, { t: 0.6, state: 'pounce', breed: 'grey_tabby', dir: 1, scale: 1 });
+      gg.save(); gg.translate(86, -110); drawButterfly(gg, { t: 0.3, scale: 1.8, hue: 200 }); gg.restore();
+    }],
+  ];
+  toys.forEach(([label, draw], i) => {
+    const ox = i * CELL_W, oy = toyRow * CELL_H;
+    g.strokeStyle = '#bbb'; g.strokeRect(ox, oy, CELL_W, CELL_H);
+    g.fillStyle = '#333'; g.fillText(label, ox + 6, oy + 16);
+    g.save();
+    g.translate(ox + CELL_W/2, oy + CELL_H - 34);
+    draw(g);
     g.restore();
   });
 

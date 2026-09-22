@@ -228,6 +228,8 @@ export const STATES = [
   'walk', 'run', 'idle', 'sit', 'sleep', 'dance', 'scratch', 'jump', 'happy', 'eat',
   'stretch', 'groom', 'pounce', 'knead', 'loaf', 'yawn', 'startle',
   'waddle', 'bamboo', 'roll',
+  // v3.5 funny pack
+  'sneeze', 'hairball', 'zoomies', 'laser',
 ];
 
 const TAU = Math.PI * 2;
@@ -455,6 +457,7 @@ export function drawCat(ctx, opts) {
   // ---------------- held / ground props (panda bamboo, cat fish)
   if (P.prop === 'bamboo') drawBamboo(ctx, P, t);
   else if (P.prop === 'fish') drawFish(ctx, P, t, B);
+  else if (P.prop === 'hairball') drawHairball(ctx, P, t, B);
 
   // ---------------- head
   drawHead(ctx, headC, P, pal, t, state, B);
@@ -731,6 +734,75 @@ function poseFor(state, t, jumpP, B, pal) {
       P.earFlat = cyc < 0.55 ? 1 : 0;
       P.headY = -2; P.headRot = -0.08;
       P.tailMode = 'spiral';
+      break;
+    }
+    // ---------------- v3.5 funny pack ----------------
+    case 'zoomies': {   // the mad sprint: full gallop, ears pinned, dust trail
+      const f = 16;
+      P.legs[0].fx = F[0] + W(f, 0) * A * 1.9;  P.legs[0].fy = -Math.max(0, Math.sin(t * f + 1.7)) * 13;
+      P.legs[1].fx = F[1] + W(f, Math.PI) * A * 1.9; P.legs[1].fy = -Math.max(0, Math.sin(t * f + 1.7 + Math.PI)) * 13;
+      P.legs[2].fx = F[2] + W(f, Math.PI * 1.2) * (A + 10); P.legs[2].fy = -Math.max(0, Math.sin(t * f + 1.2 + Math.PI * 1.5)) * 14;
+      P.legs[3].fx = F[3] + W(f, Math.PI * 0.2) * (A + 10); P.legs[3].fy = -Math.max(0, Math.sin(t * f + 1.2 + Math.PI * 0.5)) * 14;
+      P.bobY = -Math.abs(W(f, 0)) * 6;
+      P.bodyRot = 0.10 + W(f, 1) * 0.04;
+      P.sqx = 0.04; P.sqy = -0.03;
+      P.earFlat = 1;
+      P.mouth = 'open';
+      P.tailMode = 'stream';
+      P.particles = { kind: 'dust', f: 2.2 };
+      break;
+    }
+    case 'sneeze': {    // "ah... AH-CHOO!" — rear back, blast, dazed recover
+      const cyc = (t % 1.6) / 1.6;
+      if (cyc < 0.45) {           // wind-up: nose to the sky, everything pulls back
+        const q = cyc / 0.45;
+        P.headY = -q * 7; P.headRot = -q * 0.22;
+        P.bodyY = -q * 2;
+        P.sqx = -q * 0.03; P.sqy = q * 0.03;
+        P.eyeState = 'closed';
+      } else if (cyc < 0.62) {    // the blast
+        P.headY = 6; P.headRot = 0.30;
+        P.bodyY = 3; P.sqx = 0.06; P.sqy = -0.05;
+        P.legs[0].fy = -4; P.legs[1].fy = -4;
+        P.eyeState = 'closed';
+        P.mouth = 'open';
+        P.particles = { kind: 'achoo', f: 3 };
+      } else {                    // dazed, one blink of regret
+        const q = (cyc - 0.62) / 0.38;
+        P.headY = 6 - q * 6; P.headRot = 0.30 - q * 0.30;
+        P.eyeState = q > 0.7 ? 'blink' : 'closed';
+        if (cyc < 0.8) P.particles = { kind: 'achoo', f: 3 };
+      }
+      P.earFlat = cyc < 0.62 ? 1 : 0;
+      break;
+    }
+    case 'hairball': {  // cough-cough... and a tiny souvenir drops out
+      const cyc = (t % 2.8) / 2.8;
+      const cough = Math.abs(Math.sin(cyc * Math.PI * 4)) * (cyc < 0.7 ? 1 : 0.25);
+      P.bodyY = 6 + cough * 4;
+      P.bodyRot = 0.12;
+      P.sqx = -0.05 + cough * 0.04; P.sqy = 0.07 - cough * 0.04;
+      P.headY = 4 + cough * 2; P.headRot = 0.16 - cough * 0.10;
+      P.legs[2].fx = F[2] + 8; P.legs[2].fy = -2;
+      P.legs[3].fx = F[3] + 10; P.legs[3].fy = -2;
+      P.legs[0].fx = F[0] + 2; P.legs[1].fx = F[1] + 1;
+      P.tailMode = 'curl';
+      P.eyeState = cyc > 0.75 ? 'happy' : 'closed';
+      P.mouth = cough > 0.5 ? 'open' : 'closed';
+      if (cyc > 0.62) P.prop = 'hairball';   // the drop + it sits there, judging
+      break;
+    }
+    case 'laser': {     // stalking the red dot: low slink, locked eyes
+      const f = 9;
+      P.bodyY = 7; P.bodyRot = -0.07;
+      P.sqx = -0.05; P.sqy = 0.06;
+      P.legs[0].fx = F[0] + W(f, 0) * A * 0.8; P.legs[0].fy = -Math.max(0, Math.sin(t * f + Math.PI / 2)) * 5;
+      P.legs[1].fx = F[1] + W(f, Math.PI) * A * 0.8; P.legs[1].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.5)) * 5;
+      P.legs[2].fx = F[2] + W(f, Math.PI * 1.15) * A; P.legs[2].fy = -Math.max(0, Math.sin(t * f + Math.PI * 1.65)) * 4;
+      P.legs[3].fx = F[3] + W(f, Math.PI * 0.15) * A; P.legs[3].fy = -Math.max(0, Math.sin(t * f + Math.PI * 0.65)) * 4;
+      P.headY = 3; P.headRot = -0.05;
+      P.tailMode = 'spiral';
+      P.eyeState = 'open';
       break;
     }
     // ---------------- panda-specific actions ----------------
@@ -1262,6 +1334,42 @@ export function drawParticles(ctx, opts) {
       ell(ctx, x, y, 2.8, 1.5, ph * 5 + i);
       ctx.fill();
     }
+  } else if (kind === 'dust') {
+    // v3.5: dust puffs kicked up behind the zoomies sprint
+    for (let i = 0; i < 4; i++) {
+      const ph = (t * f * 0.5 + i * 0.25) % 1;
+      const x = -44 - ph * 34 - i * 7;
+      const y = -5 - Math.sin(ph * Math.PI) * 15;
+      ctx.fillStyle = `rgba(205,195,175,${0.5 * (1 - ph)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 3 + ph * 5.5, 0, TAU);
+      ctx.fill();
+    }
+  } else if (kind === 'achoo') {
+    // v3.5: the sneeze blast — a fan of droplets bursts from the nose
+    for (let i = 0; i < 7; i++) {
+      const ph = (t * f * 0.9 + i * 0.15) % 1;
+      const ang = -0.62 + i * 0.21;
+      const x = 34 + Math.cos(ang) * ph * 54;
+      const y = -82 + Math.sin(ang) * ph * 46 + ph * 14;
+      ctx.fillStyle = `rgba(80,160,230,${0.95 * (1 - ph * 0.7)})`;
+      ell(ctx, x, y, Math.max(1.4, 4.4 - ph * 2.6), Math.max(1.4, 4.4 - ph * 2.6), 0);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ell(ctx, x - 0.8, y - 0.8, Math.max(0.6, 1.5 - ph), Math.max(0.6, 1.5 - ph), 0);
+      ctx.fill();
+    }
+    // a little shock wedge right at the nose for the first third of the blast
+    const ph0 = (t * f * 0.9) % 1;
+    if (ph0 < 0.4) {
+      ctx.fillStyle = `rgba(120,190,245,${0.8 * (1 - ph0 / 0.4)})`;
+      ctx.beginPath();
+      ctx.moveTo(30, -88);
+      ctx.lineTo(52 + ph0 * 26, -102 - ph0 * 10);
+      ctx.lineTo(52 + ph0 * 26, -66 + ph0 * 8);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
   ctx.restore();
 }
@@ -1332,11 +1440,37 @@ function drawFish(ctx, P, t, B) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------- hairball prop
+function drawHairball(ctx, P, t, B) {
+  // the tiny souvenir: a fuzzy grey ball sitting in front of the paws
+  B = B || BODIES.normal;
+  const fx = B.feet[0] + 22;
+  const squish = 1 + Math.sin(t * 2.2) * 0.03;
+  ctx.save();
+  ctx.translate(fx, -5);
+  const g = ctx.createRadialGradient(-2, -3, 1, 0, 0, 8);
+  g.addColorStop(0, '#b9b3a8');
+  g.addColorStop(1, '#8d867b');
+  ctx.fillStyle = g;
+  ell(ctx, 0, 0, 7 * squish, 6.2 / squish, 0.1);
+  ctx.fill();
+  // stray fuzz strands
+  ctx.strokeStyle = 'rgba(150,142,130,0.8)';
+  ctx.lineWidth = 1;
+  for (const [a, l] of [[-1.2, 4], [0.5, 3.5], [2.2, 4.5], [3.6, 3]]) {
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 6, Math.sin(a) * 5.4);
+    ctx.lineTo(Math.cos(a) * (6 + l), Math.sin(a) * (5.4 + l * 0.8));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- emotes
 // Floating game-style emote glyphs that pop in above the cat's head.
 export const EMOTES = [
   'heart', 'love', 'note', 'question', 'exclaim', 'sweat',
-  'angry', 'laugh', 'star', 'zzz', 'fish',
+  'angry', 'laugh', 'star', 'zzz', 'fish', 'bread',
 ];
 
 // Anchor (local units, unscaled) where emotes hover: just above the head,
@@ -1492,6 +1626,35 @@ export function drawEmote(ctx, opts) {
       ctx.beginPath(); ctx.arc(-3, 0.5, 4, -0.6, 0.6); ctx.stroke();
       break;
     }
+    case 'bread': {
+      // v3.5: the loaf gets a little loaf — crust with steam curls
+      ctx.fillStyle = '#e0a852';
+      rr(ctx, -11, -3, 22, 11, 5.5);
+      ctx.fill();
+      ctx.fillStyle = '#f3cd8f';
+      rr(ctx, -11, -3, 22, 5, 4);
+      ctx.fill();
+      // crust slashes
+      ctx.strokeStyle = 'rgba(140,95,35,0.85)';
+      ctx.lineWidth = 1.4;
+      ctx.lineCap = 'round';
+      for (const sx of [-5, 0, 5]) {
+        ctx.beginPath();
+        ctx.moveTo(sx - 2, -1.2);
+        ctx.lineTo(sx + 2, -3.4);
+        ctx.stroke();
+      }
+      // steam curls
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 1.6;
+      for (const sx of [-5, 2]) {
+        ctx.beginPath();
+        ctx.moveTo(sx, -5);
+        ctx.bezierCurveTo(sx - 3, -9, sx + 3, -11, sx, -15);
+        ctx.stroke();
+      }
+      break;
+    }
   }
   ctx.restore();
 }
@@ -1520,3 +1683,71 @@ function heart(ctx, x, y, s) {
 // bounding box in local units (before dir/scale) — for hit tests.
 // Covers the largest body (chubby/panda) + raised paws + emote area.
 export const CAT_BBOX = { x: -88, y: -160, w: 180, h: 165 };
+
+// ---------------------------------------------------------------- v3.5 toys
+// drawLaser — the red pointer dot. Drawn around the origin (caller translates
+// to the dot's screen position). Pulsing glow + bright core.
+export function drawLaser(ctx, opts) {
+  const t = opts?.t || 0;
+  const pulse = 0.8 + Math.sin(t * 9) * 0.2;
+  const r = (opts?.r || 7) * (opts?.scale || 1) * pulse;
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.6);
+  g.addColorStop(0, 'rgba(255,70,60,0.95)');
+  g.addColorStop(0.35, 'rgba(255,60,50,0.5)');
+  g.addColorStop(1, 'rgba(255,60,50,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 2.6, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#ff3b30';
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.55, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.beginPath();
+  ctx.arc(-r * 0.15, -r * 0.15, r * 0.2, 0, TAU);
+  ctx.fill();
+}
+
+// drawButterfly — an ambient butterfly flapping past. Drawn around the origin,
+// wings flap fast; caller positions it and steers it across the screen.
+export function drawButterfly(ctx, opts) {
+  const t = opts?.t || 0;
+  const s = (opts?.scale || 1) * (opts?.s || 1);
+  const flap = Math.sin(t * 22);
+  const hue = opts?.hue ?? 28;   // default: monarch-ish orange
+  ctx.save();
+  ctx.scale(s, s);
+  ctx.rotate(Math.sin(t * 2.1) * 0.18);
+  // wings (near side + far side, mirrored around the body axis)
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.scale(1, 1);
+    const w = 9 * (0.55 + 0.45 * Math.abs(flap));   // wing spread follows flap
+    ctx.fillStyle = `hsla(${hue}, 85%, 60%, 0.92)`;
+    // upper wing
+    ctx.beginPath();
+    ctx.ellipse(side * w * 0.55, -3.5, w * 0.62, 4.4, side * 0.5, 0, TAU);
+    ctx.fill();
+    // lower wing
+    ctx.fillStyle = `hsla(${hue + 14}, 80%, 52%, 0.88)`;
+    ctx.beginPath();
+    ctx.ellipse(side * w * 0.42, 2.8, w * 0.4, 3.1, side * -0.35, 0, TAU);
+    ctx.fill();
+    // wing spots
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.beginPath();
+    ctx.ellipse(side * w * 0.7, -4.2, 1.3, 1.1, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+  // body + antennae
+  ctx.fillStyle = '#3a3230';
+  rr(ctx, -1.4, -5, 2.8, 10, 1.4);
+  ctx.fill();
+  ctx.strokeStyle = '#3a3230';
+  ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.moveTo(0, -5); ctx.quadraticCurveTo(-2.5, -9, -3.5, -10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, -5); ctx.quadraticCurveTo(2.5, -9, 3.5, -10); ctx.stroke();
+  ctx.restore();
+}

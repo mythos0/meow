@@ -23,6 +23,13 @@ app.commandLine.appendSwitch('in-process-gpu');            // belt & braces
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=160'); // applies to renderers
 process.title = 'MeowCat';                     // honest name in ps/top (works: comm=MeowCat)
+// v3.5 identity: Windows groups taskbar buttons, names toast notifications and
+// shows the "app" in Task Manager's App section via the AppUserModelID —
+// without this, Windows can fall back to the generic "Electron" identity.
+// (Electron 33 has the setter but no getter — the constant below is also what
+// app-info reports so the e2e can assert it.)
+const MEOW_AUMID = 'com.mythos0.meowcat';
+app.setAppUserModelId(MEOW_AUMID);
 
 // v3.4 process diet — the honest floor for stock Electron, verified empirically:
 //  * TRUE single-process (--single-process) SIGTRAP-crashes a BLANK Electron 33
@@ -152,6 +159,7 @@ function createTray() {
     { label: 'Dance!', click: () => catWin?.webContents.send('do-action', 'dance') },
     { label: 'Feed', click: () => catWin?.webContents.send('do-action', 'eat') },
     { label: 'Sleep now', click: () => catWin?.webContents.send('do-action', 'sleep') },
+    { label: 'Laser pointer!', click: () => catWin?.webContents.send('laser-start') },
     { type: 'separator' },
     { label: 'Reminders…', click: () => openReminders() },
     { label: 'Settings…', click: () => openSettings() },
@@ -309,6 +317,7 @@ ipcMain.handle('app-info', () => ({
   version: app.getVersion(),
   electron: process.versions.electron,
   platform: process.platform,
+  aumid: MEOW_AUMID,   // v3.5: e2e asserts this is MeowCat's
 }));
 ipcMain.handle('open-external', (_e, url) => {
   try {
@@ -327,6 +336,7 @@ ipcMain.handle('context-menu', (_e, pos) => {
     { label: '💃 Dance!', click: () => catWin?.webContents.send('do-action', 'dance') },
     { label: '🍖 Feed', click: () => catWin?.webContents.send('do-action', 'eat') },
     { label: '💤 Sleep now', click: () => catWin?.webContents.send('do-action', 'sleep') },
+    { label: '🔴 Laser pointer!', click: () => catWin?.webContents.send('laser-start') },
     { type: 'separator' },
     { label: 'Quit MeowCat', click: () => { quitting = true; app.quit(); } },
   ]);
