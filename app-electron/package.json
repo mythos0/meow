@@ -15,6 +15,7 @@
   "build": {
     "appId": "com.mythos0.meowcat",
     "productName": "MeowCat",
+    "npmRebuild": false,
     "afterPack": "scripts/afterpack.mjs",
     "files": [
       "main.js",

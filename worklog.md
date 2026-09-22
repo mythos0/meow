@@ -165,3 +165,27 @@ Stage Summary:
 - Release: https://github.com/mythos0/meow/releases/tag/v3.5.0
 - v3.5.0: funny pack (laser/zoomies/sneeze/hairball/butterfly/bread) + every identity surface provably MeowCat (27-assertion artifact gate), 209 automated checks green
 - Task Manager can only show "MeowCat" (3 × MeowCat.exe at rest on Windows); old downloads were the "electron" culprit
+
+---
+Task ID: 15
+Agent: Super Z (main)
+Task: v3.6.0 — "add all of this feature properly, give each feature an on/off toggle in settings, update the settings app like modern windows apps, update readme (short but funny), test all features"
+
+Work Log:
+- v3.6 feature pack built end-to-end on the v3.5 Electron base (system-reactions.js, sys-monitor.js, music-watcher.js, pomodoro.js, achievements.js, no-walk.js — all pure + injectable)
+- System-aware: 5s CPU/RAM sampler (Linux /proc in-process, Windows PS CIM one-shot) + hysteresis spike detector → startle/prowl; battery crisis → curl state (Battery API, cooldown); time-of-day weight multipliers (night sleep×3/yawn×4, speed −15%); new-window diff from the platform scanner → walk + sniff; music via long-lived PowerShell SMTC (WinRT) child / playerctl fallback → bop state; foreground app detection added to window scan (per-window PIDs + one Get-Process call) → editor loaf (goToPlatform + cozy bias) / game hype; global keyboard hook (uiohook-napi, bundled win32 prebuild) → rolling WPM → pounce + idle nap; cursor-idle watch (screen.getCursorScreenPoint) → stalk state (crouch-wiggle→creep→pounce→"caught" purr + affection)
+- Interaction: affection meter + 8 achievements persisted in settings-store (bumpStat/addAffection/unlock/addCustomSkin), perk hooks (rainbow pet, landing sparkles); companion cat (second brain, 62% size, nuzzle/play-fight/cursor rivalry); photo mode (freeze → canvas PNG → Pictures, flash)
+- Sound: contextual glass paw-taps (real recording) on window edges + synthesized squeak on jumps (scripts/gen-sfx.mjs); call detection (OBS/Zoom/Teams/Discord/…) → auto-hide + volume duck 22%
+- Dev extras: pomodoro engine (25/5 chains, tray menu, countdown badge, celebration + Night Owl achievement); build-status file watcher (green→celebrate, red→mope); idle dance party (10 min idle → 2 ghost cats)
+- Customization: seasonal hats (pumpkin/santa/flower/shades) drawn in head-space; community skins — validated JSON def → registerSkin into PALETTES → first-class store breed with own hat
+- QoL: global hotkeys Ctrl+Alt+C/P, no-walk zones (body-rect blocking + platform filtering), fullscreen auto-hide, hide-during-calls — every one with a toggle
+- Settings app REWRITTEN Windows 11 Fluent style: left nav (10 pages), cards, Win11 toggle switches (24), affection meter, achievements grid, pomodoro controls, zone editor, skin import, status-file field; window resized/resizable
+- Brain/renderer extended: 7 new states (stalk/bop/mope/nuzzle/investigate/sniff/curl), 4 new emotes (sad/battery/rainbow/cookie), 31 actions/16 emotes total
+- Tests: +104 unit (270 total incl. spike hysteresis, typing meter WPM/cooldowns, fullscreen cover, window diff, process parsing, SMTC parsing, status verdicts, pomodoro chains, zone math, brain v3.6 flows, store progression) + 43 new e2e checks in scripts/e2e-v36.mjs (real CPU-hog stress, real typing meter injection, injected battery, forced companion interactions, photo file assertions, skin import, settings UI structure) → 86 e2e total, all green; fixed bop-expiry, investigate duration, tasklist .exe strip, pomodoro snapshot clock, stalk-pounce resolution, typing timestamp edge
+- Build: npmRebuild=false (uiohook-napi ships prebuilds — packaged win32-x64 .node verified in asar); MeowCat-3.6.0-portable.exe 76,449,180 B (sha256 cc9f53c9…), launcher+inner patched, verify-exe PASS both, verify-artifact-identity 27/27, released + round-trip SHA verified
+- Docs: README rewritten short & funny (feature table, skin format, test philosophy); FEATURES.md v3.6 section + counts (31 actions/16 emotes); TESTING.md 270/89/129+43 pyramid
+
+Stage Summary:
+- Release: https://github.com/mythos0/meow/releases/tag/v3.6.0
+- 22 features shipped, every one toggleable in the new Win11 settings; 359 automated checks green
+- main pushed 3692b5a + follow-ups, tag v3.6.0
