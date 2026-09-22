@@ -132,12 +132,22 @@ export class CatBrain {
   setBatteryLow(on) {
     this._batteryLow = !!on;
     if (on) this._enter('curl', 30 + this.rand() * 20);
+    else if (this.state === 'curl') {
+      // v3.6.1: plugged back in — wake up promptly instead of finishing the
+      // full 30–50s nap ("ok, energy saved, back to chaos")
+      this._enter('yawn', 2.4);
+      this.onEvent('battery:restored');
+    }
   }
   startStalk(x, y) {
+    // v3.6.1: stalking from a window top would walk off the edge and float —
+    // ground-level behaviour only.
+    if (this.onPlatform) return false;
     this.stalk = { x, y };
     this._stalkWig = 0;
     this._enter('stalk', 7);      // hard cap like the laser chase
     this.onEvent('stalk:start');
+    return true;
   }
   moveStalk(x, y) { if (this.stalk) { this.stalk.x = x; this.stalk.y = y; } }
   stopStalk() {
@@ -148,6 +158,8 @@ export class CatBrain {
   investigate(x) {
     // only curious-ish cats stop to sniff the new arrival
     if (!['walk', 'idle', 'sit', 'loaf', 'groom', 'investigate', 'sniff'].includes(this.state)) return false;
+    // v3.6.1: investigating from a window top would float off the edge
+    if (this.onPlatform) return false;
     this._inv = { x: Math.max(this.minX + 40, Math.min(this.maxX - 40, x)) };
     // enough time to actually walk there at the current speed (capped)
     const dist = Math.abs(this._inv.x - this.x);
@@ -602,6 +614,9 @@ export class CatBrain {
       if (this.state === 'stalk') this.stopStalk();   // cursor moved off — interest lost
       if (this.state === 'pounce' && this.stalk) this.stopStalk();   // cursor pounce resolved
       if (this.state === 'investigate') this._inv = null;
+      // v3.6.1: during a battery crisis the cat stays curled — it used to wake
+      // up after each curl and randomly stroll around while "saving energy"
+      if (this.state === 'curl' && this._batteryLow) { this._enter('curl', 20 + this.rand() * 15); return; }
       if (this.state === 'bop' && this.musicOn) this._enter('bop', 3);   // keep the beat
       else this._nextAction();
     }

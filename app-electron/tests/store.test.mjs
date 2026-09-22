@@ -62,16 +62,18 @@ describe('settings-store', () => {
     assert.equal(st.get('coins'), 9_999_999);
   });
 
-  test('unlimited promo: buyBreed is free and owns the breed', () => {
+  test('unlimited promo: owned auto-expands on every write (no shrink loophole)', () => {
     const st = createSettings(memBackend());
-    // shrink owned to prove the free-unlock path (promo would auto-grant on load)
+    // v3.6.1: set() routes through the same sanitization as load() — so a
+    // mid-session shrink of `owned` can never dodge the promo auto-grant.
     st.set('owned', ['grey_tabby']);
+    assert.ok(st.get('owned').includes('panda'), 'promo re-grants all breeds');
+    assert.ok(st.get('owned').length >= Object.keys(BREED_PRICES).length);
     const before = st.get('coins');
     const r = st.buyBreed('panda');
     assert.equal(r.ok, true);
-    assert.equal(r.free, true);
+    assert.equal(r.alreadyOwned, true, 'already granted by the promo invariant');
     assert.equal(st.get('coins'), before, 'nothing deducted during promo');
-    assert.ok(st.get('owned').includes('panda'));
   });
 
   test('paid path (unlimitedCoins off): success deducts and owns', () => {

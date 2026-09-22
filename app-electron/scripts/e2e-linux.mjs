@@ -203,7 +203,15 @@ try {
 
     await set.waitForTimeout(500);
     const breedCount = await set.evaluate(() => document.querySelectorAll('.breed').length);
-    ok('settings shows 20 breed cards', breedCount === 20, `${breedCount}`);
+    const hasAllBase = await set.evaluate(() => {
+      const have = new Set([...document.querySelectorAll('.breed')].map(b => b.dataset.breed));
+      return ['grey_tabby', 'orange_tabby', 'siamese', 'calico', 'persian', 'tuxedo', 'bombay',
+        'russian_blue', 'ginger_kitten', 'ragdoll', 'bengal', 'maine_coon', 'panda', 'mochi',
+        'scottish_fold', 'snow_angora', 'somali', 'british_plush', 'choco_munchkin', 'sakura']
+        .every(b => have.has(b));
+    });
+    ok('settings shows all 20 base breed cards (plus any community skins)',
+      breedCount >= 20 && hasAllBase, `${breedCount} cards, base covered: ${hasAllBase}`);
     const unlimited = await set.evaluate(() => !document.querySelector('.breed.locked'));
     ok('unlimited coins: no locked breeds', unlimited);
     const storeUi = await set.evaluate(() => !!document.querySelector('.coins-pill') && !!document.querySelector('.tagnew'));

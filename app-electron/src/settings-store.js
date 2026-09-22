@@ -106,10 +106,18 @@ export function createSettings(backend) {
         if (Array.isArray(p.customSkins)) {
           d.customSkins = p.customSkins.filter(sk => sk && typeof sk.id === 'string' && sk.def && typeof sk.def === 'object')
             .slice(0, 32)
-            .map(sk => ({ id: String(sk.id).slice(0, 40), name: String(sk.name || sk.id).slice(0, 32), def: sk.def }));
+            .map(sk => ({
+              id: String(sk.id).slice(0, 40), name: String(sk.name || sk.id).slice(0, 32), def: sk.def,
+              ...(typeof sk.sig === 'string' ? { sig: sk.sig.slice(0, 512) } : {}),
+            }));
         }
       } else if (k === 'unlocked') {
         if (Array.isArray(p.unlocked)) d.unlocked = [...new Set(p.unlocked.filter(x => typeof x === 'string'))];
+      } else if (k === 'coins') {
+        // economy guard: strictly numeric, non-negative, capped
+        if (typeof p.coins === 'number' && Number.isFinite(p.coins) && p.coins >= 0) {
+          d.coins = Math.min(9_999_999, Math.floor(p.coins));
+        }
       } else if (OBJECT_KEYS.has(k)) {
         if (p[k] && typeof p[k] === 'object' && !Array.isArray(p[k])) d[k] = p[k];
       } else if (ARRAY_KEYS.has(k)) {
@@ -134,7 +142,18 @@ export function createSettings(backend) {
     get(key) { return structuredClone(data[key]); },
     set(key, val) {
       if (!(key in DEFAULTS)) return false;
-      data[key] = val;
+      // v3.6.1 robustness: every write goes through the same per-key
+      // sanitization the boot path uses.
+      //  * collections: the sanitized subset is kept (garbage filtered out)
+      //  * scalars: a rejected value keeps the CURRENT value — falling back
+      //    to DEFAULTS would let set('coins', -5) reset the purse to 999999
+      const prev = data[key];
+      data = sanitize({ ...data, [key]: val });
+      const scalar = !DEFAULTS[key] || typeof DEFAULTS[key] !== 'object';
+      if (scalar && !Object.is(data[key], val) &&
+          Object.is(data[key], DEFAULTS[key]) && !Object.is(prev, DEFAULTS[key])) {
+        data[key] = prev;
+      }
       persist();
       return true;
     },
@@ -185,10 +204,16 @@ export function createSettings(backend) {
     },
     addCustomSkin(skin) {           // imported community skin
       if (!skin || typeof skin.id !== 'string') return false;
-      data.customSkins = data.customSkins.filter(s => s.id !== skin.id);
-      data.customSkins.push({ id: skin.id.slice(0, 40), name: String(skin.name || skin.id).slice(0, 32), def: skin.def });
+      const entry = {
+        id: skin.id.slice(0, 40),
+        name: String(skin.name || skin.id).slice(0, 32),
+        def: skin.def,
+        ...(typeof skin.sig === 'string' ? { sig: skin.sig.slice(0, 512) } : {}),
+      };
+      data.customSkins = data.customSkins.filter(s => s.id !== entry.id);
+      data.customSkins.push(entry);
       if (data.customSkins.length > 32) data.customSkins = data.customSkins.slice(-32);
-      const pid = 'custom:' + skin.id;
+      const pid = 'custom:' + entry.id;
       if (!data.owned.includes(pid)) data.owned.push(pid);
       persist();
       return true;

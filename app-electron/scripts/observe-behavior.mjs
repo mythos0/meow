@@ -83,13 +83,19 @@ for (const s of timeline) states[s.state] = (states[s.state] || 0) + 1;
 
 // contract 1: no open-field roaming — every walking segment must be an
 // edge-to-edge ground stroll or a platform stroll, never leave the bounds,
-// and never "teleport" (per-sample |dx| bounded by run speed x sample time)
+// and never "teleport" (per-sample |dx| bounded by the fastest gait × the
+// simulated time actually elapsed between the two samples). Max gait is
+// zoomies: runSpeed(150) × 1.7, × 1.3 while stressed = 331.5 px/s. The old
+// run-only bound was flaky: a zoomies burst legitimately covers ~127px in a
+// 500ms sample.
+const MAX_PX_S = 150 * 1.7 * 1.3;
 let maxDx = 0, teleport = null;
 for (let i = 1; i < timeline.length; i++) {
   const a = timeline[i - 1], b = timeline[i];
   const dx = Math.abs(b.x - a.x);
-  const limit = 150 * (SAMPLE_MS / 1000) * 1.35 + 2;   // runSpeed cap per sample
-  if (dx > limit) { teleport = { at: a.t, from: a.x, to: b.x }; break; }
+  const dtSim = Math.max(0.001, b.t - a.t);          // simulated seconds between samples
+  const limit = MAX_PX_S * dtSim * 1.2 + 8;          // + jitter margin
+  if (dx > limit) { teleport = { at: a.t, from: a.x, to: b.x, dx, limit: Math.round(limit) }; break; }
   maxDx = Math.max(maxDx, dx);
 }
 ok('no teleporting movement (bounded per-sample displacement)', !teleport,

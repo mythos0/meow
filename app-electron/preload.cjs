@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('meow', {
   importSkin: jsonText => ipcRenderer.invoke('skins:import', jsonText),
   injectKeys: n => ipcRenderer.invoke('keys:inject', n),
   quickAction: act => ipcRenderer.invoke('quick-action', act),
+  browseStatusFile: () => ipcRenderer.invoke('status:browse'),
   on: (channel, fn) => {
     const allowed = [
       'do-action', 'reminder-fired', 'settings-changed', 'workarea-changed',

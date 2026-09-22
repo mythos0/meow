@@ -554,11 +554,12 @@ $('pomoStop').onclick = async () => { await window.meow.stopPomodoro(); renderPo
 window.meow.on('pomodoro', renderPomo);
 
 // ---------------- status file browse ----------------
+// v3.6.1: a real Electron file dialog (the old button just focused the input)
 $('statusBrowse').onclick = async () => {
-  // Electron file dialog lives in main; reuse settings:set after manual entry.
-  // Simple approach: prompt-style via input focus (portable).
-  $('statusFile').focus();
-  toast('Type the file path the cat should watch', true);
+  try {
+    const picked = await window.meow.browseStatusFile();
+    if (picked) { $('statusFile').value = picked; save({ statusFile: picked }); toast('Cat will watch ' + picked); }
+  } catch { toast('Could not open a file dialog', false); }
 };
 $('statusFile').onchange = () => save({ statusFile: $('statusFile').value.trim() });
 
@@ -647,9 +648,17 @@ function registerCustomSkins() {
   for (const sk of S.customSkins || []) registerSkin(sk.def, sk.id);
 }
 
-$('size').oninput = e => { S.size = +e.target.value; $('sizeV').textContent = Math.round(S.size * 100) + '%'; save({ size: S.size }); };
-$('opacity').oninput = e => { S.opacity = +e.target.value; $('opV').textContent = Math.round(S.opacity * 100) + '%'; save({ opacity: S.opacity }); };
-$('speed').oninput = e => { S.speed = +e.target.value; $('spV').textContent = S.speed + ' px/s'; save({ speed: S.speed }); };
+// v3.6.1: debounced saves — dragging a slider used to fire one settings:set
+// (disk write + poller orchestration + IPC) per input event.
+let _saveTimer = null;
+function saveDebounced(kv, ms = 140) {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => save(kv), ms);
+}
+
+$('size').oninput = e => { S.size = +e.target.value; $('sizeV').textContent = Math.round(S.size * 100) + '%'; saveDebounced({ size: S.size }); };
+$('opacity').oninput = e => { S.opacity = +e.target.value; $('opV').textContent = Math.round(S.opacity * 100) + '%'; saveDebounced({ opacity: S.opacity }); };
+$('speed').oninput = e => { S.speed = +e.target.value; $('spV').textContent = S.speed + ' px/s'; saveDebounced({ speed: S.speed }); };
 
 $('gotoReminders').onclick = () => {
   document.querySelectorAll('#nav .item').forEach(x => x.classList.remove('on'));

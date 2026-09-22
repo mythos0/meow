@@ -19,7 +19,7 @@ import {
   parseProcessList, findCallApp, findEditorApp, musicReaction, parseStatusFile,
 } from './src/system-reactions.js';
 import { createPomodoro, fmtRemaining } from './src/pomodoro.js';
-import { checkUnlocks, ACHIEVEMENTS, affectionProgress } from './src/achievements.js';
+import { checkUnlocks, ACHIEVEMENTS, affectionProgress, unlockedPerks } from './src/achievements.js';
 import { seasonHat, validateSkinDef } from './src/cat-renderer.js';
 
 // ------------------------------------------------------------------ v3.2/v3.4 memory & process diet
@@ -100,6 +100,7 @@ if (!gotLock) {
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
 function createCatWindow() {
+  try { enforcer?.stop(); } catch {}   // v3.6.1: never leak an interval at a destroyed window
   const wa = screen.getPrimaryDisplay().workArea;
   const scale = Number(store.get('size')) || 1.0;
   region = computeRegionSize(scale, wa);
@@ -245,6 +246,7 @@ function startBackgroundJobs() {
   coinTimer.unref?.();
 
   // v3.6: pomodoro heartbeat (1s while a timer runs)
+  let pomoTickN = 0;
   quitTimer = setInterval(() => {
     const evt = pomodoroEngine.tick();
     if (evt === 'focus-done') {
@@ -252,9 +254,9 @@ function startBackgroundJobs() {
     } else if (evt === 'break-done') {
       onPomodoroDone('break');
     } else if (pomodoroEngine.mode !== 'idle') {
-      // live countdown to the settings UI (every 5s is plenty)
-      if (Date.now() % 5000 < 1100) broadcastPomodoro('tick');
-    }
+      // live countdown to the settings UI — steady 5s cadence, no Date.now()% luck
+      if (++pomoTickN % 5 === 0) broadcastPomodoro('tick');
+    } else pomoTickN = 0;
   }, 1000);
   quitTimer.unref?.();
 }
@@ -301,11 +303,22 @@ function updateCatVisibility() {
 const spikeDetector = createSpikeDetector({});
 let callAppActive = false;
 let duckSent = false;
+let lastBatteryPushed = null;   // last battery state relayed to the renderer
 
-function onSystemSample({ cpu, ram }) {
+function onSystemSample({ cpu, ram, battery, charging }) {
   if (store.get('reactSystemSpikes')) {
     const verdict = spikeDetector.push({ cpu, ram });
     if (verdict === 'stress') sendToCat('system-event', { type: 'stress' });
+  }
+  // v3.6.1: the low-battery feature finally has a real data source —
+  // relay battery state to the renderer whenever it CHANGES (5s sampler).
+  if (store.get('reactLowBattery') && battery != null && charging != null) {
+    const state = { level: battery / 100, charging: !!charging };
+    const sig = `${state.level}|${state.charging}`;
+    if (sig !== lastBatteryPushed) {
+      lastBatteryPushed = sig;
+      sendToCat('system-event', { type: 'battery', ...state });
+    }
   }
 }
 
@@ -332,6 +345,10 @@ function onProcessList(raw) {
       duckSent = !!callApp;
       sendToCat('duck', duckSent);
     }
+  } else if (duckSent) {
+    // v3.6.1: feature turned off mid-call -> un-duck instead of staying quiet forever
+    duckSent = false;
+    sendToCat('duck', false);
   }
   void callAppActive;   // reserved for finer-grained logic
   callAppActive = !!callApp;
@@ -480,28 +497,29 @@ function onWindowScan(plats) {
 }
 
 // ---------- build/test status file watcher ----------
-let statusWatcher = null;
-let statusDebounce = null;
+// v3.6.1: a 5s poll instead of fs.watch — watch dies on atomic replaces
+// (CI exporters rename files into place) and re-creating it on every
+// unrelated settings change was pure churn. Verdicts fire on CHANGE only.
+let statusPoller = null;
+let lastStatusVerdict = null;
 
 function applyStatusFile(on) {
-  try { statusWatcher?.close(); } catch {}
-  statusWatcher = null;
+  if (statusPoller) { clearInterval(statusPoller); statusPoller = null; }
   const p = store.get('statusFile');
+  lastStatusVerdict = null;
   if (!on || !p) return;
   const readIt = () => {
-    clearTimeout(statusDebounce);
-    statusDebounce = setTimeout(() => {
-      try {
-        const verdict = parseStatusFile(fs.readFileSync(p, 'utf8'));
-        if (verdict === 'good') sendToCat('system-event', { type: 'build-ok' });
-        else if (verdict === 'bad') sendToCat('system-event', { type: 'build-bad' });
-      } catch { /* file vanished mid-write */ }
-    }, 700);
+    try {
+      const verdict = parseStatusFile(fs.readFileSync(p, 'utf8'));
+      if (verdict && verdict !== lastStatusVerdict) {
+        lastStatusVerdict = verdict;
+        sendToCat('system-event', { type: verdict === 'good' ? 'build-ok' : 'build-bad' });
+      }
+    } catch { /* file vanished mid-write */ }
   };
-  try {
-    statusWatcher = fs.watch(p, { persistent: false }, readIt);
-    readIt();
-  } catch { /* bad path */ }
+  statusPoller = setInterval(readIt, 5000);
+  statusPoller.unref?.();
+  readIt();
 }
 
 // ---------- pomodoro ----------
@@ -562,12 +580,24 @@ function checkAndSendUnlocks() {
   for (const id of fresh) {
     if (store.unlock(id)) {
       const a = ACHIEVEMENTS.find(x => x.id === id);
-      if (a) sendToCat('achievement', { id: a.id, name: a.name, icon: a.icon, desc: a.desc });
+      if (a) sendToCat('achievement', {
+        id: a.id, name: a.name, icon: a.icon, desc: a.desc,
+        // v3.6.1: perks ride along with the unlock so the renderer can activate
+        // them immediately (rainbow pets etc. used to stay dead in production)
+        perks: unlockedPerks(store.get('unlocked')),
+      });
     }
   }
 }
 
 // ---------- feature flag -> poller orchestration ----------
+const FLAG_KEYS = new Set([
+  'reactSystemSpikes', 'hideDuringCalls', 'duckDuringCalls', 'reactMusic',
+  'stalkCursor', 'reactTyping', 'dancePartyIdle', 'reactBuildStatus',
+  'statusFile', 'globalHotkeys', 'windowHopping', 'reactApps',
+  'reactNewWindows', 'hideInFullscreen', 'reactLowBattery',
+]);
+
 function applyFeatureFlags() {
   const needMonitor = store.get('reactSystemSpikes') || store.get('hideDuringCalls') || store.get('duckDuringCalls');
   if (needMonitor) sysMon.start(); else { sysMon.stop(); spikeDetector.reset(); }
@@ -575,12 +605,18 @@ function applyFeatureFlags() {
   if (store.get('stalkCursor')) startCursorWatch(); else stopCursorWatch();
   if (store.get('reactTyping') || store.get('dancePartyIdle')) { startIdleTicker(); startTypingHook(); }
   else { stopIdleTicker(); stopTypingHook(); }
+  if (!store.get('reactTyping')) stopTypingHook();   // hook serves typing only — never keep it for the party
+  lastBatteryPushed = null;   // next sample re-pushes battery state (idempotent)
   applyStatusFile(store.get('reactBuildStatus'));
   applyHotkeys(store.get('globalHotkeys'));
   const needScanner = store.get('windowHopping') || store.get('reactApps') ||
                       store.get('reactNewWindows') || store.get('hideInFullscreen');
   if (needScanner && process.platform === 'win32') ensureScanner();
   else scanner?.stop();
+  // v3.6.1: toggling a hider OFF must always un-hide — stale flags used to
+  // leave the cat invisible until the app was restarted.
+  if (!store.get('hideDuringCalls') && hiddenByCall) { hiddenByCall = false; updateCatVisibility(); }
+  if (!store.get('hideInFullscreen') && hiddenByFullscreen) { hiddenByFullscreen = false; updateCatVisibility(); }
 }
 
 // ---------- global hotkeys ----------
@@ -604,11 +640,15 @@ ipcMain.handle('settings:get', () => ({
 }));
 ipcMain.handle('settings:set', (_e, kv) => {
   const applied = {};
+  let flagsChanged = false;
   for (const [k, v] of Object.entries(kv || {})) {
     if (store.set(k, v)) applied[k] = v;
     if (k === 'autoStart') applyAutoStart(v);
+    if (FLAG_KEYS.has(k)) flagsChanged = true;
   }
-  applyFeatureFlags();
+  // v3.6.1: only re-orchestrate pollers when a flag actually changed —
+  // a breed switch or size slider used to restart the status poller too.
+  if (flagsChanged) applyFeatureFlags();
   if (catWin && !catWin.isDestroyed()) catWin.webContents.send('settings-changed', applied);
   return applied;
 });
@@ -628,10 +668,11 @@ ipcMain.handle('reminders:remove', (_e, id) => { const ok = sched.remove(id); pe
 ipcMain.handle('region:move', (_e, rect) => {
   if (!catWin || catWin.isDestroyed()) return null;
   const wa = screen.getPrimaryDisplay().workArea;
-  const w = Math.max(320, Math.min(rect?.w ?? region.w, wa.width));
-  const h = Math.max(280, Math.min(rect?.h ?? region.h, wa.height));
-  const x = Math.max(wa.x, Math.min(wa.x + wa.width - w, rect?.x ?? regionOrigin.x));
-  const y = Math.max(wa.y, Math.min(wa.y + wa.height - h, rect?.y ?? regionOrigin.y));
+  const num = (v, dflt) => (Number.isFinite(v) ? v : dflt);   // v3.6.1: NaN can never poison the region
+  const w = Math.max(320, Math.min(num(rect?.w, region.w), wa.width));
+  const h = Math.max(280, Math.min(num(rect?.h, region.h), wa.height));
+  const x = Math.max(wa.x, Math.min(wa.x + wa.width - w, num(rect?.x, regionOrigin.x)));
+  const y = Math.max(wa.y, Math.min(wa.y + wa.height - h, num(rect?.y, regionOrigin.y)));
   region = { w, h };
   regionOrigin = { x: Math.round(x), y: Math.round(y) };
   try { catWin.setBounds({ x: regionOrigin.x, y: regionOrigin.y, width: w, height: h }); } catch {}
@@ -659,6 +700,10 @@ ipcMain.handle('app-info', () => ({
   electron: process.versions.electron,
   platform: process.platform,
   aumid: MEOW_AUMID,
+  // v3.6.1: real visibility state (backgroundThrottling:false keeps the
+  // renderer's visibilityState "visible" even when hidden, so e2e + support
+  // diagnostics need this from the source of truth)
+  hidden: { user: hiddenByUser, call: hiddenByCall, fullscreen: hiddenByFullscreen },
 }));
 ipcMain.handle('open-external', (_e, url) => {
   try {
@@ -696,6 +741,7 @@ ipcMain.handle('photo:save', (_e, dataUrl) => {
   try {
     const m = /^data:image\/png;base64,(.+)$/.exec(String(dataUrl || ''));
     if (!m) return { ok: false, reason: 'bad-data' };
+    if (m[1].length > 48 * 1024 * 1024) return { ok: false, reason: 'too-large' };   // sanity cap (~36MB PNG)
     let dir;
     try { dir = app.getPath('pictures'); } catch { dir = path.join(app.getPath('userData'), 'photos'); }
     fs.mkdirSync(dir, { recursive: true });
@@ -730,13 +776,33 @@ ipcMain.handle('skins:import', (_e, jsonText) => {
     const def = JSON.parse(String(jsonText || ''));
     const err = validateSkinDef(def);
     if (err) return { ok: false, reason: err };
+    // v3.6.1: importing the SAME skin twice must not duplicate it —
+    // dedupe on a stable signature of the definition
+    const sig = JSON.stringify(def);
+    const existing = store.get('customSkins').find(s => s.sig === sig);
+    if (existing) {
+      store.ownBreed('custom:' + existing.id);
+      return { ok: true, id: 'custom:' + existing.id, deduped: true };
+    }
     const base = String(def.name || 'skin').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'skin';
     const id = `${base}_${Date.now().toString(36).slice(-4)}`;
-    store.addCustomSkin({ id, name: def.name, def });
+    store.addCustomSkin({ id, name: def.name, def, sig });
     store.ownBreed('custom:' + id);
     sendToCat('settings-changed', { customSkins: store.get('customSkins') });
     return { ok: true, id: 'custom:' + id };
   } catch (e) { return { ok: false, reason: 'invalid json' }; }
+});
+
+// status file picker — the "Browse…" button in settings used to be a stub
+ipcMain.handle('status:browse', async () => {
+  try {
+    const r = await dialog.showOpenDialog({
+      title: 'Pick the status file the cat should watch',
+      properties: ['openFile', 'showOverwriteConfirmation'],
+    });
+    if (r.canceled || !r.filePaths?.length) return null;
+    return r.filePaths[0];
+  } catch { return null; }
 });
 
 // e2e / accessibility: synthetic keystrokes feed the same typing meter
@@ -797,7 +863,7 @@ app.on('before-quit', () => {
   stopCursorWatch();
   stopTypingHook();
   applyHotkeys(false);
-  try { statusWatcher?.close(); } catch {}
+  if (statusPoller) clearInterval(statusPoller);
   fastWins.closeAll();
   if (schedTimer) clearInterval(schedTimer);
   if (coinTimer) clearInterval(coinTimer);

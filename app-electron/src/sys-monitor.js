@@ -33,23 +33,48 @@ export function memUsedPercent(text) {
   return Math.round(100 * (1 - avail / total));
 }
 
-// PowerShell one-shot output: {"cpu":12,"ram":48} (tolerant parse)
+// PowerShell one-shot output: {"cpu":12,"ram":48,"battery":87,"charging":true} (tolerant parse)
 export function parseWinStats(raw) {
   try {
     const v = JSON.parse(String(raw || '').trim().split(/\r?\n/).filter(Boolean).pop() || '');
     const cpu = Number.isFinite(+v.cpu) ? Math.max(0, Math.min(100, Math.round(+v.cpu))) : null;
     const ram = Number.isFinite(+v.ram) ? Math.max(0, Math.min(100, Math.round(+v.ram))) : null;
-    return { cpu, ram };
-  } catch { return { cpu: null, ram: null }; }
+    // battery: percent 0..100 (null when no battery), charging bool (null unknown)
+    let battery = null, charging = null;
+    if (v.battery != null && Number.isFinite(+v.battery)) battery = Math.max(0, Math.min(100, Math.round(+v.battery)));
+    if (typeof v.charging === 'boolean') charging = v.charging;
+    return { cpu, ram, battery, charging };
+  } catch { return { cpu: null, ram: null, battery: null, charging: null }; }
 }
 
-// win32 PS script: one JSON line with CPU% + RAM used %
+// linux battery sysfs (pure): /sys/class/power_supply/BAT0/capacity -> "87"
+export function parseBatteryCapacity(text) {
+  const v = parseInt(String(text || '').trim(), 10);
+  return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : null;
+}
+
+// /sys/class/power_supply/BAT0/status -> "Charging"|"Discharging"|"Full"|"Unknown"
+export function parseBatteryStatus(text) {
+  const t = String(text || '').trim().toLowerCase();
+  if (t.includes('charging') && !t.includes('discharging')) return true;   // charging
+  if (t === 'full') return true;                                           // plugged, full
+  if (t.includes('discharging')) return false;
+  return null;                                                             // unknown
+}
+
+// win32 PS script: one JSON line with CPU% + RAM used % + battery (if present)
 export const WIN_STATS_SCRIPT = `
 $ErrorActionPreference = 'SilentlyContinue'
 $cpu = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
 $os = Get-CimInstance Win32_OperatingSystem
 $ram = [math]::Round(100 * (1 - $os.FreePhysicalMemory / $os.TotalVisibleMemorySize))
-"{\\"cpu\\":$([int]$cpu),\\"ram\\":$([int]$ram)}"
+$bat = Get-CimInstance Win32_Battery | Select-Object -First 1
+$bl = $null; $bc = $null
+if ($bat) {
+  $bl = [int]$bat.EstimatedChargeRemaining
+  $bc = ($bat.BatteryStatus -ne 1)   # 1 = discharging/on battery, 2 = on AC/charging
+}
+"{\\"cpu\\":$([int]$cpu),\\"ram\\":$([int]$ram),\\"battery\\":$(if ($null -ne $bl) {[int]$bl} else {'null'}),\\"charging\\":$(if ($null -ne $bc) {$bc.ToString().ToLower()} else {'null'})}"
 `.trim();
 
 // ----------------------------- poller -------------------------------------
@@ -67,12 +92,17 @@ export function createSysMonitor(opts = {}) {
     if (busy) return;
     busy = true;
     try {
-      let cpu = null, ram = null;
+      let cpu = null, ram = null, battery = null, charging = null;
       if (platform === 'linux') {
         const cur = parseProcStat(readFn('/proc/stat'));
         cpu = cpuPercentBetween(prevStat, cur);
         prevStat = cur || prevStat;
         ram = memUsedPercent(readFn('/proc/meminfo'));
+        // battery via sysfs (first BAT* device) — null when none (desktop)
+        const cap = readFn('/sys/class/power_supply/BAT0/capacity') || readFn('/sys/class/power_supply/BAT1/capacity');
+        battery = parseBatteryCapacity(cap);
+        const bst = readFn('/sys/class/power_supply/BAT0/status') || readFn('/sys/class/power_supply/BAT1/status');
+        charging = parseBatteryStatus(bst);
       } else if (platform === 'win32' && spawnFn) {
         const out = await new Promise(resolve => {
           let p, out2 = '';
@@ -85,9 +115,9 @@ export function createSysMonitor(opts = {}) {
           p.on('error', () => { clearTimeout(kill); resolve(''); });
           p.on('close', () => { clearTimeout(kill); resolve(out2); });
         });
-        ({ cpu, ram } = parseWinStats(out));
+        ({ cpu, ram, battery, charging } = parseWinStats(out));
       }
-      if (cpu != null || ram != null) onSample({ cpu, ram });
+      if (cpu != null || ram != null || battery != null) onSample({ cpu, ram, battery, charging });
 
       // process snapshot (call-app / editor detection)
       if (tickN % procEvery === 0 && spawnFn) {

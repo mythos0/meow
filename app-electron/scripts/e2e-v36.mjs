@@ -80,6 +80,11 @@ try {
     const b = window.__brain();
     if (!['idle', 'sit', 'loaf', 'groom'].includes(b.state)) b._enter('idle', 2);
     b.musicOn = false; b._batteryLow = false; b.stressUntil = 0;
+    // v3.6.1: ground the cat — stalk/investigate now refuse to run on window
+    // tops (they used to float the cat off the edge), so scenarios must start
+    // from a deterministic ground-level state
+    b.onPlatform = null; b._jump = null; b.baseY = b.groundY; b.jumpY = 0;
+    b.stalk = null; b._inv = null; b._napRequested = false;
     return b.state;
   });
 

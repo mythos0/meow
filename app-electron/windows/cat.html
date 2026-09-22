@@ -29,6 +29,7 @@ import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAncho
 import { CatBrain } from '../src/cat-brain.js';
 import { computeRegionSize, initialOrigin, slideIfNeeded } from '../src/region.js';
 import { batteryCrisis } from '../src/system-reactions.js';
+import { unlockedPerks } from '../src/achievements.js';
 import { zonesToScreen } from '../src/no-walk.js';
 
 const cv = document.getElementById('cv');
@@ -57,10 +58,11 @@ let partyUntil = 0;
 let stalkWasCursor = false;
 let lastCursor = null;
 let pomoState = null;         // {mode, remaining, ...}
-// v3.6 battery (injectable for tests)
+// v3.6 battery: prefer main-process samples (sysfs/Win32_Battery), fall back
+// to navigator.getBattery; test hooks can inject too.
 let battery = null;
-// v3.6 perks (from achievements)
-let perks = { rainbowPet: false, sparkleLand: false, heartRain: false };
+// v3.6 perks (from achievements) — v3.6.1: actually computed from S.unlocked
+let perks = { rainbowPet: false, sparkleLand: false, heartRain: false, dotSlayer: false };
 // v3.3 region window state
 let O = { x: 0, y: 0 };
 let REGION = { w: 480, h: 434 };
@@ -115,7 +117,9 @@ async function init() {
   window.meow.on('pomodoro', onPomodoro);
   window.meow.on('achievement', showAchievement);
   window.meow.on('no-walk-zones', zones => {
-    if (brain) brain.setNoWalkZones(zonesToScreen(zones, brain.bounds));
+    if (!brain) return;
+    if (S.noWalkZones === false) { brain.setNoWalkZones([]); return; }   // v3.6.1: respect the toggle at boot
+    brain.setNoWalkZones(zonesToScreen(zones, brain.bounds));
   });
   window.meow.on('photo-mode', () => photoMode());
   window.meow.on('dance-party', startDanceParty);
@@ -133,6 +137,7 @@ async function init() {
   applyHat();
   applyCompanion(S.companionCat);
   applyTimeBias();
+  refreshPerks();
   setInterval(applyTimeBias, 60_000);
   pollBattery();
   scheduleButterfly();
@@ -173,22 +178,18 @@ function applyTimeBias() {
 // ---------------------------------------------------------- battery
 async function pollBattery() {
   try {
-    if (!battery) {
-      const b = await navigator.getBattery?.();
-      if (b) battery = { level: b.level, charging: b.charging };
+    if (navigator.getBattery && (!battery || battery.source !== 'test')) {
+      const b = await navigator.getBattery();
+      if (b) {
+        // v3.6.1: read fresh values every poll (the old code snapshotted once,
+        // so unplugging the charger was never noticed). Never clobber an
+        // injected/test value.
+        if (!battery || battery.source !== 'nav') battery = { level: b.level, charging: b.charging, source: 'nav' };
+        else { battery.level = b.level; battery.charging = b.charging; }
+      }
     }
   } catch { /* no battery API — desktop PC */ }
-  if (battery && brain && S.reactLowBattery) {
-    const crisis = batteryCrisis(battery.level, battery.charging);
-    if (crisis && brain.state !== 'curl') {
-      brain.curlUp();
-      brain.emote = { kind: 'battery', t0: brain.t };
-      showBubble('🔋 Low battery — saving energy with you', 4000);
-    } else if (!crisis && brain.state === 'curl') {
-      brain.setBatteryLow(false);
-      brain.emote = { kind: 'star', t0: brain.t };
-    }
-  }
+  applyBatteryCrisis();
   setTimeout(pollBattery, 45_000);
 }
 
@@ -206,6 +207,28 @@ function onSystemEvent(ev) {
     brain.mopeNow();
     play('growl_real', 0.18);
     showBubble('❌ build red — the cat is not amused', 3600);
+  } else if (ev.type === 'battery') {
+    // v3.6.1: real battery samples from main (sysfs / Win32_Battery)
+    battery = { level: ev.level, charging: ev.charging };
+    applyBatteryCrisis();
+  }
+}
+
+// central battery reaction — used by both main pushes and the navigator poll
+function applyBatteryCrisis() {
+  if (!brain || !battery) return;
+  if (!S.reactLowBattery) {
+    if (brain.state === 'curl' && brain._batteryLow) { brain.setBatteryLow(false); brain.emote = { kind: 'star', t0: brain.t }; }
+    return;
+  }
+  const crisis = batteryCrisis(battery.level, battery.charging);
+  if (crisis && !brain._batteryLow) {
+    brain.curlUp();
+    brain.emote = { kind: 'battery', t0: brain.t };
+    showBubble('🔋 Low battery — saving energy with you', 4000);
+  } else if (!crisis && brain._batteryLow) {
+    brain.setBatteryLow(false);
+    brain.emote = { kind: 'star', t0: brain.t };
   }
 }
 
@@ -224,8 +247,7 @@ function onTyping(t) {
     const kx = wa.x + wa.width / 2 + (Math.random() - 0.5) * 200;
     const ky = wa.y + wa.height - 30;
     if (['idle', 'sit', 'loaf', 'groom', 'walk'].includes(brain.state)) {
-      brain.startStalk(kx, ky);
-      stalkWasCursor = true;
+      if (brain.startStalk(kx, ky)) stalkWasCursor = true;   // v3.6.1: only when the stalk actually started
     }
   } else if (t.action === 'nap') {
     if (['idle', 'sit', 'loaf'].includes(brain.state)) brain.sleepNow();
@@ -237,8 +259,7 @@ function onCursorIdle(p) {
   if (!brain || !S.stalkCursor) return;
   const d = Math.hypot(p.x - brain.x, p.y - brain.baseY);
   if (d < 340 && ['idle', 'sit', 'loaf', 'groom', 'walk'].includes(brain.state)) {
-    brain.startStalk(p.x, p.y);
-    stalkWasCursor = true;
+    if (brain.startStalk(p.x, p.y)) stalkWasCursor = true;   // v3.6.1: platform cats decline
   }
 }
 function onCursorBusy(p) {
@@ -280,6 +301,17 @@ function onPomodoro(p) {
 function showAchievement(a) {
   showBubble(`${a.icon} Achievement: ${a.name} — ${a.desc}`, 5200);
   play('coin', 0.8);
+  // v3.6.1: perks arrive with the unlock event (main computes them from the
+  // fresh unlocked list) — rainbow pets etc. activate the moment they land
+  if (a.perks) perks = { ...perks, ...a.perks };
+  else refreshPerks();
+}
+
+// v3.6.1: perks used to stay false forever outside the test suite —
+// recompute them from the unlocked list whenever anything might change it.
+function refreshPerks() {
+  try { perks = unlockedPerks(S.unlocked || []); } catch { /* keep old perks */ }
+  window.__perksSet = true;
 }
 
 function startDanceParty() {
@@ -392,6 +424,8 @@ function applySettings(kv) {
   }
   if (kv.companionCat !== undefined) applyCompanion(!!kv.companionCat);
   if (kv.timeOfDayMood !== undefined) applyTimeBias();
+  if (kv.unlocked !== undefined || kv.achievements !== undefined) refreshPerks();
+  if (kv.reactLowBattery !== undefined) applyBatteryCrisis();   // v3.6.1: re-check on toggle
   if ((kv.noWalkZoneList !== undefined || kv.noWalkZones !== undefined) && brain) {
     const zones = S.noWalkZones === false ? [] : (S.noWalkZoneList || []);
     brain.setNoWalkZones(zonesToScreen(zones, brain.bounds));
@@ -520,8 +554,14 @@ function showBubble(text, ms = 5000) {
 function showReminder(item) {
   if (!brain) return;
   (window.__firedReminders = window.__firedReminders || []).push(item.label);
-  window.meow.bumpStat('reminders', 1);
-  brain.dance();
+  // v3.6.1: honor the "Cat does" choice (main already counted the stat —
+  // the renderer-side bump used to double-count every reminder)
+  const anim = item.anim || 'dance';
+  if (anim === 'eat') brain.feed();
+  else if (anim === 'sleep') brain.sleepNow();
+  else if (anim === 'happy') brain.pet();
+  else if (anim === 'jump') brain._enter('jump', 0.75);
+  else brain.dance();
   const p = brain.pose;
   const scale = S.size;
   const bx = Math.max(10, p.x - 20 - 110 - O.x), by = Math.max(10, p.y - 150 * scale - 70 - O.y);
@@ -561,6 +601,10 @@ window.addEventListener('mousemove', e => {
   if (dragging) {
     const moved = Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY);
     if (moved > 6 && pendingPet) { clearTimeout(pendingPet); pendingPet = null; }
+    // v3.6.1: grabbing the cat mid-jump must cancel the flight, or the jump
+    // lerp would fight the drag and teleport the cat on landing
+    brain._jump = null;
+    brain.onPlatform = null;
     brain.x = Math.max(brain.bounds.x + 60, Math.min(brain.bounds.x + brain.bounds.w - 60, m.x - dragDX));
     brain.baseY = Math.max(brain.bounds.y + 120, Math.min(brain.bounds.y + brain.bounds.h - 8, m.y - dragDY));
     brain.jumpY = 0;
@@ -803,7 +847,7 @@ window.__setLaser = (x, y) => { if (laser) { laser.x = x; laser.y = y; if (brain
 window.__spawnButterfly = () => spawnButterfly();
 window.__butterfly = () => butterfly && { x: butterfly.x, y: butterfly.y, hue: butterfly.hue };
 // ---------------- v3.6 test hooks ----------------
-window.__setBattery = (level, charging) => { battery = { level, charging }; };
+window.__setBattery = (level, charging) => { battery = { level, charging, source: 'test' }; };
 window.__battery = () => battery;
 window.__pollBattery = () => pollBattery();
 window.__setCursor = (x, y) => { lastCursor = { x, y }; };
@@ -826,7 +870,11 @@ window.__testEvent = (channel, data) => {
     'new-window': onNewWindow, 'app-focus': onAppFocus,
     'duck': on => { volumeMul = on ? 0.22 : 1; },
     'pomodoro': onPomodoro, 'achievement': showAchievement,
-    'no-walk-zones': zones => { if (brain) brain.setNoWalkZones(zonesToScreen(zones, brain.bounds)); },
+    'no-walk-zones': zones => {
+      if (!brain) return;
+      if (S.noWalkZones === false) { brain.setNoWalkZones([]); return; }
+      brain.setNoWalkZones(zonesToScreen(zones, brain.bounds));
+    },
     'photo-mode': () => photoMode(), 'dance-party': startDanceParty,
     'time-bias': mode => { if (!S.timeOfDayMood) return; brain?.setTimeBias(mode); },
     'boot-greet': () => brain?.greet(),

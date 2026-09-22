@@ -37,7 +37,7 @@ export const ACHIEVEMENTS = [
   { id: 'diner_10',     name: 'Regular at the Diner', desc: 'Eat 10 fish',                  icon: '🐟', test: s => s.fish >= 10 },
   { id: 'hunter_5',     name: 'Dot exterminator',   desc: 'Catch the laser 5 times',        icon: '🔴', test: s => s.lasers >= 5 },
   { id: 'zen_10',       name: 'Zen household',      desc: '10 nuzzles with a companion cat', icon: '🧘', test: s => s.nuzzles >= 10 },
-  { id: 'night_owl',    name: 'Night owl company',  desc: 'Run a focus session past 10pm',  icon: '🌙', test: s => s.pomodoroLate === 1 },
+  { id: 'night_owl',    name: 'Night owl company',  desc: 'Run a focus session past 10pm',  icon: '🌙', test: s => s.pomodoroLate >= 1 },
   { id: 'reminder_10',  name: 'On schedule',        desc: 'Survive 10 reminders',           icon: '⏰', test: s => s.reminders >= 10 },
 ];
 
