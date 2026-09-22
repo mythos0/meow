@@ -18,7 +18,8 @@ reminders with a speech bubble, real recorded **cat sounds**, and instant-open *
 | **Stack** | Electron 33 (Chromium) · HTML5 Canvas 2D · zero native modules |
 | **Art** | 100% procedural vector drawing — palettes + body skeletons + pose math, no PNGs |
 | **Brain** | Seeded deterministic state machine (weighted actions, window-top platform logic) |
-| **Tests** | 140 unit + 62 visual (Playwright pixel analysis) + 24 E2E (real app under Xvfb) |
+| **Tests** | 147 unit + 62 visual (Playwright pixel analysis) + 37 E2E (real app under Xvfb) |
+| **Identity** | Every process shows as **MeowCat** in Task Manager — never "electron" |
 | **Docs** | [docs/RENDERING.md](docs/RENDERING.md) · [docs/FEATURES.md](docs/FEATURES.md) · [docs/BUILD.md](docs/BUILD.md) · [docs/TESTING.md](docs/TESTING.md) |
 
 ![](docs/screenshots/01_hero_walk.png)
@@ -201,36 +202,53 @@ from **researched giant-panda facts** (zoo/natural-history sources, June 2022–
 | pandas **roll forward/backward/sideways** — famously tumble | `roll` state somersaults now travel forward (brain adds drift while rolling) |
 | pandas nap **sprawled** on side/belly between feedings | panda `sleep` = flat-out sprawl with the head down, not the cat curl |
 
-## Memory diet (v3.2 + v3.3)
+## Process & memory diet (v3.2 → v3.4)
 
 Task-Manager footprint was cut hard (user-reported baseline: **7 processes ≈ 400 MB**):
 
-1. **No GPU process** — `app.disableHardwareAcceleration()` + `in-process-gpu`: the cat is a
+1. **No GPU process** — `app.disableHardwareAcceleration()`: the cat is a
    tiny 2D canvas; Skia software rendering is plenty.
 2. **One helper window instead of two** — Reminders moved **inside Settings** (a section), so
    only one warm hidden renderer exists at any time.
-3. **Network service in the browser process** (`network-service-in-process`) and the audio
-   service kept in-host (`AudioServiceOutOfProcess` disabled) — two fewer utility processes.
-4. `v8CacheOptions: 'none'` on the overlay, `--max-old-space-size=160`, and the PowerShell
-   window-scan cadence relaxed 2.2 s → 3.2 s (halves the transient PowerShell spawns).
+3. `v8CacheOptions: 'none'` on the overlay, `--max-old-space-size=160`, and the PowerShell
+   window-scan cadence relaxed 2.2 s → 3.2 s — now user-controllable (v3.4 **"Jump onto window
+   tops"** toggle in Behaviour; off = zero transient PowerShell processes).
 
 **v3.3 additions:**
 
-5. **Region window** — the transparent overlay used to span the whole workArea
+4. **Region window** — the transparent overlay used to span the whole workArea
    (e.g. 1600×1000); the compositor held a full-screen surface for it and that dominated
    renderer RAM. The overlay is now a compact region (≈480×384 at 100 % cat size) that
    *follows* the cat with hysteresis (pure native moves — same pixel size, no surface
    reallocation; resizes only when the size slider or workArea changes). Pure math in
    `src/region.js`, unit-tested incl. a 40 s stroll simulation.
-6. **No eager warm pool** — the hidden Settings renderer (~57 MB PSS) is no longer resident
+5. **No eager warm pool** — the hidden Settings renderer (~57 MB PSS) is no longer resident
    at rest; it is created on first open (≈11 ms measured, local file) and kept warm after.
-7. **Idle FPS throttle** — stationary states (idle/sit/sleep/loaf/knead/groom/eat/bamboo)
+6. **Idle FPS throttle** — stationary states (idle/sit/sleep/loaf/knead/groom/eat/bamboo)
    paint at ~15 fps instead of 60; instant full rate on any movement or drag.
 
-Measured on the Linux dev rig (`scripts/mem-report.mjs`, PSS rollup): **7 → 6 processes,
-536 → ~440 MB PSS**, against a **blank-Electron-window baseline of 274 MB / 6 processes**
-on the same box — the app's own overhead is a ~10 MB JS heap plus the small canvas raster.
-(Windows shows less than these Linux figures: no zygotes, private-working-set accounting.)
+**v3.4 additions — honest process accounting & identity:**
+
+7. **Every process is named MeowCat** — both the portable launcher *and* the inner app exe
+   carry stamped PE resources (`scripts/patch-exe.mjs` via an `afterPack` hook), so Task
+   Manager shows `MeowCat` + "MeowCat — your desktop cat", never "Electron". The fixed-info
+   binary version is stamped too (it used to stay 3.1.0.0 — found & fixed by reading the
+   PE resources back with `scripts/verify-exe.mjs`).
+8. **True 1-process mode is impossible on stock Electron 33** — verified empirically:
+   `--single-process` SIGTRAP-crashes *a blank Electron app* at boot on Chromium 130.
+   Switches appended from `main.js` also never reach the early helpers (zygotes, network
+   utility spawn before app JS runs) — verified inert. So the shipped floor is the honest
+   one: **main + renderer + network helper = 3 × MeowCat.exe at rest** on Windows
+   (Linux dev adds 2 zygotes), no GPU process, no crashpad (never started).
+9. **Warm Settings self-destroys** — after 5 idle minutes the hidden settings renderer
+   closes itself (`src/fast-windows.js`, `MEOW_WARM_IDLE_MS` override), returning the
+   process count to the at-rest floor; the next open is a ~11 ms cold start.
+
+Measured on the Linux dev rig (`scripts/profile-mem.mjs`, PSS rollup): **7 → 5 processes
+(incl. 2 Linux-only zygotes), 536 → ~440 MB PSS**, against a **blank-Electron-window
+baseline of ~270 MB / 6 processes** on the same box — the app's own overhead is a ~10 MB
+JS heap plus the small canvas raster. Windows shows fewer processes than these Linux
+figures (no zygotes) and lighter private-working-set accounting.
 Profile tool kept in the repo: `scripts/profile-mem.mjs`.
 
 ## Interactions
@@ -245,12 +263,14 @@ Profile tool kept in the repo: `scripts/profile-mem.mjs`.
 
 ## Settings performance (v3.1+)
 
-The Settings window (which now also carries **Reminders**) is **created hidden at startup**
+The Settings window (which now also carries **Reminders**) is created **on first open**
 (`src/fast-windows.js`) and `open` is just `show()+focus()` on an already-loaded page:
 **~4–15 ms** warm open (was seconds), instant reopen. Closing (X button or Close) *hides* the
-window instead of destroying it, so the pool stays warm; quitting really closes everything.
-Note: renderer-initiated `window.close()` destroys the window outright in Chromium, so in-page
-Close buttons route through a dedicated `close-window` IPC — this detail is covered by tests.
+window instead of destroying it, so the pool stays warm; after **5 idle minutes** the warm
+window self-destroys to free its renderer process (v3.4), and the next open is a fast cold
+start. Quitting really closes everything. Note: renderer-initiated `window.close()` destroys
+the window outright in Chromium, so in-page Close buttons route through a dedicated
+`close-window` IPC — this detail is covered by tests.
 
 The Settings window also carries a premium **Cat Store** (gradient cards, hover lift, golden
 selected ring, NEW badges, coin pill) and an **About panel** with the version, the developer
@@ -322,9 +342,9 @@ app-electron/
     reminder-scheduler.js  due-date engine (one-shot/daily/weekly/every-N)
     topmost.js          always-on-top re-assert loop
   windows/              cat.html overlay · settings.html (store + reminders + about)
-  tests/                140 unit tests (node:test, no browser needed)
+  tests/                147 unit tests (node:test, no browser needed)
   test/harness.html     headless render harness for the 62 visual tests
-  scripts/              shoot-states.mjs · e2e-linux.mjs · mem-report.mjs · gen-icons.mjs
+  scripts/              shoot-states.mjs · e2e-linux.mjs · profile-mem.mjs · patch-exe.mjs · verify-exe.mjs
 docs/                   RENDERING / FEATURES / BUILD / TESTING deep-dives
 installer/              legacy v2 WiX materials (C# WPF era)
 ```
@@ -333,8 +353,8 @@ installer/              legacy v2 WiX materials (C# WPF era)
 
 | layer | count | what it proves |
 |---|---|---|
-| unit (`node:test`) | 140 | brain gaits & platform physics (seeded RNG), ground-stroll-only (no roaming), emote anchors hug every head, breed/body integrity (20/8), window JSON parsing, warm-pool behavior, economy incl. unlimited promo, reminder roll-forward, topmost enforcer |
+| unit (`node:test`) | 147 | brain gaits & platform physics (seeded RNG), ground-stroll-only (no roaming), emote anchors hug every head, breed/body integrity (20/8), window JSON parsing, warm-pool behavior **incl. v3.4 idle self-destroy**, economy incl. unlimited promo, reminder roll-forward, topmost enforcer |
 | visual (Playwright) | 62 | every state/breed/emote renders, feet stay planted, animation is alive, breeds pixel-distinct, mirror symmetry, emote life-cycle |
-| E2E (real app, Xvfb) | 24 | boot → paint → brain → IPC actions → coins persist → reminders fire → settings warm-open → merged reminders UI → double-click popup → free panda unlock → **live window-top jump** |
+| E2E (real app, Xvfb) | 37 | boot → paint → **process diet (MeowCat identity, no GPU/crashpad, 1 renderer at rest)** → brain → IPC actions → coins persist → reminders fire → settings warm-open → merged reminders UI → double-click popup → free panda unlock → **live window-top jump** → region slide → tap emote → **idle settings self-destroy + fast reopen** |
 
 Run everything: `npm test` (unit+visual) and `node scripts/e2e-linux.mjs` (real app).

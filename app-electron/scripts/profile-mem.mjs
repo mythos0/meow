@@ -65,11 +65,12 @@ if (browser) {
 }
 console.log('MeowCat renderer JS heap:', JSON.stringify(heap));
 
-// find the electron root pid (the one whose parent is NOT electron)
+// find the electron root pid (the one whose parent is NOT electron/meowcat)
 const psOut = execFileSync('ps', ['-eo', 'pid,ppid,comm'], { encoding: 'utf8' });
 const rows = psOut.split('\n').slice(1).map(l => l.trim().match(/^(\d+)\s+(\d+)\s+(\S+)/)).filter(Boolean)
   .map(m => ({ pid: +m[1], ppid: +m[2], comm: m[3] }));
-const electronRoots = rows.filter(r => r.comm === 'electron' && !rows.some(c => c.pid === r.ppid && c.comm === 'electron'));
+const isApp = c => c === 'electron' || c === 'MeowCat' || c.startsWith('crashpad');
+const electronRoots = rows.filter(r => isApp(r.comm) && !rows.some(c => c.pid === r.ppid && isApp(c.comm)));
 console.log('MeowCat tree:', JSON.stringify(treePss(electronRoots[0]?.pid)));
 app.kill('SIGKILL');
 

@@ -10,6 +10,31 @@
     "extra": ""
   },
   {
+    "name": "process diet: main process runs as \"MeowCat\" (not electron)",
+    "pass": true,
+    "extra": "comm=MeowCat"
+  },
+  {
+    "name": "process diet: no GPU process",
+    "pass": true,
+    "extra": "0"
+  },
+  {
+    "name": "process diet: no crashpad handler process",
+    "pass": true,
+    "extra": "0"
+  },
+  {
+    "name": "process diet: exactly 1 renderer at rest",
+    "pass": true,
+    "extra": "1"
+  },
+  {
+    "name": "process diet: total app processes <= 6 at rest",
+    "pass": true,
+    "extra": "5 procs (main=1 renderer=1 utility=1 zygote=2)"
+  },
+  {
     "name": "overlay is a compact region window (<50% of workArea)",
     "pass": true,
     "extra": "region 480x384 vs workArea 1600x1000"
@@ -17,12 +42,12 @@
   {
     "name": "brain pose advances (animation clock)",
     "pass": true,
-    "extra": "t 0.19 → 2.04"
+    "extra": "t 0.25 → 2.05"
   },
   {
     "name": "cat state machine runs",
     "pass": true,
-    "extra": "idle@800 → dance@800"
+    "extra": "idle@800 → groom@800"
   },
   {
     "name": "tray-style action (dance) reaches the cat",
@@ -32,7 +57,7 @@
   {
     "name": "coins persist through IPC+store",
     "pass": true,
-    "extra": "1000023 → 1000033"
+    "extra": "1000035 → 1000045"
   },
   {
     "name": "settings round-trip",
@@ -57,7 +82,7 @@
   {
     "name": "settings open (warm) is fast (<300ms)",
     "pass": true,
-    "extra": "13ms"
+    "extra": "11ms"
   },
   {
     "name": "close keeps the window warm (page target alive)",
@@ -90,6 +115,16 @@
     "extra": ""
   },
   {
+    "name": "window-hopping toggle present, default on",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "window-hopping setting round-trips through IPC",
+    "pass": true,
+    "extra": ""
+  },
+  {
     "name": "double-click on the cat opens the settings popup",
     "pass": true,
     "extra": ""
@@ -97,12 +132,12 @@
   {
     "name": "about page shows version + developer link",
     "pass": true,
-    "extra": "{\"ver\":\"v3.3.0\",\"dev\":true}"
+    "extra": "{\"ver\":\"v3.4.0\",\"dev\":true}"
   },
   {
     "name": "panda unlocks free (unlimited coins promo)",
     "pass": true,
-    "extra": "{\"ok\":true,\"alreadyOwned\":true,\"coins\":1000033}"
+    "extra": "{\"ok\":true,\"alreadyOwned\":true,\"coins\":1000045}"
   },
   {
     "name": "settings window opens for reminders UI",
@@ -117,17 +152,32 @@
   {
     "name": "live: cat jumps onto a nearby window top border",
     "pass": true,
-    "extra": "{\"ok\":true,\"state\":\"loaf\",\"baseY\":640,\"x\":534}"
+    "extra": "{\"ok\":true,\"state\":\"idle\",\"baseY\":640,\"x\":534}"
   },
   {
     "name": "live: region window slides to follow the walking cat",
     "pass": true,
-    "extra": "{\"ok\":true,\"from\":224,\"to\":123}"
+    "extra": "{\"ok\":true,\"from\":223,\"to\":122}"
   },
   {
     "name": "live: tapping the cat triggers the love emote on the pet",
     "pass": true,
     "extra": "{\"kind\":\"love\",\"state\":\"happy\"}"
+  },
+  {
+    "name": "settings reopened for idle-destroy test",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "idle settings window self-destroys (frees its renderer process)",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "name": "settings reopens after idle destroy (cold start ok, <1500ms)",
+    "pass": true,
+    "extra": "11ms"
   },
   {
     "name": "e2e screenshots saved",

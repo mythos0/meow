@@ -1,6 +1,6 @@
 // e2e-linux.mjs — REAL app test: boot Electron under Xvfb, verify live behavior via CDP
 import { chromium } from 'playwright';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -28,7 +28,7 @@ if (!process.env.DISPLAY) {
 const electronBin = path.join(ROOT, 'node_modules', '.bin', 'electron');
 const app = spawn(electronBin, ['.', '--remote-debugging-port=9222', '--no-sandbox', '--disable-gpu'], {
   cwd: ROOT,
-  env: { ...process.env, DISPLAY: process.env.DISPLAY },
+  env: { ...process.env, DISPLAY: process.env.DISPLAY, MEOW_WARM_IDLE_MS: '3000' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let appLog = '';
@@ -81,6 +81,42 @@ try {
     return n > 500;
   });
   ok('cat paints opaque pixels on canvas', hasCanvas);
+
+  // --------------------------------------------- 1b. v3.4 process diet (counted from the real tree)
+  function procBreakdown(rootPid) {
+    const out = execFileSync('ps', ['-eo', 'pid,ppid,comm,args'], { encoding: 'utf8' });
+    const rows = out.split('\n').slice(1).map(l => l.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/)).filter(Boolean)
+      .map(m => ({ pid: +m[1], ppid: +m[2], comm: m[3], args: m[4] }));
+    const kids = new Map();
+    for (const r of rows) { if (!kids.has(r.ppid)) kids.set(r.ppid, []); kids.get(r.ppid).push(r.pid); }
+    const b = { main: 0, gpu: 0, crashpad: 0, zygote: 0, renderer: 0, utility: 0, total: 0, mainComm: '?' };
+    const walk = pid => {
+      const r = rows.find(x => x.pid === pid);
+      if (r) {
+        const isApp = r.comm === 'MeowCat' || (r.comm === 'electron' && r.args.includes('dist/electron')) || r.comm.startsWith('crashpad');
+        if (isApp) {
+          b.total++;
+          if (r.comm.startsWith('crashpad')) b.crashpad++;
+          else if (r.args.includes('--type=zygote')) b.zygote++;
+          else if (r.args.includes('--type=renderer')) b.renderer++;
+          else if (r.args.includes('--type=gpu-process')) b.gpu++;
+          else if (r.args.includes('--type=utility')) b.utility++;
+          else { b.main++; b.mainComm = r.comm; }
+        }
+        for (const c of kids.get(pid) || []) walk(c);
+      }
+    };
+    walk(rootPid);
+    return b;
+  }
+  const pb = procBreakdown(app.pid);
+  ok('process diet: main process runs as "MeowCat" (not electron)', pb.main === 1 && pb.mainComm === 'MeowCat', `comm=${pb.mainComm}`);
+  ok('process diet: no GPU process', pb.gpu === 0, String(pb.gpu));
+  ok('process diet: no crashpad handler process', pb.crashpad === 0, String(pb.crashpad));
+  ok('process diet: exactly 1 renderer at rest', pb.renderer === 1, String(pb.renderer));
+  const expectMax = process.platform === 'win32' ? 3 : 6; // linux adds 2 zygotes + utility
+  ok(`process diet: total app processes <= ${expectMax} at rest`, pb.total <= expectMax,
+    `${pb.total} procs (main=${pb.main} renderer=${pb.renderer} utility=${pb.utility} zygote=${pb.zygote})`);
 
   // v3.3: region window (RAM diet) — overlay must be a small follower, not fullscreen
   const reg = await cat.evaluate(() => window.__region && window.__region());
@@ -172,6 +208,12 @@ try {
     ok('unlimited coins: no locked breeds', unlimited);
     const storeUi = await set.evaluate(() => !!document.querySelector('.coins-pill') && !!document.querySelector('.tagnew'));
     ok('premium store UI renders (pill + NEW badges)', storeUi);
+    const hopOn = await set.evaluate(() => { const el = document.getElementById('hopToggle'); return !!el && el.checked; });
+    ok('window-hopping toggle present, default on', hopOn === true);
+    await cat.evaluate(() => window.meow.setSettings({ windowHopping: false }));
+    const hopOff = await set.evaluate(() => window.meow.getSettings().then(s => s.windowHopping));
+    ok('window-hopping setting round-trips through IPC', hopOff === false);
+    await cat.evaluate(() => window.meow.setSettings({ windowHopping: true }));
     await set.screenshot({ path: path.join(OUT, 'settings_live.png') });
   }
 
@@ -287,6 +329,24 @@ try {
   ok('live: tapping the cat triggers the love emote on the pet',
     emoteState.kind === 'love', JSON.stringify(emoteState));
   await cat.screenshot({ path: path.join(OUT, 'cat_live_emote.png') });
+
+  // ------------------------------------------------ 10. v3.4: warm settings window self-destroys when idle
+  await cat.evaluate(() => window.meow.openWindow('settings'));
+  const set2 = await findPage('settings.html');
+  ok('settings reopened for idle-destroy test', !!set2);
+  if (set2) {
+    await set2.evaluate(() => window.meow.closeWindow('settings'));
+    await cat.waitForTimeout(4300);   // MEOW_WARM_IDLE_MS=3000 in the e2e run
+    const dead = await set2.evaluate(() => true).then(() => false).catch(() => true);
+    ok('idle settings window self-destroys (frees its renderer process)', dead);
+    const reopenMs = await cat.evaluate(async () => {
+      const t = Date.now();
+      await window.meow.openWindow('settings');
+      return Date.now() - t;
+    });
+    ok('settings reopens after idle destroy (cold start ok, <1500ms)', reopenMs < 1500, reopenMs + 'ms');
+    await cat.evaluate(() => window.meow.closeWindow('settings'));
+  }
 
   // topmost enforcer sanity: window has always-on-top state via CDP? (skip on Linux)
   ok('e2e screenshots saved', true, OUT);

@@ -66,6 +66,7 @@
 <div class="card">
   <div class="row"><label>Sound effects</label><input type="checkbox" id="sounds"></div>
   <div class="row"><label>Stay on top of fullscreen apps <span class="hint">(recommended)</span></label><input type="checkbox" id="topmost"></div>
+  <div class="row"><label>Jump onto window tops <span class="hint">(scans open windows — off saves CPU)</span></label><input type="checkbox" id="hopToggle"></div>
   <div class="row"><label>Start with Windows</label><input type="checkbox" id="autoStart"></div>
 </div>
 
@@ -191,6 +192,7 @@ function syncControls() {
   $('speed').value = S.speed; $('spV').textContent = S.speed + ' px/s';
   $('sounds').checked = !!S.sounds;
   $('topmost').checked = S.topmost !== false;
+  $('hopToggle').checked = S.windowHopping !== false;
   $('autoStart').checked = !!S.autoStart;
   $('coins').textContent = '🪙 ' + (S.coins ?? 0);
   $('shopHint').textContent = S.unlimitedCoins
@@ -210,6 +212,7 @@ $('opacity').oninput = e => { S.opacity = +e.target.value; $('opV').textContent 
 $('speed').oninput = e => { S.speed = +e.target.value; $('spV').textContent = S.speed + ' px/s'; save({ speed: S.speed }); };
 $('sounds').onchange = e => save({ sounds: e.target.checked });
 $('topmost').onchange = e => save({ topmost: e.target.checked });
+$('hopToggle').onchange = e => save({ windowHopping: e.target.checked });
 $('autoStart').onchange = e => { save({ autoStart: e.target.checked }); toast(e.target.checked ? 'Will start with Windows' : 'Auto-start disabled'); };
 $('gotoReminders').onclick = () => focusReminders();
 $('closeBtn').onclick = () => window.meow.closeWindow('settings');

@@ -88,4 +88,30 @@ describe('fast-windows pool', () => {
     const fw = createFastWindows({ factory: {} });
     assert.throws(() => fw.show('nope'), /no factory/);
   });
+
+  test('v3.4: an idle hidden window self-destroys after the idle timeout', async () => {
+    process.env.MEOW_WARM_IDLE_MS = '60';
+    try {
+      const fw = createFastWindows({ factory: { settings: () => fakeWin('settings') } });
+      const w = fw.show('settings');
+      fw.hide('settings');                       // arms the idle destroy (60ms)
+      assert.equal(fw.isAlive('settings'), true, 'warm while idle timer pending');
+      await new Promise(r => setTimeout(r, 220)); // let the idle timer fire
+      assert.equal(fw.isAlive('settings'), false, 'destroyed from the pool after idle');
+      assert.ok(w.closed >= 1, 'real close was allowed (not prevented)');
+    } finally { delete process.env.MEOW_WARM_IDLE_MS; }
+  });
+
+  test('v3.4: showing the window before the idle timeout cancels the destroy', async () => {
+    process.env.MEOW_WARM_IDLE_MS = '120';
+    try {
+      const fw = createFastWindows({ factory: { settings: () => fakeWin('settings') } });
+      const w = fw.show('settings');
+      fw.hide('settings');
+      fw.show('settings');                       // back in use — timer cancelled
+      await new Promise(r => setTimeout(r, 260)); // longer than the idle timeout
+      assert.equal(fw.isAlive('settings'), true, 'still warm — destroy was cancelled');
+      assert.equal(w.closed, 0, 'no real close happened');
+    } finally { delete process.env.MEOW_WARM_IDLE_MS; }
+  });
 });

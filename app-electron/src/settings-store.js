@@ -9,6 +9,7 @@ export const DEFAULTS = {
   sounds: true,
   autoStart: false,
   topmost: true,
+  windowHopping: true,  // v3.4: scan open windows so the cat can hop on them
   speed: 55,
   coins: 999999,        // v3.1: promo — effectively unlimited coins
   unlimitedCoins: true, // v3.1: every breed unlocks free while true

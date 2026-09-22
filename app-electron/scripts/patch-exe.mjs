@@ -39,9 +39,13 @@ vi.setStringValues(lang, {
   OriginalFilename: 'MeowCat.exe',
   ProductName: 'MeowCat',
 });
-vi.setFileVersion(3, 1, 0, 0, lang);
-vi.setProductVersion(3, 1, 0, 0, lang);
 vi.outputToResourceEntries(entries);
+// v3.4 fix: the BINARY fixed-info version was hardcoded (3,1,0,0) — Task
+// Manager's "Product version" column reads it, not the strings. Parse it now.
+const [vMaj = 3, vMin = 4, vPat = 0] = VERSION.split('.').map(n => parseInt(n, 10) || 0);
+vi.setFileVersion(vMaj, vMin, vPat, 0, lang);
+vi.setProductVersion(vMaj, vMin, vPat, 0, lang);
+console.log('fixed-info version stamped:', `${vMaj}.${vMin}.${vPat}.0`);
 console.log('version info stamped:', 'MeowCat', VERSION);
 
 // ---- icon (background-less cat face)

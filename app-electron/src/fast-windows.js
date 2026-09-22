@@ -1,11 +1,28 @@
 // fast-windows.js — warm window pool so Settings/Reminders open instantly.
 // Windows are created hidden at startup; "open" is a show()+focus() on an
 // already-loaded page. Close hides (app keeps them warm) unless quitting.
+// v3.4: a warm window self-destroys after 5 idle minutes hidden — the hidden
+// settings renderer used to stay resident (~45MB + a process) forever; the
+// pool recreates it on demand (~150ms) if the user comes back later.
 
 'use strict';
 
 export function createFastWindows({ factory } = {}) {
   const pool = new Map();
+  const IDLE_MS = Number(process.env.MEOW_WARM_IDLE_MS) || 5 * 60 * 1000;
+
+  function armIdleDestroy(w, name) {
+    clearTimeout(w.__idleTimer);
+    if (!(IDLE_MS > 0)) return;
+    w.__idleTimer = setTimeout(() => {
+      const cur = pool.get(name);
+      if (cur !== w) return;                       // replaced meanwhile
+      pool.delete(name);
+      w.__allowClose = true;
+      try { w.close(); } catch { /* ignore */ }
+    }, IDLE_MS);
+    if (typeof w.__idleTimer.unref === 'function') w.__idleTimer.unref();
+  }
 
   function get(name) {
     let w = pool.get(name);
@@ -22,11 +39,12 @@ export function createFastWindows({ factory } = {}) {
       w.__allowClose = false;
       try {
         w.on('close', e => {
-          if (!w.__allowClose) { e.preventDefault(); w.hide(); }
+          if (!w.__allowClose) { e.preventDefault(); w.hide(); armIdleDestroy(w, name); }
         });
       } catch { /* fake windows in tests may lack .on */ }
       pool.set(name, w);
     }
+    clearTimeout(w.__idleTimer);                   // in use again — not idle
     return w;
   }
 
@@ -48,10 +66,14 @@ export function createFastWindows({ factory } = {}) {
     },
     hide(name) {
       const w = pool.get(name);
-      if (w && !(typeof w.isDestroyed === 'function' && w.isDestroyed())) w.hide();
+      if (w && !(typeof w.isDestroyed === 'function' && w.isDestroyed())) {
+        w.hide();
+        armIdleDestroy(w, name);
+      }
     },
     closeAll() {
       for (const [, w] of pool) {
+        clearTimeout(w.__idleTimer);
         if (typeof w.isDestroyed === 'function' && w.isDestroyed()) continue;
         w.__allowClose = true;
         try { w.close(); } catch { /* ignore */ }

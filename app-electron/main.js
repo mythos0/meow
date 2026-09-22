@@ -12,19 +12,30 @@ import { createWindowScanner } from './src/window-scan.js';
 import { createFastWindows } from './src/fast-windows.js';
 import { computeRegionSize, initialOrigin } from './src/region.js';
 
-// ------------------------------------------------------------------ v3.2 memory diet
+// ------------------------------------------------------------------ v3.2/v3.4 memory & process diet
 // User-visible goal: fewest possible processes & lowest RAM in Task Manager.
 //  1. no GPU process — the cat is a tiny 2D canvas, Skia software rendering is
 //     plenty and a full GPU process (~50-120MB) is pure waste
-//  2. network service in the browser process (no separate utility process)
-//  3. audio service in the host process (no separate utility process)
-//  4. single helper window: Reminders lives INSIDE Settings (one warm hidden
-//     renderer instead of two)
-app.disableHardwareAcceleration();
-app.commandLine.appendSwitch('in-process-gpu');            // no GPU process
-app.commandLine.appendSwitch('network-service-in-process'); // no network utility
+//  2. single helper window: Reminders lives INSIDE Settings (one warm hidden
+//     renderer instead of two), self-destroying after 5 idle minutes (v3.4)
+app.disableHardwareAcceleration();                         // no GPU process (API)
+app.commandLine.appendSwitch('in-process-gpu');            // belt & braces
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=160');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=160'); // applies to renderers
+process.title = 'MeowCat';                     // honest name in ps/top (works: comm=MeowCat)
+
+// v3.4 process diet — the honest floor for stock Electron, verified empirically:
+//  * TRUE single-process (--single-process) SIGTRAP-crashes a BLANK Electron 33
+//    app at boot (framework bug in Chromium 130) → unusable, don't ship it.
+//  * Switches appended here never reach the EARLY helper processes (zygotes,
+//    network utility spawn before our JS runs) — verified inert, so the only
+//    way to pass them would be a self-relaunch hack, not worth the fragility.
+//  * Windows has no zygotes and crashpad only starts with crashReporter.start()
+//    (we never start it) → at rest Windows Task Manager shows:
+//        MeowCat.exe  (main)  +  MeowCat.exe (renderer)  +  network helper
+//    = 3 MeowCat entries, all named MeowCat (was 7 "electron" rows pre-v3.2).
+//  * The warm settings renderer now self-destroys after 5 idle minutes
+//    (fast-windows.js), so the at-rest count is what the user measures.
 
 // v3.3 region window: current size + origin (screen coords) of the overlay
 let region = { w: 480, h: 434 };
@@ -58,6 +69,21 @@ for (const r of store.get('reminders')) {
 
 function persistReminders() {
   store.set('reminders', sched.list());
+}
+
+// v3.4: window-top platform scanner, created on demand (settings toggle)
+function ensureScanner() {
+  if (process.platform !== 'win32') return;
+  if (!scanner) {
+    scanner = createWindowScanner({
+      spawnFn: spawn,
+      intervalMs: 3200,
+      onResult: plats => {
+        if (catWin && !catWin.isDestroyed()) catWin.webContents.send('platforms', plats);
+      },
+    });
+  }
+  scanner.start();
 }
 
 // ---------------------------------------------------------------- single instance
@@ -200,8 +226,24 @@ function startBackgroundJobs() {
 }
 
 // ---------------------------------------------------------------- auto-start
+// v3.4: for the PORTABLE build process.execPath points into the throwaway
+// %TEMP% extraction dir (gone after reboot) — register the original .exe the
+// user actually launched instead, so auto-start survives temp cleanups.
+function autoStartPath() {
+  try {
+    const dir = process.env.PORTABLE_EXECUTABLE_DIR;
+    if (dir && process.platform === 'win32') {
+      const exes = fs.readdirSync(dir).filter(f => /^meowcat.*\.exe$/i.test(f));
+      for (const f of exes) {
+        const p = path.join(dir, f);
+        if (fs.existsSync(p)) return p;
+      }
+    }
+  } catch { /* fall through */ }
+  return process.execPath;
+}
 function applyAutoStart(on) {
-  try { app.setLoginItemSettings({ openAtLogin: !!on, path: process.execPath }); } catch {}
+  try { app.setLoginItemSettings({ openAtLogin: !!on, path: autoStartPath() }); } catch {}
 }
 
 // ---------------------------------------------------------------- IPC
@@ -211,6 +253,7 @@ ipcMain.handle('settings:set', (_e, kv) => {
   for (const [k, v] of Object.entries(kv || {})) {
     if (store.set(k, v)) applied[k] = v;
     if (k === 'autoStart') applyAutoStart(v);
+    if (k === 'windowHopping') { if (v) ensureScanner(); else scanner?.stop(); }
   }
   if (catWin && !catWin.isDestroyed()) catWin.webContents.send('settings-changed', applied);
   return applied;
@@ -305,16 +348,9 @@ app.whenReady().then(() => {
   // v3.1: window-top platform scanner (cat hops onto nearby window borders).
   // v3.2: 3.2s cadence — each scan briefly spawns PowerShell; a slightly
   // longer beat halves the CPU churn and RAM spikes with no perceptible lag.
-  if (process.platform === 'win32') {
-    scanner = createWindowScanner({
-      spawnFn: spawn,
-      intervalMs: 3200,
-      onResult: plats => {
-        if (catWin && !catWin.isDestroyed()) catWin.webContents.send('platforms', plats);
-      },
-    });
-    scanner.start();
-  }
+  // v3.4: user-controllable (Behaviour → "Jump on window tops"); each scan is
+  // a transient PowerShell process, so the toggle doubles as a process diet.
+  if (store.get('windowHopping') !== false) ensureScanner();
 
   // v3.3 RAM diet: no eager warm pool — the hidden settings renderer used to
   // sit resident (~57MB PSS) while the user measures at-rest RAM in Task
