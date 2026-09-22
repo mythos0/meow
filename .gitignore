@@ -7,3 +7,4 @@ artifacts/exe-release/
 app-electron/node_modules/
 app-electron/dist/
 app-electron/package-lock.json
+artifacts/e2e-*/
