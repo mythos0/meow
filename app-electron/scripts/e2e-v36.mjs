@@ -151,12 +151,20 @@ try {
     return true;
   });
   ok('typing burst injected into the real typing meter', !!burst);
+  // v3.8: retry bursts for the window — the idle ticker only samples the meter
+  // every 3s, and a single pounce verdict lands whenever the cat happens to be
+  // mid-jump/eat (startStalk is declined then). The FEATURE under test is the
+  // full pipeline keys->meter->ticker->renderer->stalk, not a timing lottery.
   let pounceViaTyping = false;
   const tTyp = Date.now();
-  while (Date.now() - tTyp < 10000) {          // idle ticker ticks every 3s
-    const b = await cat.evaluate(() => window.__brain());
-    if (b.state === 'stalk' && b.stalk) { pounceViaTyping = true; break; }
-    await sleep(300);
+  while (Date.now() - tTyp < 12000) {
+    await cat.evaluate(() => window.meow.injectKeys(25));
+    for (let i = 0; i < 8; i++) {
+      const b = await cat.evaluate(() => window.__brain());
+      if (b.state === 'stalk' && b.stalk) { pounceViaTyping = true; break; }
+      await sleep(300);
+    }
+    if (pounceViaTyping) break;
   }
   ok('live: fast typing -> cat pounces toward the keyboard', pounceViaTyping);
   await cat.evaluate(() => window.__brain().stopStalk());

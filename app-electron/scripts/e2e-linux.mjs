@@ -1,7 +1,7 @@
 // e2e-linux.mjs — REAL app test: boot Electron under Xvfb, verify live behavior via CDP
 import { chromium } from 'playwright';
 import { spawn, execFileSync } from 'child_process';
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -364,9 +364,11 @@ try {
     const s = await window.meow.getSettings();
     return { state: b?.state, kind: b?.emote?.kind || null, pets: s.stats.pets || 0 };
   });
+  // v3.8: 'rainbow' is also a valid pet emote — the rainbowPet perk (unlocked
+  // once affection achievements land) recolors 30% of pets
   ok('live: holding the cat pets it (happy + pets stat +1)',
     emoteState.state === 'happy' && emoteState.pets === pets0 + 1 &&
-      ['love', 'heart'].includes(emoteState.kind), JSON.stringify({ pets0, ...emoteState }));
+      ['love', 'heart', 'rainbow'].includes(emoteState.kind), JSON.stringify({ pets0, ...emoteState }));
   await cat.screenshot({ path: path.join(OUT, 'cat_live_emote.png') });
 
   // ------------------------------------------------ 9d. v3.5 funny pack: laser pointer toy (live)
@@ -432,7 +434,7 @@ try {
   ok('cat window <title> is MeowCat', catTitle === 'MeowCat', JSON.stringify(catTitle));
   const info = await cat.evaluate(() => (window.meow.appInfo ? window.meow.appInfo() : null));
   ok('AppUserModelID is com.mythos0.meowcat', !!info && info.aumid === 'com.mythos0.meowcat', JSON.stringify(info));
-  ok('app version matches package.json', !!info && info.version === '3.7.0', info && info.version);
+  ok('app version matches package.json', !!info && info.version === JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, info && info.version);
 
   // ------------------------------------------------ 10. v3.4: warm settings window self-destroys when idle
   await cat.evaluate(() => window.meow.openWindow('settings'));

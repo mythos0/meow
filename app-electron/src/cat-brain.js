@@ -31,6 +31,25 @@ export const ACTIONS = [
   'stalk', 'bop', 'mope', 'nuzzle', 'investigate', 'sniff', 'curl',
 ];
 
+// v3.8: is platform `b` (from the newest scan) the same physical window as
+// `a` (the one the cat stands on)? Pure geometry — the window may have been
+// dragged/resized between scans, so we compare top-border overlap instead of
+// object identity. Returns the best candidate or null.
+export function matchPlatform(a, candidates, opts = {}) {
+  const maxDy = opts.maxDy ?? 260;      // border drifted further than this => treat as gone
+  let best = null, bestScore = 0;
+  for (const b of candidates || []) {
+    if (Math.abs(b.y - a.y) > maxDy) continue;
+    const ovL = Math.max(a.x, b.x);
+    const ovR = Math.min(a.x + a.w, b.x + b.w);
+    const overlap = Math.max(0, ovR - ovL);
+    if (overlap <= 0) continue;
+    const score = overlap / Math.min(a.w, b.w);   // ≥1 when one span contains the other
+    if (score > bestScore) { bestScore = score; best = b; }
+  }
+  return bestScore >= (opts.minOverlap ?? 0.5) ? best : null;
+}
+
 // emote shown when entering a state
 export const EMOTE_ON = {
   startle: 'exclaim', pounce: 'exclaim', dance: 'note', sleep: 'zzz',
@@ -293,7 +312,7 @@ export class CatBrain {
       case 'dance': this._enter('dance', 2.6 + this.rand() * 2); break;
       case 'eat': this._enter('eat', 4.9); break;   // 3 bite+chew cycles (1.4s each) + gulp
       case 'sleep': this._enter('sleep', 7 + this.rand() * 6); break;
-      case 'jump': this._enter('jump', 0.75); break;
+      case 'jump': if (this.onPlatform) this._borderHop(); else this._enter('jump', 0.75); break;
       case 'stretch': this._enter('stretch', 2.6 + this.rand() * 1.2); break;
       case 'groom': this._enter('groom', 3 + this.rand() * 1.5); break;
       case 'pounce': this._enter('pounce', 1.9); break;
@@ -349,8 +368,15 @@ export class CatBrain {
   // ------------------------------------------------------------ platforms
   // platforms: [{ x, y, w, h }] — full window rects in screen coords.
   // The cat stands on the TOP border (y) between x and x+w.
+  //
+  // v3.8: windows MOVE and RESIZE between scans. The old code compared by
+  // object identity, so the moment the user dragged/resized a window the cat
+  // lost its platform and TELEPORTED to the ground ("rendering jump from one
+  // place to another"). Now: platforms are re-bound by geometry — the same
+  // physical window keeps the cat on its (new) top border, a moved border is
+  // followed with a visible hop, and a vanished window gets an animated fall.
   setPlatforms(list) {
-    this.platforms = (Array.isArray(list) ? list : [])
+    let fresh = (Array.isArray(list) ? list : [])
       .filter(p => p && Number.isFinite(p.x) && Number.isFinite(p.y) &&
                    p.w > 90 && p.h > 40 &&
                    p.y >= this.bounds.y - 40 && p.y <= this.bounds.y + this.bounds.h)
@@ -358,14 +384,62 @@ export class CatBrain {
     // v3.6: drop window tops that intersect a no-walk zone (top-strip test —
     // a zone pinned low should not veto a tall window far above it)
     if (this._zones.length) {
-      this.platforms = this.platforms.filter(pl =>
+      fresh = fresh.filter(pl =>
         !this._zones.some(z => rectsIntersect({ x: pl.x, y: pl.y, w: pl.w, h: Math.min(pl.h, 24) }, z, 4)));
     }
-    // drop reference to vanished windows
-    if (this.onPlatform && !this.platforms.includes(this.onPlatform)) {
-      this.onPlatform = null;
-      this.baseY = this.groundY;
+
+    const cur = this.onPlatform;
+    if (cur) {
+      const match = matchPlatform(cur, fresh);
+      if (match) {
+        // same physical window (it may have been dragged/resized): re-bind
+        // and keep the cat ON its top border at the same relative spot.
+        const rel = cur.w > 0 ? (this.x - cur.x) / cur.w : 0.5;
+        const pad = 30;
+        let nx = match.x + Math.max(0, Math.min(1, rel)) * match.w;
+        nx = Math.max(match.x + pad, Math.min(match.x + match.w - pad, nx));
+        nx = Math.max(this.minX + pad, Math.min(this.maxX - pad, nx));
+        const dy = match.y - cur.y;
+        this.onPlatform = match;
+        if (!this._jump) {
+          if (Math.abs(dy) <= 60) {
+            // border nudged (small resize) — ride along, imperceptible
+            this.x = nx;
+            this.baseY = match.y;
+          } else {
+            // border moved far (drag / resize-from-top): hop back onto it
+            // visibly instead of silently teleporting
+            this._jumpTo(match, 0.6);
+          }
+        }
+      } else {
+        // window vanished (closed / minimized / excluded): fall with a little
+        // forward arc — never the old instant drop to the ground
+        this.onPlatform = null;
+        const dir = this.dir;
+        this._jump = { x0: this.x, x1: this.x + dir * 46, y0: this.baseY, y1: this.groundY, pl: null };
+        this._enter('jump', 0.5);
+      }
     }
+    this.platforms = fresh;
+  }
+
+  // v3.8: hop ALONG the top border of the window we are standing on —
+  // "the cat walks AND jumps on the top border". Lands back on the border.
+  _borderHop() {
+    const pl = this.onPlatform;
+    if (!pl) { this._enter('jump', 0.75); return; }
+    const pad = 34;
+    const lo = Math.max(pl.x + pad, this.minX + pad);
+    const hi = Math.min(pl.x + pl.w - pad, this.maxX - pad);
+    if (hi - lo < 44) { this._enter('jump', 0.75); return; }   // border too short: in-place hop
+    const reach = 90 + this.rand() * 110;
+    let x1 = this.x + this.dir * reach;
+    if (x1 < lo || x1 > hi) { this.dir *= -1; x1 = this.x + this.dir * reach; }   // bounce off the edge
+    x1 = Math.max(lo, Math.min(hi, x1));
+    this.onPlatform = null;   // airborne; re-bound on landing via _jump.pl
+    this._jump = { x0: this.x, x1, y0: this.baseY, y1: pl.y, pl };
+    this._enter('jump', 0.55);
   }
 
   // best window to jump onto from the current spot, or null

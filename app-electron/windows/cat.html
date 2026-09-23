@@ -69,7 +69,9 @@ let REGION = { w: 480, h: 434 };
 
 // ---------------------------------------------------------- audio
 function loadSounds() {
-  const names = ['meow_real', 'meow_real2', 'meow_real3', 'purr_real', 'purr', 'patter', 'run_patter', 'whoosh', 'land', 'scratch', 'coin', 'chirp', 'dance_loop', 'glass_real', 'squeak'];
+  // v3.8: growl_real + hiss_real finally load — hairball/build-bad growls
+  // were silent no-ops before (play() found no element and gave up).
+  const names = ['meow_real', 'meow_real2', 'meow_real3', 'purr_real', 'purr', 'patter', 'run_patter', 'whoosh', 'land', 'scratch', 'coin', 'chirp', 'dance_loop', 'glass_real', 'squeak', 'growl_real', 'hiss_real'];
   for (const n of names) {
     const a = new Audio(`../sounds/${n}.wav`);
     a.preload = 'auto';
@@ -95,6 +97,34 @@ function play(name, vol = 0.9) {
     try { a.currentTime = 0; } catch {}
     a.play().catch(() => {});
     window.__lastPlay = { name, t: performance.now() / 1000 };   // e2e instrumentation
+  } catch {}
+}
+
+// v3.8: ONE meow voice. Clicking the cat used to fan out through the 3-slot
+// audio pool AND across 3 different meow samples, so rapid petting stacked
+// several overlapping meows (reported as "overlapping clicks make overlapping
+// meow sound"). All meow variants now share a single exclusive element:
+// starting a new meow stops the previous one, so no matter how many clicks
+// land, exactly one meow is audible at any moment.
+const MEOW_VARIANTS = ['meow_real', 'meow_real2', 'meow_real3'];
+let meowVoice = null;
+function playMeow(vol = 0.95) {
+  if (!S.sounds) return;
+  try {
+    if (!meowVoice) {
+      meowVoice = audio[MEOW_VARIANTS[0]].cloneNode();
+      // e2e instrumentation: how many DISTINCT meow elements are playing right
+      // now (a Set — restarts of the same element don't double-count)
+      window.__meowEls = new Set();
+      meowVoice.addEventListener('play', () => window.__meowEls.add(meowVoice));
+      meowVoice.addEventListener('ended', () => window.__meowEls.delete(meowVoice));
+    }
+    const pick = MEOW_VARIANTS[Math.floor(Math.random() * MEOW_VARIANTS.length)];
+    if (meowVoice.src.indexOf(`/${pick}.wav`) === -1) meowVoice.src = `../sounds/${pick}.wav`;
+    meowVoice.volume = Math.max(0, Math.min(1, vol * volumeMul));
+    try { meowVoice.currentTime = 0; } catch {}
+    meowVoice.play().catch(() => {});
+    window.__lastPlay = { name: pick, t: performance.now() / 1000, exclusive: 'meow' };
   } catch {}
 }
 
@@ -385,18 +415,32 @@ function companionBreedTick(dt) {
   if (!companion || !brain) return;
   const c = companion.brain;
   c.tick(dt);
-  // v3.7: stick close to the big cat. The old 420px pull threshold let the
-  // kitten roam far outside the ~480px region window that follows the MAIN
-  // cat — it was drawn outside the visible area (clipped = "friend cat not
-  // showing"). Now: run back beyond the leash, and a hard net guarantees it
-  // can never render outside the region even mid-state.
+  // v3.7/v3.8: stick close to the big cat. The kitten used to roam outside
+  // the ~480px region window that follows the MAIN cat (clipped = "friend
+  // cat not showing"), and v3.7's hard net TELEPORTED it back — a visible
+  // "rendering jump". Worse, _enter('run') re-rolls the facing dir AFTER we
+  // set it, so the kitten often sprinted the WRONG way first. Now: the
+  // chase dir is re-asserted every frame while beyond the leash, the
+  // catch-up run speeds up with the gap, and the safety net GLIDES the
+  // kitten back smoothly instead of snapping it.
   const dx = brain.x - c.x;
-  if (Math.abs(dx) > companionLeashPx && ['walk', 'idle', 'run', 'sit'].includes(c.state)) {
-    c.dir = dx > 0 ? 1 : -1;
-    c._enter('run', 1.2);
+  const beyond = Math.abs(dx) > companionLeashPx;
+  if (beyond && ['walk', 'idle', 'run', 'sit', 'loaf', 'groom'].includes(c.state)) {
+    c._enter('run', 1.0);
   }
-  if (!c.onPlatform && !c._jump && Math.abs(c.x - brain.x) > companionLeashPx + 50) {
-    c.x = brain.x + Math.sign(c.x - brain.x) * (companionLeashPx + 50);
+  if (beyond) {
+    c.dir = dx > 0 ? 1 : -1;                                   // lock chase dir (anti re-roll)
+    c.runSpeed = Math.min(340, 170 + (Math.abs(dx) - companionLeashPx) * 1.6);   // catch up faster when far
+  } else {
+    c.runSpeed = 150;                                          // back to the default sprint
+  }
+  // smooth safety net (never a teleport): if somehow stuck far out — e.g. on
+  // a window top that runs away from the main cat — slide toward the leash
+  // edge at up to 420 px/s, which reads as a frantic dash, not a glitch.
+  const overflow = Math.abs(dx) - (companionLeashPx + 90);
+  if (overflow > 0 && !c._jump) {
+    const step = Math.min(overflow, 420 * dt);
+    c.x += Math.sign(dx) * step;
   }
   // nuzzle / play-fight when close and both are calm
   companionCd -= dt;
@@ -426,16 +470,34 @@ function companionBreedTick(dt) {
 function playSfxSafe(n, v) { play(n, v); }
 
 // ---------------------------------------------------------- region sync
-function syncRegion(wa, recenter = false) {
+// v3.8: fully synchronized like the slide path — the canvas origin + size
+// are committed ONLY after the OS window actually landed on the new rect.
+// The old code flipped O and resized the canvas immediately while the
+// setBounds was still in flight, so the cat visibly jumped/distorted for a
+// few frames on every size-slider change, workArea change and at boot.
+let regionResizeSeq = 0;        // monotonic token; a newer resize supersedes an older one
+let regionResizeInFlight = false;
+async function syncRegion(wa) {
   REGION = computeRegionSize(S.size, wa);
-  companionLeashPx = companionLeash(REGION.w);   // v3.7: kitten stays inside the region
+  companionLeashPx = companionLeash(REGION.w);
   const feet = brain ? brain.baseY + brain.jumpY : wa.y + wa.height - 8;
   const cx = brain ? brain.x : wa.x + wa.width / 2;
-  O = initialOrigin(wa, REGION, cx, feet);
+  const nO = initialOrigin(wa, REGION, cx, feet);
+  const needMove = !O || nO.x !== O.x || nO.y !== O.y || cv.width !== REGION.w || cv.height !== REGION.h;
+  if (!needMove) return;
+  const token = ++regionResizeSeq;
+  regionResizeInFlight = true;
+  let res = null;
+  try { res = await window.meow.moveRegion({ x: nO.x, y: nO.y, w: REGION.w, h: REGION.h }); }
+  catch { /* window gone — keep local values */ }
+  if (token !== regionResizeSeq) return;      // a newer resize took over
+  regionResizeInFlight = false;
+  // main clamps the rect against the real work area — adopt its answer
+  if (res && Number.isFinite(res.w) && Number.isFinite(res.h)) REGION = { w: res.w, h: res.h };
+  O = res ? { x: res.x, y: res.y } : nO;
   cv.width = REGION.w; cv.height = REGION.h;
   cv.style.width = REGION.w + 'px'; cv.style.height = REGION.h + 'px';
-  window.meow.moveRegion({ x: O.x, y: O.y, w: REGION.w, h: REGION.h });
-  if (recenter) return;
+  try { paint(); } catch { /* next frame repaints anyway */ }
 }
 
 function applySettings(kv) {
@@ -569,14 +631,25 @@ function tickButterfly(dt, now) {
 }
 
 // ---------------------------------------------------------- bubbles
+// v3.8: keep overlays fully inside the region window. The bubble used to be
+// clamped only on the left/top, so a cat near the region's right/bottom edge
+// had its text clipped by the transparent overlay (half-readable reminders,
+// cut-off achievements). Measure the real box, then clamp both axes.
+function clampBox(el, x, y) {
+  const w = el.offsetWidth || 240, h = el.offsetHeight || 44;
+  const maxX = Math.max(8, REGION.w - w - 8);
+  const maxY = Math.max(8, REGION.h - h - 8);
+  el.style.left = Math.max(8, Math.min(x, maxX)) + 'px';
+  el.style.top = Math.max(8, Math.min(y, maxY)) + 'px';
+}
+
 function showBubble(text, ms = 5000) {
   if (!brain) return;
   const p = brain.pose;
   const scale = S.size;
   bubble.textContent = text;
-  bubble.style.left = Math.max(10, p.x - 20 - 110 - O.x) + 'px';
-  bubble.style.top = Math.max(10, p.y - 150 * scale - 78 - O.y) + 'px';
   bubble.style.display = 'block';
+  clampBox(bubble, p.x - 20 - 110 - O.x, p.y - 150 * scale - 78 - O.y);
   clearTimeout(bubbleTimer);
   bubbleTimer = setTimeout(() => { bubble.style.display = 'none'; }, ms);
 }
@@ -594,11 +667,11 @@ function showReminder(item) {
   else brain.dance();
   const p = brain.pose;
   const scale = S.size;
-  const bx = Math.max(10, p.x - 20 - 110 - O.x), by = Math.max(10, p.y - 150 * scale - 70 - O.y);
+  // v3.8: the bubble IS the reminder delivery — show the message, clamped
+  // inside the region so even long messages are fully readable
   bubble.textContent = '⏰ ' + item.label;
-  bubble.style.left = bx + 'px';
-  bubble.style.top = by + 'px';
   bubble.style.display = 'block';
+  clampBox(bubble, p.x - 20 - 110 - O.x, p.y - 150 * scale - 70 - O.y);
   play('chirp', 0.8);
   clearTimeout(bubbleTimer);
   bubbleTimer = setTimeout(() => { bubble.style.display = 'none'; }, 8000);
@@ -681,8 +754,8 @@ window.addEventListener('mouseup', e => {
   // first click meowing first is just a cat being a cat).
   if (pendingPet && downOnCat) {
     clearTimeout(pendingPet); pendingPet = null;
-    const meows = ['meow_real', 'meow_real2', 'meow_real3'];
-    play(meows[Math.floor(Math.random() * meows.length)], 0.95);
+    // v3.8: one exclusive meow voice — spam-clicking can never stack meows
+    playMeow(0.95);
     if (brain) brain.emote = { kind: 'heart', t0: brain.t };
   }
   downOnCat = false;
@@ -801,7 +874,7 @@ function loop(ts) {
     // IMMEDIATELY (not on the next rAF — the idle throttle can delay that by
     // ~67ms, which is visible). Horizontal focus is the main/companion
     // midpoint so a leashed kitten can never sit outside the region.
-    if (!slideInFlight) {
+    if (!slideInFlight && !regionResizeInFlight) {
       const p0 = brain.pose;
       const wa0 = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
       const focusX = companion ? (p0.x + companion.brain.pose.x) / 2 : p0.x;
@@ -892,9 +965,8 @@ function paint() {
     const mm = Math.max(0, pomoState.remaining);
     const label = (pomoState.mode === 'focus' ? '🍅 ' : '☕ ') + fmtRemaining(mm);
     badge.textContent = label;
-    badge.style.left = Math.max(10, p.x - 30 - O.x) + 'px';
-    badge.style.top = Math.max(10, p.y - 150 * S.size - 46 - O.y) + 'px';
     badge.style.display = 'block';
+    clampBox(badge, p.x - 30 - O.x, p.y - 150 * S.size - 46 - O.y);   // v3.8: clamp inside region
   } else badge.style.display = 'none';
 }
 
@@ -939,6 +1011,9 @@ window.__volumeMul = () => volumeMul;
 window.__settings = () => S;
 window.__catVisible = () => catVisible;
 window.__lastPlayInfo = () => window.__lastPlay || null;
+window.__playMeow = () => playMeow(0.95);   // v3.8 e2e: exercise the exclusive voice
+window.__activeMeowCount = () => (window.__meowEls ? window.__meowEls.size : 0);
+window.__clampBox = (el, x, y) => clampBox(el, x, y);
 // e2e: dispatch a main-process event through the real handlers
 window.__testEvent = (channel, data) => {
   const map = {
@@ -953,6 +1028,7 @@ window.__testEvent = (channel, data) => {
       brain.setNoWalkZones(zonesToScreen(zones, brain.bounds));
     },
     'photo-mode': () => photoMode(), 'dance-party': startDanceParty,
+    'reminder-fired': showReminder,
     'time-bias': mode => { if (!S.timeOfDayMood) return; brain?.setTimeBias(mode); },
     'boot-greet': () => brain?.greet(),
   };

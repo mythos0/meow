@@ -126,8 +126,12 @@ describe('platform hopping (window top borders)', () => {
     b.onPlatform = pl;
     b.baseY = pl.y;
     b.setPlatforms([]);           // window closed
+    // v3.8: no more instant teleport — the cat gets an animated fall
     assert.equal(b.onPlatform, null);
-    assert.equal(b.baseY, 1040);
+    assert.equal(b.state, 'jump');
+    assert.ok(b._jump, 'fall is a jump arc, not a snap');
+    for (let i = 0; i < 120 && b._jump; i++) b.tick(1 / 60);   // let the fall land
+    assert.equal(b.baseY, b.groundY, 'lands on the ground after the fall');
   });
 
   test('dropAt snaps to a window top under the cat', () => {

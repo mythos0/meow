@@ -78,13 +78,23 @@ export function parseWindowsJson(raw) {
 
 // turn raw windows into platform candidates for the brain.
 // keepProc: v3.6 leaves `proc` attached so main can react to apps.
+// v3.8: opts.workArea + opts.maxWidthFrac (default 0.92) drop MAXIMIZED
+// windows — the user asked for the cat to walk and jump on the top border of
+// normal (resizable/restored) windows, not on full-screen ones whose top
+// border spans the whole screen width and reads as walking on air.
 export function toPlatforms(list, opts = {}) {
   const exclude = opts.excludeRe ||
     /meowcat|program manager|windows (input|shell experience|default lockscreen)|nvidia|geforce|msi afterburner|notification center|nexus/i;
   const minW = opts.minW ?? 150, minH = opts.minH ?? 100;
   const max = opts.max ?? 24;
-  return (list || [])
-    .filter(w => w.w >= minW && w.h >= minH && !exclude.test(w.title))
+  const wa = opts.workArea || null;
+  const maxFrac = Number.isFinite(opts.maxWidthFrac) ? opts.maxWidthFrac : 0.92;
+  let out = (list || [])
+    .filter(w => w.w >= minW && w.h >= minH && !exclude.test(w.title));
+  if (wa && Number.isFinite(wa.width) && wa.width > 0) {
+    out = out.filter(w => w.w < wa.width * maxFrac);
+  }
+  return out
     .sort((a, b) => (b.w * b.h) - (a.w * a.h))
     .slice(0, max);
 }
@@ -119,7 +129,9 @@ export function createWindowScanner(opts = {}) {
     try {
       const out = await scanOnce();
       if (out == null) return;
-      const plats = toPlatforms(parseWindowsJson(out));
+      // v3.8: workArea-aware — maximized windows never become platforms
+      const wa = opts.workAreaFn ? opts.workAreaFn() : null;
+      const plats = toPlatforms(parseWindowsJson(out), wa ? { workArea: wa } : {});
       const sig = JSON.stringify(plats);
       if (sig !== lastSig) { lastSig = sig; onResult(plats); }
     } catch { /* never crash the app over a scan */ }

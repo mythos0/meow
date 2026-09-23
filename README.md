@@ -16,7 +16,7 @@ MeowCat.exe        ← in Task Manager, always. Never "electron".
 
 | It can… | Details |
 |---|---|
-| 🚶 **Live on your windows** | Walks the taskbar, jumps onto window top borders, strolls across your apps, hops roof-to-roof |
+| 🚶 **Live on your windows** | Walks the taskbar, and walks & jumps along the top border of your normal (resized) windows — hopping roof-to-roof, riding along when you drag or resize a window it stands on, and politely skipping maximized full-screen ones |
 | 🖥️ **Feel your machine** | CPU/RAM spike → startled panic · low battery → curls up "to save energy" · 10 PM → yawny naps · new window opens → walks over and sniffs it |
 | 🎵 **Hear your music** | Bops to the beat while Spotify/YouTube plays; new track = excited hop (Windows SMTC) |
 | 💻 **Judge your job** | Loafs on your code editor while you type; happy-dances when your build file goes green, mopes when it's red |
@@ -38,17 +38,17 @@ MeowCat.exe        ← in Task Manager, always. Never "electron".
 
 ## Install
 
-1. Grab `MeowCat-3.7.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
+1. Grab `MeowCat-3.8.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
 2. Run it. A cat appears. That's the whole setup.
 3. Right-click the cat → **Settings…**, or double-click it. Tray icon works too.
-4. **Click the cat** → it meows. For real. That's it, that's the feature.
+4. **Click the cat** → it meows. For real. Spam-click it → still exactly one cat, one voice, zero overlap.
 
 | | |
 |---|---|
 | **Stack** | Electron 33 · HTML5 Canvas 2D · zero native modules required for the core |
 | **Art** | 100% procedural — palettes + body skeletons + IK pose math, no PNGs |
 | **Sounds** | Real recorded cats (+2 tiny code-synthesized SFX, because the author doesn't own a trampoline) |
-| **Tests** | 303 unit + 89 visual + 126 E2E (real app under Xvfb, every feature exercised live) |
+| **Tests** | 306 unit + 89 visual + 127 E2E (real app under Xvfb, every feature exercised live) |
 | **RAM** | ~277 MB PSS, 3× MeowCat.exe processes at rest (main + renderer + helper, all named MeowCat) |
 | **CPU** | v3.7 halved idle CPU: no slide-flapping, paints freeze while hidden, one PowerShell stream instead of 12/min |
 | **Docs** | [RENDERING](docs/RENDERING.md) · [FEATURES](docs/FEATURES.md) · [BUILD](docs/BUILD.md) · [TESTING](docs/TESTING.md) |
@@ -93,6 +93,16 @@ v3.7's torture pass earned its scars: the hop that used to flap the overlay wind
 the visible window and astral-projected, a render loop that kept painting at 60 FPS while
 hidden, and a Windows sampler that spawned a fresh PowerShell every 5 seconds like it was
 paying per spawn. All measured, all fixed, all regression-tested.
+
+v3.8 went after the leftover jumps: spam-clicking the cat stacked overlapping meows (now one
+exclusive voice — one cat, one meow, no choir), windows that moved or resized between scans
+teleported the standing cat to the ground (it now re-binds by geometry, rides the border, and
+only ever *hops* after a far-dragged window), a vanished window dropped the cat instantly
+(now an animated fall), the companion kitten sprinted the wrong way on leash-recovery and got
+snapped back (now a smooth dash), the reminder toast said "your cat has a message" instead of
+the actual message, and long speech bubbles got clipped at the region edge. Plus the headline
+act: the cat properly walks AND jumps along the top border of resized windows — and no longer
+treats a maximized full-screen window as a sidewalk.
 
 ## License
 

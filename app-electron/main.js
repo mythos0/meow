@@ -80,6 +80,10 @@ function ensureScanner() {
       spawnFn: spawn,
       intervalMs: 4500,   // v3.7: was 3200 — each scan is a PowerShell spawn; 4.5s is imperceptible
       onResult: onWindowScan,
+      // v3.8: fresh work area each scan so maximized ("full") windows are
+      // never offered as platforms — the cat walks the top border of
+      // normal resized windows only
+      workAreaFn: () => { try { return screen.getPrimaryDisplay().workArea; } catch { return null; } },
     });
   }
   scanner.start();
@@ -230,9 +234,12 @@ function startBackgroundJobs() {
       sendToCat('reminder-fired', item);
       try {
         if (Notification.isSupported()) {
+          // v3.8: the toast carries the ACTUAL reminder message — the old
+          // generic "Your cat has a message for you!" body hid what the
+          // reminder was even for.
           const n = new Notification({
-            title: '🐱 ' + item.label,
-            body: 'Your cat has a message for you!',
+            title: '🐱 MeowCat reminder',
+            body: item.label,
             silent: !item.sound,
           });
           if (item.sound) n.on('click', () => sendToCat('do-action', 'dance'));
