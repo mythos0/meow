@@ -211,3 +211,8 @@ Stage Summary:
 - v3.7.0: 2 user-reported rendering bugs root-caused and fixed (hop-flap, invisible kitten), CPU -50% at idle (measured), RAM at the Electron floor, click-meow shipped
 - 303 unit + 89 visual + 126 E2E = 518 checks green; visual QA 60 shots identical
 - Build + release next (MeowCat-3.7.0-portable.exe)
+
+Stage Summary (release):
+- Built MeowCat-3.7.0-portable.exe (76,454,382 B, sha256 a923d6ce…): afterPack stamped inner exe, patch-exe stamped launcher (3.7.0.0 binary version), verify-exe PASS, verify-artifact-identity 27/27, v3.7 feature strings verified inside app.asar (cat-visible, companionLeash, winStatsStreamScript, TOPSLACK)
+- Released https://github.com/mythos0/meow/releases/tag/v3.7.0 — asset round-trip SHA-256 verified byte-identical
+- main pushed ef4b7b2 + tag v3.7.0; artifact excluded from repo via .gitignore (artifacts/v37-shots/)
