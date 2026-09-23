@@ -238,3 +238,23 @@ Stage Summary:
 - The rendering jump is dead by construction: the window never makes a >15px/frame move, and the cat's window carries it in real time.
 - v3.9.0: 480 automated checks green, pixel-identical art, no CPU/RAM regression (both improved), Release + exe verified
 - Pending for next session: user real-Windows validation of the chase camera feel (drag a window the cat stands on)
+
+---
+Task ID: 18
+Agent: Super Z (main)
+Task: v3.10.0 — user directive: "remove all kind of cat hidden logic such as call detection, etc has in the app. without explicit user quit the cat shouldnt stop its process."
+
+Work Log:
+- REMOVED call/record-app detection end-to-end: pure helpers (CALL_APP_RE, findCallApp, isFullscreenWindow, parseProcessList) deleted from system-reactions.js; onProcessList + hiddenByCall + hiddenByFullscreen + the "taking cover" toast deleted from main.js; hiddenByUser is now the ONLY visibility flag (tray "Hide cat" / Ctrl+Alt+C stay — they are explicit user actions).
+- REMOVED the sound-duck that rode on call detection: 'duck' IPC channel + volumeMul multiplier gone from cat.html (sounds always play at full requested volume); the e2e __volumeMul hook verified deleted.
+- REMOVED fullscreen auto-hide: hideInFullscreen wiring in onWindowScan gone; FLAG_KEYS shrunk; applyFeatureFlags no longer guards stale hide flags.
+- REMOVED the process-list sampler from sys-monitor.js (sampleProcs/procTimer/onProcesses) — it existed ONLY to feed call detection: linux sampler now spawns ZERO subprocesses, win32 spawns exactly ONE persistent PowerShell (extra optimization).
+- Settings cleaned: hideDuringCalls/duckDuringCalls/hideInFullscreen removed from DEFAULTS (sanitize() auto-drops them from old persisted files), settings.html rows + bindSwitch + sync pairs removed (24 → 21 switches).
+- NEVER-STOP guarantees (main.js): closed cat window self-heals (recreate after 250ms when !quitting), render-process-gone → destroy → revival, second-instance re-summons a missing window, process-level uncaughtException/unhandledRejection guards log-and-continue; window-all-closed keeps the app alive; only tray/context "Quit" (quitting=true) ends the process.
+- Tests: NEW tests/v310.test.mjs (7 contract tests: removed keys/symbols, legacy settings sanitized, set() rejects, no tasklist ever, zero linux spawns, no duck hook in renderer, main.js crash guards present); features.test.mjs lost fullscreen/process-list describes; v37.test.mjs updated (linux = zero spawns); store-features toggle list shrunk; e2e-robust section 1 replaced (zoom process must NOT hide cat + loop keeps painting + window.close() resurrection live: revived in 436ms, process alive); e2e-v37 section 5 flipped (call app changes nothing); e2e-v36 toggles 22→19 + deleted-keys probe + switch count 24→21.
+- Full regression: 351 unit+visual (262 unit + 89 visual) + 133 E2E (44 linux + 20 robust + 43 v36 + 9 v37 + 11 v38 + 6 v39) = 484 checks green (v39 chase-camera + vanish checks are load-sensitive: p99 30px and a "did not land" flake under heavy sandbox load, both passed on isolated re-runs — timing, not regressions; code paths untouched).
+- Build: MeowCat-3.10.0-portable.exe 76,460,405B sha256 630fafae… — afterpack stamped inner exe, patch-exe stamped launcher, verify-artifact-identity 27/27 ("Task Manager can only show MeowCat"), v3.10 strings confirmed inside app.asar (uncaughtException/render-process-gone/reviving), asar verified clean of hide-during-calls logic.
+- Docs: README feature row rewritten (cat NEVER hides itself, never quits on its own), FEATURES.md §12.5 (v3.10), TESTING.md pyramid updated (262/89 rows, robust 20, v37 9, new v3.10 contract row).
+
+Stage Summary:
+- v3.10.0 shipped: no call detection, no fullscreen auto-hide, no ducking, no process-list sampler; the cat can only be hidden by the user and only stopped by an explicit Quit — plus a real extra CPU win (one less recurring subprocess on Windows, zero on Linux).

@@ -16,8 +16,8 @@ import { createSysMonitor } from './src/sys-monitor.js';
 import { createMusicWatcher } from './src/music-watcher.js';
 import {
   createSpikeDetector, createTypingMeter,
-  batteryCrisis, shouldDanceParty, isFullscreenWindow, diffWindows,
-  parseProcessList, findCallApp, findEditorApp, musicReaction, parseStatusFile,
+  batteryCrisis, shouldDanceParty, diffWindows,
+  findEditorApp, musicReaction, parseStatusFile,
 } from './src/system-reactions.js';
 import { createPomodoro, fmtRemaining } from './src/pomodoro.js';
 import { checkUnlocks, ACHIEVEMENTS, affectionProgress, unlockedPerks } from './src/achievements.js';
@@ -31,6 +31,17 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=160');
 process.title = 'MeowCat';
 const MEOW_AUMID = 'com.mythos0.meowcat';
 app.setAppUserModelId(MEOW_AUMID);
+
+// v3.10: the cat's process must never stop on its own. An unexpected crash in
+// the main process used to take the whole cat down without any user action —
+// now it is logged and swallowed so the desktop cat keeps living until the
+// user explicitly quits it from the tray or the context menu.
+process.on('uncaughtException', err => {
+  console.error('[meowcat] uncaughtException (cat keeps running):', err);
+});
+process.on('unhandledRejection', err => {
+  console.error('[meowcat] unhandledRejection (cat keeps running):', err);
+});
 
 // v3.3 region window: current size + origin (screen coords) of the overlay
 let region = { w: 480, h: 434 };
@@ -110,11 +121,12 @@ function ensureTracker() {
 // ---------------------------------------------------------------- single instance
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-  app.quit();
+  app.quit();   // a second launcher defers to the RUNNING cat — it never stops it
 } else {
   app.on('second-instance', () => {
     if (hiddenByUser) { hiddenByUser = false; updateCatVisibility(); }
     else if (catWin && !catWin.isDestroyed()) catWin.show();
+    else if (!catWin) createCatWindow();   // v3.10: re-summon the cat window too
   });
 }
 
@@ -146,19 +158,33 @@ function createCatWindow() {
   catWin.setMenuBarVisibility(false);
   catWin.loadFile(path.join(__dirname, 'windows', 'cat.html'));
   catWin.once('ready-to-show', () => {
-    if (!hiddenByUser && !hiddenByCall && !hiddenByFullscreen) catWin.show();
+    // v3.10: only the USER (tray / Ctrl+Alt+C) can have the cat hidden —
+    // call/fullscreen auto-hide no longer exist.
+    if (!hiddenByUser) catWin.show();
     // v3.7: tell the renderer its true visibility so its render loop starts in
     // sync with reality (it boots assuming "visible").
-    sendToCat('cat-visible', !hiddenByUser && !hiddenByCall && !hiddenByFullscreen);
+    sendToCat('cat-visible', !hiddenByUser);
   });
+
+  // v3.10: the cat's process must NEVER stop on its own. If the overlay window
+  // is closed or its renderer dies without an explicit Quit, it comes back.
+  catWin.on('closed', () => {
+    catWin = null;
+    if (!quitting) setTimeout(() => { if (!catWin && !quitting) createCatWindow(); }, 250);
+  });
+  try {
+    catWin.webContents.on('render-process-gone', (_e, details) => {
+      if (quitting) return;
+      console.error('[meowcat] renderer gone:', details?.reason, '— reviving the cat');
+      try { catWin?.destroy(); } catch {}   // 'closed' handler recreates it
+    });
+  } catch {}
 
   enforcer = createTopmostEnforcer(catWin, { level: 'screen-saver', intervalMs: 3000 });
   enforcer.start();
 
   try { catWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch {}
   try { catWin.setIgnoreMouseEvents(true, { forward: true }); } catch {}
-
-  catWin.on('closed', () => { catWin = null; });
 }
 
 // ---------------------------------------------------------------- tray
@@ -310,14 +336,14 @@ function applyAutoStart(on) {
 
 // ================================================================ v3.6 feature systems
 
-// ---------- visibility (hotkey / call / fullscreen auto-hide) ----------
+// ---------- visibility (ONLY the user can hide the cat) ----------
+// v3.10: call-detection and fullscreen auto-hide were removed entirely.
+// The cat never hides itself and its process never stops on its own —
+// only the tray 'Hide cat' / Ctrl+Alt+C may hide it, only 'Quit' stops it.
 let hiddenByUser = false;         // global hotkey or tray "Hide cat"
-let hiddenByCall = false;         // OBS/Zoom/Teams detected
-let hiddenByFullscreen = false;   // fullscreen app has focus
-let lastCallToast = 0;
 
 function updateCatVisibility() {
-  const show = !hiddenByUser && !hiddenByCall && !hiddenByFullscreen;
+  const show = !hiddenByUser;
   if (catWin && !catWin.isDestroyed()) {
     try { show ? catWin.show() : catWin.hide(); } catch { /* gone */ }
     // v3.7: the renderer pauses its rAF loop while hidden — a transparent
@@ -325,16 +351,14 @@ function updateCatVisibility() {
     sendToCat('cat-visible', show);
   }
   if (tray) {
-    const why = hiddenByUser ? 'hidden by hotkey' : hiddenByCall ? 'hidden — call detected' : hiddenByFullscreen ? 'hidden — fullscreen app' : 'your desktop cat';
+    const why = hiddenByUser ? 'hidden by hotkey' : 'your desktop cat';
     try { tray.setToolTip('MeowCat — ' + why); } catch {}
   }
   buildTrayMenu();   // refresh Hide/Show label
 }
 
-// ---------- system monitor (CPU/RAM spikes + call-app detection) ----------
+// ---------- system monitor (CPU/RAM spikes + battery relay) ----------
 const spikeDetector = createSpikeDetector({});
-let callAppActive = false;
-let duckSent = false;
 let lastBatteryPushed = null;   // last battery state relayed to the renderer
 
 function onSystemSample({ cpu, ram, battery, charging }) {
@@ -354,44 +378,14 @@ function onSystemSample({ cpu, ram, battery, charging }) {
   }
 }
 
-function onProcessList(raw) {
-  const names = parseProcessList(raw);
-  if (!names.length) return;
-  const callApp = findCallApp(names);
-  // auto-hide during screen share / recording / calls
-  if (store.get('hideDuringCalls')) {
-    if (!!callApp !== hiddenByCall) {
-      hiddenByCall = !!callApp;
-      updateCatVisibility();
-      if (hiddenByCall && Date.now() - lastCallToast > 10 * 60_000 && Notification.isSupported()) {
-        lastCallToast = Date.now();
-        try {
-          new Notification({ title: '🐱 MeowCat is taking cover', body: 'Call or recording detected — the cat will be back when you\u2019re done.' }).show();
-        } catch {}
-      }
-    }
-  }
-  // auto-duck sounds during calls
-  if (store.get('duckDuringCalls')) {
-    if (!!callApp !== duckSent) {
-      duckSent = !!callApp;
-      sendToCat('duck', duckSent);
-    }
-  } else if (duckSent) {
-    // v3.6.1: feature turned off mid-call -> un-duck instead of staying quiet forever
-    duckSent = false;
-    sendToCat('duck', false);
-  }
-  void callAppActive;   // reserved for finer-grained logic
-  callAppActive = !!callApp;
-}
+// v3.10: onProcessList (call-app detection + ducking) is gone — the monitor
+// no longer samples process lists at all (one less recurring subprocess).
 
 const sysMon = createSysMonitor({
   spawnFn: spawn,
   readFn: p => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } },
   intervalMs: process.platform === 'win32' ? 8000 : 5000,   // v3.7: Windows one-shots are expensive
   onSample: onSystemSample,
-  onProcesses: onProcessList,
 });
 
 // ---------- music watcher (SMTC / playerctl) ----------
@@ -507,12 +501,7 @@ function onWindowScan(plats) {
   }
   lastPlatSig = JSON.stringify(clean);
 
-  // fullscreen / exclusive app -> politely leave the stage
-  if (store.get('hideInFullscreen')) {
-    const wa = screen.getPrimaryDisplay().workArea;
-    const fsNow = clean.some(w => isFullscreenWindow(w, wa));
-    if (fsNow !== hiddenByFullscreen) { hiddenByFullscreen = fsNow; updateCatVisibility(); }
-  }
+  // v3.10: fullscreen auto-hide removed — the cat stays on stage, always.
 
   // app-specific reactions: loaf on editors, get hyped over games
   if (store.get('reactApps') && clean.length) {
@@ -624,14 +613,14 @@ function checkAndSendUnlocks() {
 
 // ---------- feature flag -> poller orchestration ----------
 const FLAG_KEYS = new Set([
-  'reactSystemSpikes', 'hideDuringCalls', 'duckDuringCalls', 'reactMusic',
+  'reactSystemSpikes', 'reactMusic',
   'stalkCursor', 'reactTyping', 'dancePartyIdle', 'reactBuildStatus',
   'statusFile', 'globalHotkeys', 'windowHopping', 'reactApps',
-  'reactNewWindows', 'hideInFullscreen', 'reactLowBattery',
+  'reactNewWindows', 'reactLowBattery',
 ]);
 
 function applyFeatureFlags() {
-  const needMonitor = store.get('reactSystemSpikes') || store.get('hideDuringCalls') || store.get('duckDuringCalls');
+  const needMonitor = store.get('reactSystemSpikes');
   if (needMonitor) sysMon.start(); else { sysMon.stop(); spikeDetector.reset(); }
   if (store.get('reactMusic')) musicWatcher.start(); else { musicWatcher.stop(); prevMusic = null; }
   if (store.get('stalkCursor')) startCursorWatch(); else stopCursorWatch();
@@ -642,13 +631,9 @@ function applyFeatureFlags() {
   applyStatusFile(store.get('reactBuildStatus'));
   applyHotkeys(store.get('globalHotkeys'));
   const needScanner = store.get('windowHopping') || store.get('reactApps') ||
-                      store.get('reactNewWindows') || store.get('hideInFullscreen');
+                      store.get('reactNewWindows');
   if (needScanner && process.platform === 'win32') ensureScanner();
   else scanner?.stop();
-  // v3.6.1: toggling a hider OFF must always un-hide — stale flags used to
-  // leave the cat invisible until the app was restarted.
-  if (!store.get('hideDuringCalls') && hiddenByCall) { hiddenByCall = false; updateCatVisibility(); }
-  if (!store.get('hideInFullscreen') && hiddenByFullscreen) { hiddenByFullscreen = false; updateCatVisibility(); }
 }
 
 // ---------- global hotkeys ----------
@@ -754,7 +739,8 @@ ipcMain.handle('app-info', () => ({
   // v3.6.1: real visibility state (backgroundThrottling:false keeps the
   // renderer's visibilityState "visible" even when hidden, so e2e + support
   // diagnostics need this from the source of truth)
-  hidden: { user: hiddenByUser, call: hiddenByCall, fullscreen: hiddenByFullscreen },
+  // v3.10: only the user-hidden flag remains — call/fullscreen hide are gone.
+  hidden: { user: hiddenByUser },
 }));
 ipcMain.handle('open-external', (_e, url) => {
   try {

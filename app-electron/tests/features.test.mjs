@@ -3,8 +3,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createSpikeDetector, batteryCrisis, timeBias, createTypingMeter,
-  shouldDanceParty, isFullscreenWindow, diffWindows,
-  parseProcessList, findCallApp, findEditorApp,
+  shouldDanceParty, diffWindows,
+  findEditorApp,
   parseMusicLine, musicReaction, parseStatusFile,
 } from '../src/system-reactions.js';
 
@@ -105,19 +105,8 @@ describe('dance party', () => {
   });
 });
 
-describe('fullscreen detection', () => {
-  const wa = { x: 0, y: 0, width: 1920, height: 1040 };
-  test('covers the work area', () => {
-    assert.equal(isFullscreenWindow({ x: 0, y: 0, w: 1920, h: 1040 }, wa), true);
-    assert.equal(isFullscreenWindow({ x: -8, y: -8, w: 1936, h: 1056 }, wa), true);
-  });
-  test('a normal window is not fullscreen', () => {
-    assert.equal(isFullscreenWindow({ x: 100, y: 100, w: 1200, h: 700 }, wa), false);
-  });
-  test('maximized-but-not-covering is not fullscreen', () => {
-    assert.equal(isFullscreenWindow({ x: 0, y: 0, w: 1920, h: 900 }, wa), false);
-  });
-});
+// v3.10: the 'fullscreen detection' describe was removed with the feature —
+// the cat no longer auto-hides in fullscreen (see tests/v310.test.mjs).
 
 describe('new-window diff', () => {
   test('detects newly appeared windows', () => {
@@ -137,24 +126,7 @@ describe('new-window diff', () => {
   });
 });
 
-describe('process list parsing', () => {
-  test('ps -eo comm= format', () => {
-    const names = parseProcessList('chrome\nslack\nobs\n');
-    assert.deepEqual(names, ['chrome', 'slack', 'obs']);
-  });
-  test('tasklist CSV format strips .exe + header', () => {
-    const raw = '"Image Name","PID","Session Name","Session#","Mem Usage"\n"zoom.exe","1234","Console","1","50,000 K"\n"obs64.exe","5678","Console","1","120,000 K"';
-    const names = parseProcessList(raw);
-    assert.ok(names.includes('zoom'));
-    assert.ok(names.includes('obs64'));
-  });
-  test('call app detection', () => {
-    assert.equal(findCallApp(['chrome', 'obs64', 'notepad']), 'obs64');
-    assert.equal(findCallApp(['Zoom']), 'Zoom');
-    assert.equal(findCallApp(['Teams.exe']), 'Teams.exe');
-    assert.equal(findCallApp(['spotify', 'discord']), 'discord');
-    assert.equal(findCallApp(['notepad']), null);
-  });
+describe('editor detection', () => {
   test('editor detection', () => {
     assert.equal(findEditorApp(['Code']), 'Code');
     assert.equal(findEditorApp(['idea64']), 'idea64');

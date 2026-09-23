@@ -191,8 +191,25 @@ Cat Store as a first-class breed.
 
 **Quality-of-life** — global hotkeys (Ctrl+Alt+C summon/hide, Ctrl+Alt+P photo), **no-walk
 zones** (work-area-relative rects the cat's body never enters, and whose window tops it never
-lands on), **auto-hide in fullscreen** (window-covering detection from the scanner), plus the
-existing reminders, auto-start, topmost enforcement and warm-pool settings.
+lands on), plus the existing reminders, auto-start, topmost enforcement and warm-pool settings.
+
+## 12.5 v3.10 — no cat is ever hidden, no process ever stops
+
+* **All automatic cat-hiding logic was removed.** Call/record-app detection (OBS, Zoom,
+  Teams, Discord, Skype, Webex, Slack — the auto-hide + the "taking cover" toast + the 22 %
+  sound duck that rode along) and fullscreen auto-hide are deleted end-to-end: pure helpers
+  (`findCallApp`, `isFullscreenWindow`, `parseProcessList`), the settings toggles, the
+  settings-UI rows, and the renderer's duck multiplier. A Zoom process on the machine now
+  changes *nothing* for the cat. Only an explicit user action — the tray "Hide cat" or
+  Ctrl+Alt+C — may hide it, and Ctrl+Alt+C brings it right back.
+* **The cat's process never stops on its own.** Only the explicit Quit (tray or context
+  menu) ends it. If the overlay window is closed or its renderer crashes without a quit,
+  main resurrects it (fresh booted window in ~250 ms); a `second-instance` launch now also
+  re-summons the window; an uncaught exception in the main process is logged and swallowed
+  instead of taking the cat down.
+* **One less recurring subprocess.** The process-list sampler (`ps`/`tasklist`) existed
+  solely to feed call detection and is gone with it — the Linux sampler now spawns nothing
+  at all, and Windows spawns exactly one persistent PowerShell for stats.
 
 ## 12. v3.8 — one cat, one voice; walk & jump on real window borders
 

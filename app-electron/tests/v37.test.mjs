@@ -110,7 +110,6 @@ describe('v3.7 sys-monitor streaming sampler (win32)', () => {
       platform: 'win32',
       intervalMs: 1000,
       onSample: s => samples.push(s),
-      onProcesses: () => {},
     });
     mon.start();
     await new Promise(r => setTimeout(r, 60));
@@ -136,7 +135,6 @@ describe('v3.7 sys-monitor streaming sampler (win32)', () => {
       platform: 'win32',
       intervalMs: 1000,
       onSample: () => {},
-      onProcesses: () => {},
     });
     try {
       mon.start();
@@ -170,7 +168,6 @@ describe('v3.7 sys-monitor streaming sampler (win32)', () => {
       platform: 'win32',
       intervalMs: 300,   // watchdog = 300*2.5+1500 ≈ 2.25s
       onSample: () => {},
-      onProcesses: () => {},
     });
     mon.start();
     await new Promise(r => setTimeout(r, 4200));
@@ -178,7 +175,7 @@ describe('v3.7 sys-monitor streaming sampler (win32)', () => {
     mon.stop();
   });
 
-  test('linux path unchanged: /proc sampling via timer, no stream', async () => {
+  test('linux path unchanged: /proc sampling via timer, zero subprocesses', async () => {
     let spawnCalled = 0;
     const mon = createSysMonitor({
       spawnFn: () => { spawnCalled++; return fakeSpawn(); },
@@ -186,12 +183,13 @@ describe('v3.7 sys-monitor streaming sampler (win32)', () => {
       platform: 'linux',
       intervalMs: 1000,
       onSample: () => {},
-      onProcesses: () => {},
     });
     mon.start();
     await new Promise(r => setTimeout(r, 30));
     assert.equal(mon.__streamAlive(), false, 'no streamer on linux');
-    assert.equal(spawnCalled, 1, 'one spawn = the ps process list, nothing else');
+    // v3.10: the ps process list is gone with call detection — the sampler
+    // spawns NOTHING on linux.
+    assert.equal(spawnCalled, 0, 'no subprocess at all on linux');
     mon.stop();
   });
 

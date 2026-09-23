@@ -28,7 +28,7 @@ MeowCat.exe        ← in Task Manager, always. Never "electron".
 | 🏆 **Brag** | 8 achievements — "Purring Machine" (100 pets), "Dot Exterminator" (5 laser catches)… |
 | 🍅 **Manage your time** | Pomodoro companion: supervises focus rounds, celebrates with a dance when you finish |
 | 🎃 **Dress up** | Seasonal hats (pumpkin in October, santa in December, shades in summer) + importable JSON community skins |
-| 🚫 **Respect boundaries** | No-walk zones you draw on screen · auto-hides during calls (OBS/Zoom/Teams) and fullscreen games · duck under mic use |
+| 🚫 **Respect boundaries** | No-walk zones you draw on screen — and it stays on stage: the cat NEVER hides itself (no call/fullscreen auto-hide) and never quits on its own |
 | 🎮 **Play** | Interactive laser-pointer chase (+3 coins per catch), ambient butterflies, zoomies, sneezes, hairballs, a bread emote for the loaf |
 | ⏰ **Nag you** | Reminders & timers — the cat dances and delivers your message |
 | 🛍️ **Get adopted** | Cat Store: 20 breeds + a panda that waddles like a real bear and eats bamboo sitting up (researched!) |
@@ -38,7 +38,7 @@ MeowCat.exe        ← in Task Manager, always. Never "electron".
 
 ## Install
 
-1. Grab `MeowCat-3.9.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
+1. Grab `MeowCat-3.10.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
 2. Run it. A cat appears. That's the whole setup.
 3. Right-click the cat → **Settings…**, or double-click it. Tray icon works too.
 4. **Click the cat** → it meows. For real. Spam-click it → still exactly one cat, one voice, zero overlap.
@@ -48,7 +48,7 @@ MeowCat.exe        ← in Task Manager, always. Never "electron".
 | **Stack** | Electron 33 · HTML5 Canvas 2D · zero native modules required for the core |
 | **Art** | 100% procedural — palettes + body skeletons + IK pose math, no PNGs |
 | **Sounds** | Real recorded cats (+2 tiny code-synthesized SFX, because the author doesn't own a trampoline) |
-| **Tests** | 347 unit + 89 visual + 133 E2E (real app under Xvfb, every feature exercised live) |
+| **Tests** | 351 unit + 89 visual + 133 E2E (real app under Xvfb, every feature exercised live) |
 | **RAM** | ~165 MB PSS, 3× MeowCat.exe processes at rest (main + renderer + helper, all named MeowCat) |
 | **CPU** | idle 13% of a core, sleep ~5.7% (7.5fps breathing), paints freeze while hidden, one PowerShell stream instead of 12/min |
 | **Docs** | [RENDERING](docs/RENDERING.md) · [FEATURES](docs/FEATURES.md) · [BUILD](docs/BUILD.md) · [TESTING](docs/TESTING.md) |

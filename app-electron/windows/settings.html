@@ -132,10 +132,6 @@
           <label class="sw"><input type="checkbox" id="topmost"><span class="tr"><span class="kn"></span></span></label>
         </div>
         <div class="fl-row">
-          <div class="txt"><div class="l1">Auto-hide in fullscreen</div><div class="l2">Polite mode — when a game or video goes fullscreen, the cat leaves the stage.</div></div>
-          <label class="sw"><input type="checkbox" id="hideInFullscreen"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
           <div class="txt"><div class="l1">Walk &amp; jump on window tops</div><div class="l2">The cat strolls and hops along the top border of normal (resized) windows. Maximized full-screen windows are skipped, and it rides along when you move or resize a window it stands on. Off saves CPU.</div></div>
           <label class="sw"><input type="checkbox" id="hopToggle"><span class="tr"><span class="kn"></span></span></label>
         </div>
@@ -216,14 +212,6 @@
         <div class="fl-row">
           <div class="txt"><div class="l1">Contextual sounds</div><div class="l2">Glass paw-taps on window edges, toy squeaks on jumps.</div></div>
           <label class="sw"><input type="checkbox" id="contextualSounds"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Duck during calls</div><div class="l2">Zoom/Teams/OBS detected → cat sounds politely step aside.</div></div>
-          <label class="sw"><input type="checkbox" id="duckDuringCalls"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Hide during calls</div><div class="l2">The cat auto-hides while a call or recording app runs. It will be back.</div></div>
-          <label class="sw"><input type="checkbox" id="hideDuringCalls"><span class="tr"><span class="kn"></span></span></label>
         </div>
       </div>
     </section>
@@ -577,7 +565,6 @@ bindSwitch('sounds', 'sounds');
 bindSwitch('topmost', 'topmost');
 bindSwitch('hopToggle', 'windowHopping');
 bindSwitch('autoStart', 'autoStart', v => toast(v ? 'Will start with Windows' : 'Auto-start disabled'));
-bindSwitch('hideInFullscreen', 'hideInFullscreen');
 bindSwitch('noWalkZones', 'noWalkZones');
 bindSwitch('seasonalSkins', 'seasonalSkins');
 bindSwitch('companionCat', 'companionCat', v => toast(v ? 'A friend has arrived 🐾' : 'Companion dismissed'));
@@ -590,8 +577,6 @@ bindSwitch('reactTyping', 'reactTyping');
 bindSwitch('stalkCursor', 'stalkCursor');
 bindSwitch('reactMusic', 'reactMusic');
 bindSwitch('contextualSounds', 'contextualSounds');
-bindSwitch('duckDuringCalls', 'duckDuringCalls');
-bindSwitch('hideDuringCalls', 'hideDuringCalls');
 bindSwitch('pomodoro', 'pomodoro');
 bindSwitch('reactBuildStatus', 'reactBuildStatus');
 bindSwitch('globalHotkeys', 'globalHotkeys');
@@ -604,14 +589,13 @@ function syncControls() {
   $('speed').value = S.speed; $('spV').textContent = S.speed + ' px/s';
   for (const [id, key] of [
     ['sounds', 'sounds'], ['topmost', 'topmost'], ['hopToggle', 'windowHopping'],
-    ['autoStart', 'autoStart'], ['hideInFullscreen', 'hideInFullscreen'],
+    ['autoStart', 'autoStart'],
     ['noWalkZones', 'noWalkZones'], ['seasonalSkins', 'seasonalSkins'],
     ['companionCat', 'companionCat'], ['reactSystemSpikes', 'reactSystemSpikes'],
     ['reactLowBattery', 'reactLowBattery'], ['timeOfDayMood', 'timeOfDayMood'],
     ['reactNewWindows', 'reactNewWindows'], ['reactApps', 'reactApps'],
     ['reactTyping', 'reactTyping'], ['stalkCursor', 'stalkCursor'],
     ['reactMusic', 'reactMusic'], ['contextualSounds', 'contextualSounds'],
-    ['duckDuringCalls', 'duckDuringCalls'], ['hideDuringCalls', 'hideDuringCalls'],
     ['pomodoro', 'pomodoro'], ['reactBuildStatus', 'reactBuildStatus'],
     ['globalHotkeys', 'globalHotkeys'], ['photoMode', 'photoMode'], ['achievements', 'achievements'],
   ]) $(id).checked = S[key] !== undefined ? !!S[key] : false;

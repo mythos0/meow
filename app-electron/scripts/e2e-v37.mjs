@@ -6,7 +6,8 @@
 //      outside the visible canvas (async slide-sync + repaint on landing)
 //   3. companion kitten: leashed to the main cat, always inside the region
 //   4. quick tap = real meow (sound actually routed through play())
-//   5. hidden cat = paused render loop (rAF stops; resumes on show) — CPU win
+//   5. v3.10 contract: a call app must NOT hide the cat and NOT pause the
+//      render loop (the old hidden-pause now applies to USER hide only)
 import { chromium } from 'playwright';
 import { spawn } from 'child_process';
 import { mkdirSync } from 'fs';
@@ -176,57 +177,36 @@ try {
   ok('quick tap plays a real meow + heart',
     !!tap.lastPlay && /^meow_real/.test(tap.lastPlay.name) && tap.emote === 'heart', JSON.stringify(tap));
 
-  // ---------------- 5. hidden cat pauses the render loop ----------------
-  // real pipeline: a process named "teams" -> sysMonitor -> parseProcessList
-  // -> findCallApp -> updateCatVisibility -> cat-visible -> rAF stops
+  // ---------------- 5. v3.10: a call app changes NOTHING ----------------
+  // the old pipeline (teams -> sysMonitor -> parseProcessList -> findCallApp
+  // -> updateCatVisibility) is DELETED: the cat must stay visible, keep
+  // painting, and the hidden state must carry only the user flag.
   const teamsBin = '/tmp/meow-e2e-v37/teams';
-  const { mkdirSync: mkd, copyFileSync: cpf } = await import('fs');
+  const { mkdirSync: mkd, copyFileSync: cpf, rmSync: rmf } = await import('fs');
   mkd('/tmp/meow-e2e-v37', { recursive: true });
   cpf('/bin/sleep', teamsBin);
-  await cat.evaluate(() => window.meow.setSettings({ hideDuringCalls: true }));
   const teamsProc = spawn(teamsBin, ['120'], { stdio: 'ignore' });
-  let hiddenSeen = false;
-  const tHide = Date.now();
-  while (Date.now() - tHide < 30000) {
+  let stayedVisible = false;
+  const tCall = Date.now();
+  while (Date.now() - tCall < 8000) {
     const h = await cat.evaluate(async () => (await window.meow.appInfo()).hidden);
-    if (h.call) { hiddenSeen = true; break; }
+    if (h.user === false && !('call' in h)) { stayedVisible = true; break; }
     await sleep(400);
   }
-  ok('call app hides the cat (pipeline intact)', hiddenSeen, `${Date.now() - tHide}ms`);
-  // while hidden: the LOOP must be paused -> real paints must freeze
-  const paintsHidden = await Promise.race([
-    cat.evaluate(async () => {
-      const p0 = window.__paintCount || 0;
-      await new Promise(r => setTimeout(r, 1200));
-      return { p0, p1: window.__paintCount || 0 };
-    }),
-    sleep(1600).then(() => null),
-  ]);
-  ok('render loop pauses while hidden (paints frozen, CPU saved)',
-    hiddenSeen && !!paintsHidden && paintsHidden.p1 === paintsHidden.p0, JSON.stringify(paintsHidden));
+  ok('call app present: hidden stays {user:false} with no call flag', stayedVisible,
+    `${Date.now() - tCall}ms`);
+  // the LOOP must keep painting the whole time (nothing pauses it)
+  const paintsDuring = await cat.evaluate(async () => {
+    const p0 = window.__paintCount || 0;
+    await new Promise(r => setTimeout(r, 1200));
+    return { p0, p1: window.__paintCount || 0 };
+  });
+  ok('render loop never pauses for a call app (paints flowing)',
+    stayedVisible && paintsDuring.p1 > paintsDuring.p0, JSON.stringify(paintsDuring));
   const visFlag = await cat.evaluate(() => window.__catVisible());
-  ok('__catVisible flag false while hidden', visFlag === false, `flag=${visFlag}`);
+  ok('__catVisible stays true while a call app runs', visFlag === true, `flag=${visFlag}`);
   teamsProc.kill('SIGKILL');
-  let shownAgain = false;
-  const tShow = Date.now();
-  while (Date.now() - tShow < 25000) {
-    const h = await cat.evaluate(async () => (await window.meow.appInfo()).hidden);
-    if (!h.call) { shownAgain = true; break; }
-    await sleep(400);
-  }
-  // resumes painting (and stays alive) after the call ends
-  await sleep(1200);
-  const paintsAfter = await Promise.race([
-    cat.evaluate(async () => {
-      const p0 = window.__paintCount || 0;
-      await new Promise(r => setTimeout(r, 1200));
-      return { p0, p1: window.__paintCount || 0 };
-    }),
-    sleep(1600).then(() => null),
-  ]);
-  ok('cat returns and the render loop resumes (paints flowing again)',
-    shownAgain && !!paintsAfter && paintsAfter.p1 > paintsAfter.p0, JSON.stringify(paintsAfter));
-  await cat.evaluate(() => window.meow.setSettings({ hideDuringCalls: false }));
+  rmf('/tmp/meow-e2e-v37', { recursive: true, force: true });
 
   await cat.screenshot({ path: path.join(OUT, 'v37_final.png') });
 } catch (e) {

@@ -1,6 +1,9 @@
-// e2e-robust.mjs — v3.6.1 robustness pass: adversarial scenarios through the
-// REAL pipelines (real process detection, real pollers, real IPC, real timers).
-// Every scenario pins a bug that shipped in v3.6.0 and is fixed in v3.6.1.
+// e2e-robust.mjs — adversarial scenarios through the REAL pipelines (real IPC,
+// real pollers, real timers). Since v3.10 it also pins the two user directives:
+//   * NO cat-hiding logic exists anymore — a Zoom-named process must NOT hide
+//     the cat, must NOT duck its sounds, and the settings/UI must not offer it.
+//   * the cat's process never stops on its own — closing/destroying the cat
+//     window without a quit must self-heal with a fresh booted cat window.
 import { chromium } from 'playwright';
 import { spawn } from 'child_process';
 import { mkdirSync, writeFileSync, copyFileSync, rmSync, existsSync } from 'fs';
@@ -69,7 +72,7 @@ async function findPage(suffix, tries = 20) {
 }
 
 try {
-  const cat = await findPage('cat.html');
+  let cat = await findPage('cat.html');
   ok('cat window booted', !!cat);
   if (!cat) throw new Error('no cat window');
   await cat.waitForFunction('window.__catBooted === true', null, { timeout: 15000 });
@@ -83,57 +86,62 @@ try {
     return b.state;
   });
 
-  // ============ 1. REAL call-app detection: a process named "zoom" ============
-  // (the v3.6 e2e drove the duck handler directly; this one exercises the full
-  // main-process pipeline: sysMonitor -> ps -> parseProcessList -> findCallApp)
+  // ============ 1. v3.10: NO auto-hide exists — a call app must be ignored ====
+  // (the old pipeline sysMonitor -> ps -> parseProcessList -> findCallApp is
+  // deleted; a Zoom process must change NOTHING for the cat)
   await calm();
-  const hiddenState = () => cat.evaluate(async () => (await window.meow.appInfo()).hidden);
+  const appInfo0 = await cat.evaluate(async () => window.meow.appInfo());
+  ok('hidden state has only the user flag (call/fullscreen hide deleted)',
+    appInfo0.hidden && !('call' in appInfo0.hidden) && !('fullscreen' in appInfo0.hidden) &&
+    appInfo0.hidden.user === false, JSON.stringify(appInfo0.hidden));
+  const s0 = await cat.evaluate(async () => window.meow.getSettings());
+  ok('settings expose no hide toggles anymore',
+    !('hideDuringCalls' in s0) && !('duckDuringCalls' in s0) && !('hideInFullscreen' in s0));
+  ok('renderer has no duck volume multiplier left',
+    await cat.evaluate(() => window.__volumeMul === undefined));
+
   const zoomBin = '/tmp/meow-e2e-call/zoom';
   mkdirSync('/tmp/meow-e2e-call', { recursive: true });
   copyFileSync('/bin/sleep', zoomBin);
   const zoomProc = spawn(zoomBin, ['600'], { stdio: 'ignore' });
-  let callSeen = null;
-  const tCall = Date.now();
-  while (Date.now() - tCall < 30000) {
-    const h = await hiddenState();
-    if (h.call) { callSeen = { hiddenAtMs: Date.now() - tCall }; break; }
-    await sleep(500);
-  }
-  ok('live: a process named "zoom" hides the cat (real ps -> call-app path)',
-    !!callSeen, JSON.stringify(callSeen));
-  await cat.screenshot({ path: path.join(OUT, 'robust_call_hidden.png') }).catch(() => {});
-
-  // duck must also be active now
-  const duckLive = await cat.evaluate(() => window.__volumeMul());
-  ok('live: call detection ducks the cat sounds to 22%', duckLive === 0.22, String(duckLive));
-
-  // ---- the regression: toggle "hide during calls" OFF while hidden ----
-  // v3.6.0 bug: the stale hiddenByCall flag kept the cat invisible forever.
-  await cat.evaluate(() => window.meow.setSettings({ hideDuringCalls: false }));
-  let unhidden = null;
-  const tUn = Date.now();
-  while (Date.now() - tUn < 5000) {
-    const h = await hiddenState();
-    if (!h.call) { unhidden = { atMs: Date.now() - tUn }; break; }
-    await sleep(300);
-  }
-  ok('regression: toggling hide-during-calls OFF unhides the cat instantly',
-    !!unhidden, JSON.stringify(unhidden));
-
-  // kill zoom: on the next process snapshot the duck lifts and the flag clears
+  await sleep(6500);   // > 2 monitor samples: any resurrected detector would have fired
+  const duringCall = await cat.evaluate(() => ({
+    hidden: window.__catVisible(),
+    paints: window.__paintCount || 0,
+  }));
+  const paintsA = duringCall.paints;
+  await sleep(1200);
+  const paintsB = await cat.evaluate(() => window.__paintCount || 0);
+  ok('live: a process named "zoom" does NOT hide the cat (loop keeps painting)',
+    duringCall.hidden === true && paintsB > paintsA, `paints ${paintsA}->${paintsB}`);
   zoomProc.kill('SIGKILL');
   rmSync('/tmp/meow-e2e-call', { recursive: true, force: true });
-  let duckRestored = 0;
-  const tDk = Date.now();
-  while (Date.now() - tDk < 25000) {
-    duckRestored = await cat.evaluate(() => window.__volumeMul());
-    if (duckRestored === 1) break;
-    await sleep(500);
+
+  // ============ 1b. v3.10: the cat window self-heals without a quit ==========
+  // window.close() destroys the overlay — main must notice and resurrect it;
+  // the app process must never die.
+  const oldPaints = await cat.evaluate(() => window.__paintCount || 0);
+  await cat.evaluate(() => window.close()).catch(() => {});   // the evaluate may lose the target as it closes
+  let revived = null;
+  const tRev = Date.now();
+  while (Date.now() - tRev < 15000) {
+    cat = await findPage('cat.html', 4);
+    if (cat) {
+      try {
+        await cat.waitForFunction('window.__catBooted === true', null, { timeout: 8000 });
+        revived = { atMs: Date.now() - tRev, paintsFresh: await cat.evaluate(() => window.__paintCount || 0) };
+        break;
+      } catch { cat = null; }
+    }
+    await sleep(400);
   }
-  ok('call app exits -> duck lifts on the next process snapshot', duckRestored === 1, String(duckRestored));
-  const visAfterKill = await hiddenState();
-  ok('cat remains visible after the call app exits', visAfterKill.call === false, JSON.stringify(visAfterKill));
-  await cat.evaluate(() => window.meow.setSettings({ hideDuringCalls: true, duckDuringCalls: true }));
+  let procAlive = true;
+  try { process.kill(app.pid, 0); } catch { procAlive = false; }
+  ok('live: closed cat window resurrects itself (fresh booted renderer, old paints=' + oldPaints + ')',
+    !!revived && procAlive && revived.paintsFresh > 0, JSON.stringify({ revived, procAlive }));
+  const infoAfterRevive = await cat.evaluate(async () => window.meow.appInfo());
+  ok('app process is still the same healthy MeowCat after the revival',
+    procAlive && !!infoAfterRevive.version, JSON.stringify({ version: infoAfterRevive.version, hidden: infoAfterRevive.hidden }));
 
   // ============ 2. reminder: real scheduler + chosen anim + single stat bump ==
   await calm();

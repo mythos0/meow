@@ -23,13 +23,12 @@ export const DEFAULTS = {
   reactLowBattery: true,     // low battery -> curls up "to save energy"
   timeOfDayMood: true,       // yawns & naps at night, playful by day
   reactNewWindows: true,     // new app opens -> walks over & investigates
-  hideDuringCalls: true,     // OBS/Zoom/Teams detected -> hide (never photobomb a call)
-  duckDuringCalls: true,     // call detected -> cat sounds step aside
   reactMusic: true,          // music playing -> bops along
   reactApps: true,           // loafs on your editor, gets playful over games
   reactTyping: true,         // fast typing burst -> pounce; long idle -> nap
   stalkCursor: true,         // cursor idle nearby -> stalk & pounce it
-  hideInFullscreen: false,   // auto-hide while a fullscreen app has focus
+  // v3.10: hideDuringCalls / duckDuringCalls / hideInFullscreen were REMOVED —
+  // the cat never hides on its own; only the user may hide or quit it.
   // interaction & progression
   affectionSystem: true,     // pets build an affection meter that unlocks perks
   companionCat: false,       // a second cat: nuzzle, play-fight, rival stalking

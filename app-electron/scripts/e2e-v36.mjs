@@ -90,22 +90,27 @@ try {
 
   // ================= 1. toggles round-trip through IPC =================
   const tog = await cat.evaluate(async () => {
+    // v3.10: hideDuringCalls / duckDuringCalls / hideInFullscreen are REMOVED
+    // from the app — they must round-trip NO more.
     const keys = ['reactSystemSpikes', 'reactLowBattery', 'timeOfDayMood', 'reactNewWindows',
-      'hideDuringCalls', 'duckDuringCalls', 'reactMusic', 'reactApps', 'reactTyping',
+      'reactMusic', 'reactApps', 'reactTyping',
       'stalkCursor', 'affectionSystem', 'photoMode', 'contextualSounds', 'pomodoro',
       'dancePartyIdle', 'seasonalSkins', 'achievements', 'globalHotkeys', 'noWalkZones',
-      'companionCat', 'reactBuildStatus', 'hideInFullscreen'];
+      'companionCat', 'reactBuildStatus'];
+    const removed = ['hideDuringCalls', 'duckDuringCalls', 'hideInFullscreen'];
     // flip all off, verify, flip back to defaults
     const offs = {}; for (const k of keys) offs[k] = false;
     await window.meow.setSettings(offs);
     const s1 = await window.meow.getSettings();
     const allOff = keys.every(k => s1[k] === false);
-    const ons = {}; for (const k of keys) ons[k] = (k === 'companionCat' || k === 'reactBuildStatus' || k === 'hideInFullscreen' || k === 'seasonalSkins') ? false : true;
+    const goneForGood = removed.every(k => !(k in s1));
+    const ons = {}; for (const k of keys) ons[k] = (k === 'companionCat' || k === 'reactBuildStatus' || k === 'seasonalSkins') ? false : true;
     await window.meow.setSettings(ons);
     const s2 = await window.meow.getSettings();
-    return { allOff, restored: keys.every(k => s2[k] === ons[k]) };
+    return { allOff, goneForGood, restored: keys.every(k => s2[k] === ons[k]) };
   });
-  ok('all 22 feature toggles round-trip through IPC', tog.allOff && tog.restored, JSON.stringify(tog));
+  ok('all 19 feature toggles round-trip through IPC + hide toggles stay deleted',
+    tog.allOff && tog.restored && tog.goneForGood, JSON.stringify(tog));
 
   // ================= 2. CPU/RAM spike -> startle (real sampler) =================
   await calm();
@@ -407,14 +412,11 @@ try {
   ok('live: cat respects the no-walk zone', zoneLive.ok, JSON.stringify(zoneLive));
   await cat.evaluate(() => window.meow.setSettings({ noWalkZoneList: [] }));
 
-  // ================= 16. duck during calls =================
-  const duck = await cat.evaluate(async () => {
-    window.__testEvent('duck', true);
-    const v1 = window.__volumeMul();
-    window.__testEvent('duck', false);
-    return { ducked: v1, restored: window.__volumeMul() };
-  });
-  ok('call detected -> cat sounds duck to 22%', duck.ducked === 0.22 && duck.restored === 1, JSON.stringify(duck));
+  // ================= 16. v3.10: duck-during-calls is gone =================
+  // The 'duck' channel and the volume multiplier were deleted — the renderer
+  // must not know the old test hook anymore.
+  const duckGone = await cat.evaluate(() => window.__volumeMul === undefined);
+  ok('v3.10: call-ducking is deleted (no volumeMul hook, sounds never duck)', duckGone);
 
   // ================= 17. community skin import =================
   const skin = await cat.evaluate(async () => {
@@ -471,7 +473,8 @@ try {
       fluentCards: document.querySelectorAll('.fl-card').length,
     }));
     ok('Win11 nav pane with 10 sections', nav.items === 10, JSON.stringify(nav));
-    ok('every feature has a toggle switch (24 switches)', nav.switches >= 24, String(nav.switches));
+    ok('every feature has a toggle switch (21 after the 3 hide toggles were removed in v3.10)',
+      nav.switches >= 21, String(nav.switches));
     ok('Fluent cards render', nav.fluentCards >= 14, String(nav.fluentCards));
     // navigate sections via the nav
     const navWorks = await set.evaluate(() => {

@@ -1,7 +1,9 @@
 // sys-monitor.js — main-process sampler for the "living on your machine" pack.
-//  * CPU/RAM: Linux reads /proc (no subprocess); Windows uses one short
-//    PowerShell one-shot per sample (CIM LoadPercentage + memory).
-//  * Processes: `ps -eo comm=` (Linux) / `tasklist /fo csv /nh` (Windows).
+//  * CPU/RAM: Linux reads /proc (no subprocess); Windows uses ONE persistent
+//    PowerShell streamer emitting a JSON line per sample.
+//  * v3.10: the process-list sampling (`ps` / `tasklist`) was REMOVED along
+//    with call-app detection — it served nothing else. Linux now spawns no
+//    subprocess at all; Windows spawns exactly one PowerShell.
 // Everything heavy is behind injectable fs/spawn so unit tests drive it.
 
 'use strict';
@@ -105,22 +107,20 @@ while ($true) {
 //   win32: ONE persistent PowerShell streams CPU/RAM/battery JSON lines
 //          (startStream); a watchdog restarts it with backoff if it dies or
 //          goes quiet, and after 4 failures we fall back to the legacy
-//          one-shot timer. The process list stays a one-shot `tasklist` on
-//          its own slower timer (procEvery samples).
-//   linux: unchanged — /proc reads in-process (no subprocess at all).
+//          one-shot timer.
+//   linux: /proc reads in-process (no subprocess at all).
+//   v3.10: no process list anywhere — call detection is gone.
 export function createSysMonitor(opts = {}) {
   const spawnFn = opts.spawnFn || null;             // child_process.spawn
   const readFn = opts.readFn || (() => null);       // fs.readFileSync
   const platform = opts.platform || process.platform;
   const intervalMs = opts.intervalMs ?? 5000;
-  const procEvery = opts.procEvery ?? 2;            // process list every Nth sample
   const onSample = opts.onSample || (() => {});
-  const onProcesses = opts.onProcesses || (() => {});
   const wantStream = opts.streamWin !== false;      // v3.7 default: streaming on win32
   const MAX_STREAM_FAILS = 4;
 
   let running = false;
-  let timer = null, procTimer = null, tickN = 0, prevStat = null, busy = false;
+  let timer = null, prevStat = null, busy = false;
   // streaming sampler state
   let streamProc = null, streamBuf = '', streamFails = 0;
   let streamRestart = null, streamWatchdog = null;
@@ -220,27 +220,8 @@ export function createSysMonitor(opts = {}) {
         ({ cpu, ram, battery, charging } = parseWinStats(out));
       }
       handleSample({ cpu, ram, battery, charging });
-      tickN++;
     } catch { /* never kill the app over telemetry */ }
     finally { busy = false; }
-  }
-
-  async function sampleProcs() {
-    if (!spawnFn) return;
-    const isWin = platform === 'win32';
-    const names = await new Promise(resolve => {
-      let p, out = '';
-      try {
-        p = spawnFn(isWin ? 'tasklist' : 'ps',
-          isWin ? ['/fo', 'csv', '/nh'] : ['-eo', 'comm='],
-          { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-      } catch { resolve(''); return; }
-      const kill = setTimeout(() => { try { p.kill(); } catch {} }, 8000);
-      p.stdout.on('data', d => { out += d; });
-      p.on('error', () => { clearTimeout(kill); resolve(''); });
-      p.on('close', () => { clearTimeout(kill); resolve(out); });
-    });
-    if (names) onProcesses(names);
   }
 
   return {
@@ -249,18 +230,10 @@ export function createSysMonitor(opts = {}) {
       running = true;
       if (useStream()) { startStream(); }
       if (!streamProc && !timer) fallbackToTimer();      // linux, or stream failed to spawn
-      if (spawnFn) {
-        sampleProcs();
-        if (!procTimer) {
-          procTimer = setInterval(sampleProcs, intervalMs * procEvery);
-          if (procTimer.unref) procTimer.unref();
-        }
-      }
     },
     stop() {
       running = false;
       if (timer) { clearInterval(timer); timer = null; }
-      if (procTimer) { clearInterval(procTimer); procTimer = null; }
       clearStreamTimers();
       killStream();
     },

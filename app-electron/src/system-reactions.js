@@ -97,18 +97,9 @@ export function shouldDanceParty(idleSec, opts = {}) {
          (opts.lastPartyAgeSec == null || opts.lastPartyAgeSec >= oncePer);
 }
 
-// ---------------------------------------------------------------- fullscreen app
-// A window covering (almost) the whole work area = fullscreen/exclusive game
-// or media app → the cat politely leaves the stage.
-export function isFullscreenWindow(rect, workArea, opts = {}) {
-  if (!rect || !workArea) return false;
-  const cover = opts.cover ?? 0.94;
-  const aw = workArea.width ?? workArea.w;
-  const ah = workArea.height ?? workArea.h;
-  const ax = workArea.x ?? 0, ay = workArea.y ?? 0;
-  return rect.w >= aw * cover && rect.h >= ah * cover &&
-         rect.x <= ax + aw * (1 - cover) && rect.y <= ay + ah * (1 - cover);
-}
+// v3.10: fullscreen auto-hide and call-app detection were REMOVED entirely.
+// The cat never hides itself — only an explicit user action (tray / hotkey)
+// may hide it, and only the explicit Quit may stop its process.
 
 // ---------------------------------------------------------------- new-window diff
 // Platform lists from the window scanner — which windows just appeared?
@@ -120,35 +111,10 @@ export function diffWindows(previous, current, opts = {}) {
 }
 
 // ---------------------------------------------------------------- processes
-// Call/record apps: if one of these runs, assume a call or a recording.
-export const CALL_APP_RE = /(^|\/)(obs64|obs32|zoom|Teams|ms-teams|teams|Discord|skype|webex|slack)(\.exe)?$/i;
-
 // Editors & IDEs: the cat curls up on top of them while you code.
+// (v3.10: call/record-app detection was removed — the cat ignores your calls.)
 export const EDITOR_APP_RE = /^(Code|code|notepad\+\+|notepad|sublime_text|idea|idea64|pycharm|webstorm|goland|clion|rider|vim|nvim|emacs|devenv|studio64|zed|cursor|windsurf)(\.exe)?$/i;
 
-// parse `ps -eo comm=` / `tasklist /fo csv /nh` / PowerShell (Get-Process).Name
-// into a plain list of process names — one parser for all three formats.
-export function parseProcessList(raw) {
-  if (!raw || typeof raw !== 'string') return [];
-  const names = [];
-  for (const lineRaw of raw.split(/\r?\n/)) {
-    const line = lineRaw.trim();
-    if (!line || /^["]?image name["]?,/i.test(line)) continue;   // tasklist header
-    if (line.startsWith('"')) {
-      // tasklist CSV: "name","pid",...
-      const m = line.match(/^"([^"]+)"/);
-      if (m) names.push(m[1].replace(/\.exe$/i, ''));
-    } else {
-      names.push(line.replace(/\.exe$/i, ''));
-    }
-  }
-  return names;
-}
-
-export function findCallApp(names) {
-  for (const n of names || []) if (CALL_APP_RE.test(n)) return n;
-  return null;
-}
 export function findEditorApp(names) {
   for (const n of names || []) if (EDITOR_APP_RE.test(n)) return n;
   return null;

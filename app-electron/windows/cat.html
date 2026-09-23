@@ -41,7 +41,9 @@ let S = { breed: 'grey_tabby', size: 1.0, opacity: 1.0, sounds: true, speed: 55,
 let brain = null;
 let audio = {};
 let bubbleTimer = null;
-let volumeMul = 1;            // v3.6: ducked during calls
+// v3.10: the call-time volume duck multiplier was removed along with call
+// detection — the cat ignores calls completely and always plays at full
+// requested volume.
 let frozen = false;           // v3.6: photo mode
 let flashUntil = 0;           // v3.6: photo flash
 let currentHat = null;        // v3.6: seasonal / skin hat
@@ -93,7 +95,7 @@ function play(name, vol = 0.9) {
       audioPool.set(name, pool);
     }
     const a = pool.arr[pool.i++ % pool.arr.length];
-    a.volume = Math.max(0, Math.min(1, vol * volumeMul));
+    a.volume = Math.max(0, Math.min(1, vol));
     try { a.currentTime = 0; } catch {}
     a.play().catch(() => {});
     window.__lastPlay = { name, t: performance.now() / 1000 };   // e2e instrumentation
@@ -121,7 +123,7 @@ function playMeow(vol = 0.95) {
     }
     const pick = MEOW_VARIANTS[Math.floor(Math.random() * MEOW_VARIANTS.length)];
     if (meowVoice.src.indexOf(`/${pick}.wav`) === -1) meowVoice.src = `../sounds/${pick}.wav`;
-    meowVoice.volume = Math.max(0, Math.min(1, vol * volumeMul));
+    meowVoice.volume = Math.max(0, Math.min(1, vol));
     try { meowVoice.currentTime = 0; } catch {}
     meowVoice.play().catch(() => {});
     window.__lastPlay = { name: pick, t: performance.now() / 1000, exclusive: 'meow' };
@@ -161,7 +163,6 @@ async function init() {
   window.meow.on('cursor-busy', onCursorBusy);
   window.meow.on('new-window', onNewWindow);
   window.meow.on('app-focus', onAppFocus);
-  window.meow.on('duck', on => { volumeMul = on ? 0.22 : 1; });
   window.meow.on('pomodoro', onPomodoro);
   window.meow.on('achievement', showAchievement);
   window.meow.on('no-walk-zones', zones => {
@@ -189,9 +190,9 @@ async function init() {
   setInterval(applyTimeBias, 60_000);
   pollBattery();
   scheduleButterfly();
-  // v3.7: stop painting entirely while the cat is hidden (hotkey / call /
-  // fullscreen auto-hide) — the loop used to burn 60fps of software-raster
-  // CPU on an invisible window.
+  // v3.7: stop painting entirely while the cat is hidden — and since v3.10 the
+  // ONLY thing that can hide it is an explicit user action (tray / Ctrl+Alt+C).
+  // The loop used to burn 60fps of software-raster CPU on an invisible window.
   window.meow.on('cat-visible', on => {
     catVisible = !!on;
     if (catVisible) { lastTs = performance.now(); rafId = requestAnimationFrame(loop); }
@@ -1045,7 +1046,6 @@ window.__perks = () => perks;
 window.__setPerks = p => { perks = { ...perks, ...p }; };
 window.__photoMode = () => photoMode();
 window.__frozen = () => frozen;
-window.__volumeMul = () => volumeMul;
 window.__settings = () => S;
 window.__catVisible = () => catVisible;
 window.__lastPlayInfo = () => window.__lastPlay || null;
@@ -1059,7 +1059,6 @@ window.__testEvent = (channel, data) => {
     'system-event': onSystemEvent, 'music': onMusic, 'typing': onTyping,
     'cursor-idle': onCursorIdle, 'cursor-busy': onCursorBusy,
     'new-window': onNewWindow, 'app-focus': onAppFocus,
-    'duck': on => { volumeMul = on ? 0.22 : 1; },
     'pomodoro': onPomodoro, 'achievement': showAchievement,
     'no-walk-zones': zones => {
       if (!brain) return;

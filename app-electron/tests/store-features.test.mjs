@@ -15,8 +15,8 @@ describe('v3.6 feature toggles', () => {
   test('all feature toggles exist in DEFAULTS', () => {
     const toggles = [
       'reactSystemSpikes', 'reactLowBattery', 'timeOfDayMood', 'reactNewWindows',
-      'hideDuringCalls', 'duckDuringCalls', 'reactMusic', 'reactApps', 'reactTyping',
-      'stalkCursor', 'hideInFullscreen', 'affectionSystem', 'companionCat',
+      'reactMusic', 'reactApps', 'reactTyping',
+      'stalkCursor', 'affectionSystem', 'companionCat',
       'photoMode', 'contextualSounds', 'pomodoro', 'dancePartyIdle',
       'reactBuildStatus', 'seasonalSkins', 'achievements', 'communitySkins',
       'globalHotkeys', 'noWalkZones',
