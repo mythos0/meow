@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('meow', {
       'system-event', 'music', 'typing', 'cursor-idle', 'cursor-busy',
       'new-window', 'app-focus', 'duck', 'pomodoro', 'achievement',
       'no-walk-zones', 'photo-mode', 'dance-party', 'time-bias', 'boot-greet',
+      'cat-visible',   // v3.7: pause the render loop while the cat is hidden
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));

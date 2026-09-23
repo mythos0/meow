@@ -27,7 +27,7 @@
 <script type="module">
 import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAnchor, CAT_BBOX, registerSkin } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
-import { computeRegionSize, initialOrigin, slideIfNeeded } from '../src/region.js';
+import { computeRegionSize, initialOrigin, slideIfNeeded, companionLeash } from '../src/region.js';
 import { batteryCrisis } from '../src/system-reactions.js';
 import { unlockedPerks } from '../src/achievements.js';
 import { zonesToScreen } from '../src/no-walk.js';
@@ -76,12 +76,25 @@ function loadSounds() {
     audio[n] = a;
   }
 }
+// v3.7: pooled clones — the old code allocated a fresh HTMLAudioElement via
+// cloneNode() for EVERY play call (footsteps fire up to ~14/s while walking),
+// which was constant GC churn in the renderer. A small rotating pool per
+// sound reuses elements; overlapping same-name plays may restart a tail,
+// which is inaudible for the short UI/footstep samples.
+const audioPool = new Map();
 function play(name, vol = 0.9) {
   if (!S.sounds || !audio[name]) return;
   try {
-    const a = audio[name].cloneNode();
+    let pool = audioPool.get(name);
+    if (!pool) {
+      pool = { arr: [audio[name].cloneNode(), audio[name].cloneNode(), audio[name].cloneNode()], i: 0 };
+      audioPool.set(name, pool);
+    }
+    const a = pool.arr[pool.i++ % pool.arr.length];
     a.volume = Math.max(0, Math.min(1, vol * volumeMul));
+    try { a.currentTime = 0; } catch {}
     a.play().catch(() => {});
+    window.__lastPlay = { name, t: performance.now() / 1000 };   // e2e instrumentation
   } catch {}
 }
 
@@ -141,8 +154,16 @@ async function init() {
   setInterval(applyTimeBias, 60_000);
   pollBattery();
   scheduleButterfly();
+  // v3.7: stop painting entirely while the cat is hidden (hotkey / call /
+  // fullscreen auto-hide) — the loop used to burn 60fps of software-raster
+  // CPU on an invisible window.
+  window.meow.on('cat-visible', on => {
+    catVisible = !!on;
+    if (catVisible) { lastTs = performance.now(); rafId = requestAnimationFrame(loop); }
+    else cancelAnimationFrame(rafId);
+  });
   if (S.timeOfDayMood) brain.setTimeBias((new Date().getHours() >= 22 || new Date().getHours() < 7) ? 'night' : 'day');
-  requestAnimationFrame(loop);
+  rafId = requestAnimationFrame(loop);
 }
 
 function registerCustomSkins(list) {
@@ -347,6 +368,7 @@ async function photoMode() {
 }
 
 // ---------------------------------------------------------- companion cat
+let companionLeashPx = 160;
 function applyCompanion(on) {
   if (on && !companion && brain) {
     const b = new CatBrain({
@@ -363,11 +385,18 @@ function companionBreedTick(dt) {
   if (!companion || !brain) return;
   const c = companion.brain;
   c.tick(dt);
-  // stick close to the big cat
+  // v3.7: stick close to the big cat. The old 420px pull threshold let the
+  // kitten roam far outside the ~480px region window that follows the MAIN
+  // cat — it was drawn outside the visible area (clipped = "friend cat not
+  // showing"). Now: run back beyond the leash, and a hard net guarantees it
+  // can never render outside the region even mid-state.
   const dx = brain.x - c.x;
-  if (Math.abs(dx) > 420 && ['walk', 'idle'].includes(c.state)) {
+  if (Math.abs(dx) > companionLeashPx && ['walk', 'idle', 'run', 'sit'].includes(c.state)) {
     c.dir = dx > 0 ? 1 : -1;
     c._enter('run', 1.2);
+  }
+  if (!c.onPlatform && !c._jump && Math.abs(c.x - brain.x) > companionLeashPx + 50) {
+    c.x = brain.x + Math.sign(c.x - brain.x) * (companionLeashPx + 50);
   }
   // nuzzle / play-fight when close and both are calm
   companionCd -= dt;
@@ -399,6 +428,7 @@ function playSfxSafe(n, v) { play(n, v); }
 // ---------------------------------------------------------- region sync
 function syncRegion(wa, recenter = false) {
   REGION = computeRegionSize(S.size, wa);
+  companionLeashPx = companionLeash(REGION.w);   // v3.7: kitten stays inside the region
   const feet = brain ? brain.baseY + brain.jumpY : wa.y + wa.height - 8;
   const cx = brain ? brain.x : wa.x + wa.width / 2;
   O = initialOrigin(wa, REGION, cx, feet);
@@ -580,6 +610,7 @@ let dragging = false;
 let dragDX = 0, dragDY = 0;
 let downX = 0, downY = 0;
 let pendingPet = null;
+let downOnCat = false;   // v3.7: quick click = real meow
 
 function toScreen(cx, cy) { return { x: cx + O.x, y: cy + O.y }; }
 
@@ -612,8 +643,9 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('mousedown', e => {
   const m = toScreen(e.clientX, e.clientY);
-  if (!catHit(m.x, m.y)) return;
+  if (!catHit(m.x, m.y)) { downOnCat = false; return; }
   if (e.button !== 0) return;
+  downOnCat = true;   // v3.7: click-vs-pet discrimination on release
   downX = e.clientX; downY = e.clientY;
   dragDX = m.x - brain.x;
   dragDY = m.y - brain.baseY;
@@ -640,9 +672,20 @@ window.addEventListener('dblclick', e => {
   dragging = false;
   window.meow.openWindow('settings');
 });
-window.addEventListener('mouseup', () => {
+window.addEventListener('mouseup', e => {
   if (dragging) brain.dropAt(brain.x, brain.baseY);
   dragging = false;
+  // v3.7: a quick click on the cat = a real meow + a tiny heart. Holding the
+  // button past 280ms is the pet (pendingPet fires); a drag cancels both via
+  // the move guard in mousemove. A double-click still opens Settings (the
+  // first click meowing first is just a cat being a cat).
+  if (pendingPet && downOnCat) {
+    clearTimeout(pendingPet); pendingPet = null;
+    const meows = ['meow_real', 'meow_real2', 'meow_real3'];
+    play(meows[Math.floor(Math.random() * meows.length)], 0.95);
+    if (brain) brain.emote = { kind: 'heart', t0: brain.t };
+  }
+  downOnCat = false;
 });
 window.addEventListener('contextmenu', e => {
   e.preventDefault();
@@ -680,12 +723,17 @@ function stepSounds() {
 let lastTs = performance.now();
 const IDLE_STATES = new Set(['idle', 'sit', 'sleep', 'loaf', 'knead', 'groom', 'eat', 'bamboo', 'sniff', 'mope', 'nuzzle', 'curl']);
 let idleFrameSkip = 0;
+let catVisible = true;
+let rafId = 0;
+let slideInFlight = null;   // v3.7: the slide whose window move is still landing
 function loop(ts) {
-  const dt = (ts - lastTs) / 1000;
+  // v3.7: clamp dt — a renderer stall (window move, GC, system sleep) used to
+  // hand the brain a huge step and teleport the cat on the next frame.
+  const dt = Math.min(0.11, Math.max(0, (ts - lastTs) / 1000));
   const throttle = brain && !frozen && IDLE_STATES.has(brain.state) && !dragging;
   if (throttle && idleFrameSkip < 3) {
     idleFrameSkip++;
-    requestAnimationFrame(loop);
+    rafId = requestAnimationFrame(loop);
     return;
   }
   idleFrameSkip = 0;
@@ -745,82 +793,109 @@ function loop(ts) {
         if (pc.brain.state !== 'dance') pc.brain._enter('dance', 4);
       }
     }
-    const p = brain.pose;
-    const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
-    const cand = slideIfNeeded(O, REGION, p.x, p.y, wa, S.size);
-    if (cand) {
-      O = cand;
-      window.meow.moveRegion({ x: O.x, y: O.y, w: REGION.w, h: REGION.h });
-    }
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.save();
-    ctx.translate(p.x - O.x, p.y - O.y);
-    const opts = {
-      t: p.t, state: p.state, dir: p.dir, breed: S.breed,
-      scale: S.size, alpha: S.opacity, jumpP: p.jumpP, hat: currentHat,
-    };
-    drawCat(ctx, opts);
-    drawParticles(ctx, opts);
-    if (brain.emote && brain.emote.kind) {
-      const age = brain.t - brain.emote.t0;
-      if (age < 2) {
-        const E = emoteAnchor(S.breed);
-        drawEmote(ctx, {
-          kind: brain.emote.kind, t: age,
-          x: E.x, y: E.y, scale: S.size,
-        });
-      } else brain.emote = null;
-    }
-    ctx.restore();
-    // companion cat
-    if (companion) {
-      const cp = companion.brain.pose;
-      ctx.save();
-      ctx.translate(cp.x - O.x, cp.y - O.y);
-      drawCat(ctx, { t: cp.t, state: cp.state, dir: cp.dir, breed: companion.breed, scale: S.size * 0.62, alpha: S.opacity, jumpP: cp.jumpP, hat: companion.hat });
-      drawParticles(ctx, { t: cp.t, state: cp.state, breed: companion.breed, scale: S.size * 0.62 });
-      ctx.restore();
-    }
-    // dance party ghosts
-    if (partyCats) {
-      for (const pc of partyCats) {
-        const pp = pc.brain.pose;
-        ctx.save();
-        ctx.translate(pp.x - O.x, pp.y - O.y);
-        drawCat(ctx, { t: pp.t, state: pp.state, dir: pp.dir, breed: pc.breed, scale: S.size * 0.7, alpha: 0.8 * S.opacity, jumpP: pp.jumpP });
-        ctx.restore();
+    // v3.7: region slide, fully synchronized. The window move is ASYNC —
+    // painting the canvas with the NEW origin before the OS has actually
+    // moved the window made the cat visibly jump for a few frames (the
+    // "cat jumping/flushing" report). So: keep painting with the OLD origin
+    // while the move is in flight; when it lands, flip the origin and repaint
+    // IMMEDIATELY (not on the next rAF — the idle throttle can delay that by
+    // ~67ms, which is visible). Horizontal focus is the main/companion
+    // midpoint so a leashed kitten can never sit outside the region.
+    if (!slideInFlight) {
+      const p0 = brain.pose;
+      const wa0 = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
+      const focusX = companion ? (p0.x + companion.brain.pose.x) / 2 : p0.x;
+      const cand = slideIfNeeded(O, REGION, focusX, p0.y, wa0, S.size);
+      if (cand) {
+        slideInFlight = cand;
+        window.meow.moveRegion({ x: cand.x, y: cand.y, w: REGION.w, h: REGION.h })
+          .then(res => {
+            if (res) O = { x: res.x, y: res.y };
+            slideInFlight = null;
+            try { paint(); } catch { /* next frame repaints anyway */ }
+          })
+          .catch(() => { slideInFlight = null; });
       }
     }
-    // v3.5 toys
-    if (butterfly) {
-      ctx.save();
-      ctx.translate(butterfly.x - O.x, butterfly.y - O.y);
-      drawButterfly(ctx, { t: p.t, scale: S.size, hue: butterfly.hue, s: 1.15 });
-      ctx.restore();
-    }
-    if (laser) {
-      ctx.save();
-      ctx.translate(laser.x - O.x, laser.y - O.y);
-      drawLaser(ctx, { t: p.t, scale: S.size });
-      ctx.restore();
-    }
-    // photo flash
-    const nowS2 = performance.now() / 1000;
-    if (nowS2 < flashUntil) {
-      ctx.fillStyle = `rgba(255,255,255,${(flashUntil - nowS2) / 0.28 * 0.85})`;
-      ctx.fillRect(0, 0, cv.width, cv.height);
-    }
-    // pomodoro badge
-    if (pomoState && pomoState.mode && pomoState.mode !== 'idle') {
-      const mm = Math.max(0, pomoState.remaining);
-      const label = (pomoState.mode === 'focus' ? '🍅 ' : '☕ ') + fmtRemaining(mm);
-      badge.textContent = label;
-      badge.style.left = Math.max(10, p.x - 30 - O.x) + 'px';
-      badge.style.top = Math.max(10, p.y - 150 * S.size - 46 - O.y) + 'px';
-      badge.style.display = 'block';
-    } else badge.style.display = 'none';
+    paint();
   }
-  requestAnimationFrame(loop);
+  if (catVisible) rafId = requestAnimationFrame(loop);
+}
+
+// v3.7: pure draw of the current state (no ticking) — used by the rAF loop
+// AND right after a region slide lands, so the cat is never drawn at a stale
+// window position.
+function paint() {
+  if (!brain) return;
+  window.__paintCount = (window.__paintCount || 0) + 1;   // e2e: CPU probe counts real paints
+  const p = brain.pose;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.save();
+  ctx.translate(p.x - O.x, p.y - O.y);
+  const opts = {
+    t: p.t, state: p.state, dir: p.dir, breed: S.breed,
+    scale: S.size, alpha: S.opacity, jumpP: p.jumpP, hat: currentHat,
+  };
+  drawCat(ctx, opts);
+  drawParticles(ctx, opts);
+  if (brain.emote && brain.emote.kind) {
+    const age = brain.t - brain.emote.t0;
+    if (age < 2) {
+      const E = emoteAnchor(S.breed);
+      drawEmote(ctx, {
+        kind: brain.emote.kind, t: age,
+        x: E.x, y: E.y, scale: S.size,
+      });
+    } else brain.emote = null;
+  }
+  ctx.restore();
+  // companion cat
+  if (companion) {
+    const cp = companion.brain.pose;
+    ctx.save();
+    ctx.translate(cp.x - O.x, cp.y - O.y);
+    drawCat(ctx, { t: cp.t, state: cp.state, dir: cp.dir, breed: companion.breed, scale: S.size * 0.62, alpha: S.opacity, jumpP: cp.jumpP, hat: companion.hat });
+    drawParticles(ctx, { t: cp.t, state: cp.state, breed: companion.breed, scale: S.size * 0.62 });
+    ctx.restore();
+  }
+  // dance party ghosts
+  if (partyCats) {
+    for (const pc of partyCats) {
+      const pp = pc.brain.pose;
+      ctx.save();
+      ctx.translate(pp.x - O.x, pp.y - O.y);
+      drawCat(ctx, { t: pp.t, state: pp.state, dir: pp.dir, breed: pc.breed, scale: S.size * 0.7, alpha: 0.8 * S.opacity, jumpP: pp.jumpP });
+      ctx.restore();
+    }
+  }
+  // v3.5 toys
+  if (butterfly) {
+    ctx.save();
+    ctx.translate(butterfly.x - O.x, butterfly.y - O.y);
+    drawButterfly(ctx, { t: p.t, scale: S.size, hue: butterfly.hue, s: 1.15 });
+    ctx.restore();
+  }
+  if (laser) {
+    ctx.save();
+    ctx.translate(laser.x - O.x, laser.y - O.y);
+    drawLaser(ctx, { t: p.t, scale: S.size });
+    ctx.restore();
+  }
+  // photo flash
+  const nowS2 = performance.now() / 1000;
+  if (nowS2 < flashUntil) {
+    ctx.fillStyle = `rgba(255,255,255,${(flashUntil - nowS2) / 0.28 * 0.85})`;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+  // pomodoro badge
+  if (pomoState && pomoState.mode && pomoState.mode !== 'idle') {
+    const mm = Math.max(0, pomoState.remaining);
+    const label = (pomoState.mode === 'focus' ? '🍅 ' : '☕ ') + fmtRemaining(mm);
+    badge.textContent = label;
+    badge.style.left = Math.max(10, p.x - 30 - O.x) + 'px';
+    badge.style.top = Math.max(10, p.y - 150 * S.size - 46 - O.y) + 'px';
+    badge.style.display = 'block';
+  } else badge.style.display = 'none';
 }
 
 function fmtRemaining(ms) {
@@ -862,6 +937,8 @@ window.__photoMode = () => photoMode();
 window.__frozen = () => frozen;
 window.__volumeMul = () => volumeMul;
 window.__settings = () => S;
+window.__catVisible = () => catVisible;
+window.__lastPlayInfo = () => window.__lastPlay || null;
 // e2e: dispatch a main-process event through the real handlers
 window.__testEvent = (channel, data) => {
   const map = {

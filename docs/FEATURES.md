@@ -1,7 +1,27 @@
-# MeowCat v3.6 — Feature Reference
+# MeowCat v3.7 — Feature Reference
 
 A procedural desktop pet for Windows 11. Everything about the cat is drawn by code
 (see [RENDERING.md](RENDERING.md)); this page lists the product-level features.
+
+## 0. What v3.7 changed (the "stop being rude to your laptop" release)
+
+* **Click = meow.** A quick tap on the cat plays a real recorded meow + a heart.
+  Holding the click stays the pet (purr + affection + coins).
+* **The jumping/flushing bug is dead.** The overlay window used to flap up/down on
+  every hop, bop and zoomies bounce (a zero-width vertical slide band), and repainted
+  at the new origin before the OS had actually moved the window. Both halves are fixed:
+  an 80px slack band + fully synchronized async slides with an immediate repaint on landing.
+* **The friend cat shows up properly.** The companion kitten used to roam 420px from the
+  big cat — outside the ~480px window that follows it (invisible kitten). It is now leashed
+  to ~160px and the window slides to the pair's midpoint, so both are always on screen.
+* **CPU diet, measured -50% at idle.** Paints freeze while the cat is hidden (hotkey /
+  call / fullscreen), the region window is moved with setPosition instead of a full
+  setBounds cycle, redundant always-on-top pokes are skipped, footstep sounds reuse a
+  small audio pool instead of allocating per step, and on Windows ONE persistent
+  PowerShell streams CPU/RAM/battery samples (self-healing watchdog, falls back to the
+  legacy one-shot after 4 failures) instead of a fresh spawn every 5 seconds.
+* **RAM trim:** the warm Settings window self-destroys after 2.5 idle minutes (was 5),
+  spell-check dictionaries are off, renderer heap stays capped at 160MB.
 
 ## 1. The cat
 

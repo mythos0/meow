@@ -53,6 +53,17 @@ function clampNum(v, lo, hi) {
 // (hysteresis: while inside, the window never moves). When out, re-center
 // on the cat (clamped to the workArea) — one cheap native move, then quiet.
 // Returns the new origin, or null when no move is needed.
+//
+// v3.7 TOPSLACK: the region height already reserves aboveFeet() of headroom
+// above the GROUND feet (the 70px in-place hop is part of that reserve), but
+// the old check compared the LIVE feet against the full reserve — at ground
+// level the band was exactly zero pixels wide, so every hop (70px), music-bop
+// bob (4px) or zoomies bounce (9px) re-triggered a slide and the overlay
+// window flapped up/down on loop (the "cat jumping/flushing" bug report).
+// The slack lets small airborne arcs ride inside the reserve; real climbs
+// (platform jumps, far above the slack) still slide.
+const TOPSLACK = 80;
+
 export function slideIfNeeded(origin, region, catX, feetY, workArea, scale) {
   const wa = workArea || { x: 0, y: 0, width: 1600, height: 1000 };
   const r = region || { w: 480, h: 434 };
@@ -63,7 +74,7 @@ export function slideIfNeeded(origin, region, catX, feetY, workArea, scale) {
 
   const outLeft = catX < o.x + mX;
   const outRight = catX > o.x + r.w - mX;
-  const outTop = feetY - top < o.y;             // headroom breached
+  const outTop = feetY - (top - TOPSLACK) < o.y;   // headroom breached (with slack)
   const outBottom = feetY + bottom > o.y + r.h;
 
   if (!outLeft && !outRight && !outTop && !outBottom) return null;
@@ -73,4 +84,13 @@ export function slideIfNeeded(origin, region, catX, feetY, workArea, scale) {
   if (outTop || outBottom) ny = clampNum(feetY + bottom - r.h, wa.y, wa.y + wa.height - r.h);
   if (nx === o.x && ny === o.y) return null;
   return { x: Math.round(nx), y: Math.round(ny) };
+}
+
+// v3.7: the companion kitten must stay inside the region window that follows
+// the MAIN cat. The renderer leashes the kitten to within `companionLeash`
+// pixels of the main cat and slides using the pair's midpoint — with a leash
+// this size both cats always fit inside the region at any scale.
+export function companionLeash(regionW) {
+  const w = Number.isFinite(regionW) && regionW > 0 ? regionW : 480;
+  return Math.max(110, Math.round(w / 2 - 80));
 }

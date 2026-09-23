@@ -9,7 +9,10 @@
 
 export function createFastWindows({ factory } = {}) {
   const pool = new Map();
-  const IDLE_MS = Number(process.env.MEOW_WARM_IDLE_MS) || 5 * 60 * 1000;
+  // v3.7: 2.5 min instead of 5 — a hidden warm settings renderer is ~45MB +
+  // a process; 2.5 min still makes a second open feel instant while halving
+  // the idle footprint. MEOW_WARM_IDLE_MS still overrides (tests set 3000).
+  const IDLE_MS = Number(process.env.MEOW_WARM_IDLE_MS) || 2.5 * 60 * 1000;
 
   function armIdleDestroy(w, name) {
     clearTimeout(w.__idleTimer);

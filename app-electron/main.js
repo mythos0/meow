@@ -78,7 +78,7 @@ function ensureScanner() {
   if (!scanner) {
     scanner = createWindowScanner({
       spawnFn: spawn,
-      intervalMs: 3200,
+      intervalMs: 4500,   // v3.7: was 3200 — each scan is a PowerShell spawn; 4.5s is imperceptible
       onResult: onWindowScan,
     });
   }
@@ -118,15 +118,19 @@ function createCatWindow() {
       contextIsolation: true, nodeIntegration: false,
       backgroundThrottling: false,
       v8CacheOptions: 'none',
+      spellcheck: false,   // v3.7: the overlay has no text inputs — drop the dictionary
     },
   });
   catWin.setMenuBarVisibility(false);
   catWin.loadFile(path.join(__dirname, 'windows', 'cat.html'));
   catWin.once('ready-to-show', () => {
     if (!hiddenByUser && !hiddenByCall && !hiddenByFullscreen) catWin.show();
+    // v3.7: tell the renderer its true visibility so its render loop starts in
+    // sync with reality (it boots assuming "visible").
+    sendToCat('cat-visible', !hiddenByUser && !hiddenByCall && !hiddenByFullscreen);
   });
 
-  enforcer = createTopmostEnforcer(catWin, { level: 'screen-saver', intervalMs: 2000 });
+  enforcer = createTopmostEnforcer(catWin, { level: 'screen-saver', intervalMs: 3000 });
   enforcer.start();
 
   try { catWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch {}
@@ -197,7 +201,7 @@ function makeWindow(name) {
     resizable: spec.resizable ?? false, minimizable: true, autoHideMenuBar: true,
     minWidth: spec.minW, minHeight: spec.minH,
     title: spec.title, backgroundColor: '#1c1b22', icon: ICON_PATH,
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, spellcheck: false },
   });
   w.loadFile(path.join(__dirname, 'windows', name + '.html'));
   return w;
@@ -291,6 +295,9 @@ function updateCatVisibility() {
   const show = !hiddenByUser && !hiddenByCall && !hiddenByFullscreen;
   if (catWin && !catWin.isDestroyed()) {
     try { show ? catWin.show() : catWin.hide(); } catch { /* gone */ }
+    // v3.7: the renderer pauses its rAF loop while hidden — a transparent
+    // overlay painting 60fps for nobody was pure CPU burn.
+    sendToCat('cat-visible', show);
   }
   if (tray) {
     const why = hiddenByUser ? 'hidden by hotkey' : hiddenByCall ? 'hidden — call detected' : hiddenByFullscreen ? 'hidden — fullscreen app' : 'your desktop cat';
@@ -357,7 +364,7 @@ function onProcessList(raw) {
 const sysMon = createSysMonitor({
   spawnFn: spawn,
   readFn: p => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } },
-  intervalMs: 5000,
+  intervalMs: process.platform === 'win32' ? 8000 : 5000,   // v3.7: Windows one-shots are expensive
   onSample: onSystemSample,
   onProcesses: onProcessList,
 });
@@ -673,9 +680,20 @@ ipcMain.handle('region:move', (_e, rect) => {
   const h = Math.max(280, Math.min(num(rect?.h, region.h), wa.height));
   const x = Math.max(wa.x, Math.min(wa.x + wa.width - w, num(rect?.x, regionOrigin.x)));
   const y = Math.max(wa.y, Math.min(wa.y + wa.height - h, num(rect?.y, regionOrigin.y)));
+  const nx = Math.round(x), ny = Math.round(y);
+  const sizeChanged = w !== region.w || h !== region.h;
+  const posChanged = nx !== regionOrigin.x || ny !== regionOrigin.y;
   region = { w, h };
-  regionOrigin = { x: Math.round(x), y: Math.round(y) };
-  try { catWin.setBounds({ x: regionOrigin.x, y: regionOrigin.y, width: w, height: h }); } catch {}
+  regionOrigin = { x: nx, y: ny };
+  // v3.7: move-only updates use setPosition (a same-size setBounds can force
+  // the transparent surface through a full native resize cycle = flicker),
+  // and identical rects are skipped entirely.
+  if (posChanged || sizeChanged) {
+    try {
+      if (sizeChanged) catWin.setBounds({ x: nx, y: ny, width: w, height: h });
+      else catWin.setPosition(nx, ny, false);
+    } catch {}
+  }
   return { ...regionOrigin, ...region };
 });
 

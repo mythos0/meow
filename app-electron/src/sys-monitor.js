@@ -77,7 +77,37 @@ if ($bat) {
 "{\\"cpu\\":$([int]$cpu),\\"ram\\":$([int]$ram),\\"battery\\":$(if ($null -ne $bl) {[int]$bl} else {'null'}),\\"charging\\":$(if ($null -ne $bc) {$bc.ToString().ToLower()} else {'null'})}"
 `.trim();
 
+// v3.7: the STREAMING variant — one persistent PowerShell that emits a JSON
+// line every N seconds. A fresh one-shot per sample cost a full PowerShell
+// startup (~0.3 CPU-s) every 5s, which users felt as constant CPU burn.
+export function winStatsStreamScript(seconds) {
+  const s = Math.max(1, Math.round(seconds || 5));
+  return `
+$ErrorActionPreference = 'SilentlyContinue'
+$interval = ${s}
+while ($true) {
+  $cpu = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
+  $os = Get-CimInstance Win32_OperatingSystem
+  $ram = [math]::Round(100 * (1 - $os.FreePhysicalMemory / $os.TotalVisibleMemorySize))
+  $bat = Get-CimInstance Win32_Battery | Select-Object -First 1
+  $bl = $null; $bc = $null
+  if ($bat) {
+    $bl = [int]$bat.EstimatedChargeRemaining
+    $bc = ($bat.BatteryStatus -ne 1)
+  }
+  "{\\"cpu\\":$([int]$cpu),\\"ram\\":$([int]$ram),\\"battery\\":$(if ($null -ne $bl) {[int]$bl} else {'null'}),\\"charging\\":$(if ($null -ne $bc) {$bc.ToString().ToLower()} else {'null'})}"
+  Start-Sleep -Seconds $interval
+}`.trim();
+}
+
 // ----------------------------- poller -------------------------------------
+// v3.7 architecture:
+//   win32: ONE persistent PowerShell streams CPU/RAM/battery JSON lines
+//          (startStream); a watchdog restarts it with backoff if it dies or
+//          goes quiet, and after 4 failures we fall back to the legacy
+//          one-shot timer. The process list stays a one-shot `tasklist` on
+//          its own slower timer (procEvery samples).
+//   linux: unchanged — /proc reads in-process (no subprocess at all).
 export function createSysMonitor(opts = {}) {
   const spawnFn = opts.spawnFn || null;             // child_process.spawn
   const readFn = opts.readFn || (() => null);       // fs.readFileSync
@@ -86,7 +116,79 @@ export function createSysMonitor(opts = {}) {
   const procEvery = opts.procEvery ?? 2;            // process list every Nth sample
   const onSample = opts.onSample || (() => {});
   const onProcesses = opts.onProcesses || (() => {});
-  let timer = null, tickN = 0, prevStat = null, busy = false;
+  const wantStream = opts.streamWin !== false;      // v3.7 default: streaming on win32
+  const MAX_STREAM_FAILS = 4;
+
+  let running = false;
+  let timer = null, procTimer = null, tickN = 0, prevStat = null, busy = false;
+  // streaming sampler state
+  let streamProc = null, streamBuf = '', streamFails = 0;
+  let streamRestart = null, streamWatchdog = null;
+  const useStream = () => wantStream && platform === 'win32' && !!spawnFn && streamFails < MAX_STREAM_FAILS;
+
+  function handleSample(s) {
+    if (s && (s.cpu != null || s.ram != null || s.battery != null)) onSample(s);
+  }
+
+  function clearStreamTimers() {
+    if (streamRestart) { clearTimeout(streamRestart); streamRestart = null; }
+    if (streamWatchdog) { clearTimeout(streamWatchdog); streamWatchdog = null; }
+  }
+  function killStream() {
+    if (streamProc) { try { streamProc.kill(); } catch {} streamProc = null; }
+  }
+  function armWatchdog() {
+    if (streamWatchdog) clearTimeout(streamWatchdog);
+    streamWatchdog = setTimeout(() => {
+      // no line for 2.5 intervals — PowerShell hung: kill and respawn
+      if (running && streamProc) { streamFails++; killStream(); scheduleStreamRestart(); }
+    }, intervalMs * 2.5 + 1500);
+    if (streamWatchdog.unref) streamWatchdog.unref();
+  }
+  function scheduleStreamRestart() {
+    if (!running) return;
+    if (streamFails >= MAX_STREAM_FAILS) { fallbackToTimer(); return; }
+    streamRestart = setTimeout(() => {
+      streamRestart = null;
+      if (running && useStream()) startStream();
+    }, Math.min(30000, 2000 * Math.max(1, streamFails)));
+    if (streamRestart.unref) streamRestart.unref();
+  }
+  function startStream() {
+    let p = null;
+    try {
+      p = spawnFn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', winStatsStreamScript(intervalMs / 1000)],
+        { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch { scheduleStreamRestart(); return; }
+    streamProc = p;
+    streamBuf = '';
+    p.stdout.on('data', d => {
+      streamBuf += d;
+      let idx;
+      while ((idx = streamBuf.indexOf('\n')) >= 0) {
+        const line = streamBuf.slice(0, idx).trim();
+        streamBuf = streamBuf.slice(idx + 1);
+        if (!line) continue;
+        streamFails = 0;                       // healthy
+        handleSample(parseWinStats(line));
+      }
+    });
+    p.on('error', () => { streamFails++; if (streamProc === p) streamProc = null; scheduleStreamRestart(); });
+    p.on('close', () => {
+      if (streamProc === p) {
+        streamProc = null;
+        if (running) streamFails++;   // v3.7: a stream that died mid-run is a failure
+        scheduleStreamRestart();
+      }
+    });
+    armWatchdog();
+  }
+  function fallbackToTimer() {
+    if (timer) return;
+    sample();
+    timer = setInterval(sample, intervalMs);
+    if (timer.unref) timer.unref();
+  }
 
   async function sample() {
     if (busy) return;
@@ -117,34 +219,56 @@ export function createSysMonitor(opts = {}) {
         });
         ({ cpu, ram, battery, charging } = parseWinStats(out));
       }
-      if (cpu != null || ram != null || battery != null) onSample({ cpu, ram, battery, charging });
-
-      // process snapshot (call-app / editor detection)
-      if (tickN % procEvery === 0 && spawnFn) {
-        const isWin = platform === 'win32';
-        const names = await new Promise(resolve => {
-          let p, out = '';
-          try {
-            p = spawnFn(isWin ? 'tasklist' : 'ps',
-              isWin ? ['/fo', 'csv', '/nh'] : ['-eo', 'comm='],
-              { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-          } catch { resolve(''); return; }
-          const kill = setTimeout(() => { try { p.kill(); } catch {} }, 8000);
-          p.stdout.on('data', d => { out += d; });
-          p.on('error', () => { clearTimeout(kill); resolve(''); });
-          p.on('close', () => { clearTimeout(kill); resolve(out); });
-        });
-        if (names) onProcesses(names);
-      }
+      handleSample({ cpu, ram, battery, charging });
       tickN++;
     } catch { /* never kill the app over telemetry */ }
     finally { busy = false; }
   }
 
+  async function sampleProcs() {
+    if (!spawnFn) return;
+    const isWin = platform === 'win32';
+    const names = await new Promise(resolve => {
+      let p, out = '';
+      try {
+        p = spawnFn(isWin ? 'tasklist' : 'ps',
+          isWin ? ['/fo', 'csv', '/nh'] : ['-eo', 'comm='],
+          { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      } catch { resolve(''); return; }
+      const kill = setTimeout(() => { try { p.kill(); } catch {} }, 8000);
+      p.stdout.on('data', d => { out += d; });
+      p.on('error', () => { clearTimeout(kill); resolve(''); });
+      p.on('close', () => { clearTimeout(kill); resolve(out); });
+    });
+    if (names) onProcesses(names);
+  }
+
   return {
-    start() { if (timer) return; sample(); timer = setInterval(sample, intervalMs); if (timer.unref) timer.unref(); },
-    stop() { if (timer) { clearInterval(timer); timer = null; } },
-    get running() { return !!timer; },
+    start() {
+      if (running) return;
+      running = true;
+      if (useStream()) { startStream(); }
+      if (!streamProc && !timer) fallbackToTimer();      // linux, or stream failed to spawn
+      if (spawnFn) {
+        sampleProcs();
+        if (!procTimer) {
+          procTimer = setInterval(sampleProcs, intervalMs * procEvery);
+          if (procTimer.unref) procTimer.unref();
+        }
+      }
+    },
+    stop() {
+      running = false;
+      if (timer) { clearInterval(timer); timer = null; }
+      if (procTimer) { clearInterval(procTimer); procTimer = null; }
+      clearStreamTimers();
+      killStream();
+    },
+    get running() { return running || !!timer; },
     sampleNow: sample,
+    // v3.7 test hooks
+    __streamAlive: () => !!streamProc,
+    __streamFails: () => streamFails,
+    __kickStream: () => { if (streamProc) { try { streamProc.kill(); } catch {} } },
   };
 }

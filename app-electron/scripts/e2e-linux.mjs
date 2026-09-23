@@ -332,17 +332,41 @@ try {
   });
   ok('live: region window slides to follow the walking cat', slide.ok, JSON.stringify(slide));
 
-  // ------------------------------------------------ 9c. tap the cat -> love emote anchored above it (v3.2 fix, live)
+  // ------------------------------------------------ 9c. tap the cat -> real meow + heart (v3.7); HOLD = pet (v3.2 fix)
   await cat.waitForTimeout(600);
   const emote = await cat.evaluate(() => window.__catLocal());
-  await cat.mouse.click(emote.x, emote.y - 40);   // quick tap = pet
-  await cat.waitForTimeout(450);                  // pendingPet delay 280ms
-  const emoteState = await cat.evaluate(() => {
+  // v3.7: a quick tap now plays a REAL MEOW and shows a heart. Pin a long
+  // idle first so no footstep sound can overwrite __lastPlay mid-assert.
+  await cat.evaluate(() => { const b = window.__brain(); b._enter('idle', 30); window.__lastPlay = null; });
+  await cat.waitForTimeout(150);
+  await cat.mouse.click(emote.x, emote.y - 40);   // quick tap = meow!
+  await cat.waitForTimeout(120);
+  const tapState = await cat.evaluate(() => {
     const b = window.__brain && window.__brain();
-    return { kind: b?.emote?.kind || null, state: b?.state };
+    return {
+      kind: b?.emote?.kind || null,
+      lastPlay: window.__lastPlayInfo ? window.__lastPlayInfo() : null,
+    };
   });
-  ok('live: tapping the cat triggers the love emote on the pet',
-    emoteState.kind === 'love', JSON.stringify(emoteState));
+  ok('v3.7: a quick tap on the cat plays a real meow + heart emote',
+    !!tapState.lastPlay && /^meow_real/.test(tapState.lastPlay.name) && tapState.kind === 'heart',
+    JSON.stringify(tapState));
+  await cat.waitForTimeout(500);
+  await cat.mouse.move(emote.x, emote.y - 40);
+  // hold > 280ms = the pet. The pet contract: happy state + pets stat +1
+  // (the emote itself is love OR heart — petAffection has a random 25% heart)
+  const pets0 = await cat.evaluate(async () => (await window.meow.getSettings()).stats.pets || 0);
+  await cat.mouse.down();
+  await cat.waitForTimeout(450);                   // pendingPet delay 280ms
+  await cat.mouse.up();
+  const emoteState = await cat.evaluate(async () => {
+    const b = window.__brain && window.__brain();
+    const s = await window.meow.getSettings();
+    return { state: b?.state, kind: b?.emote?.kind || null, pets: s.stats.pets || 0 };
+  });
+  ok('live: holding the cat pets it (happy + pets stat +1)',
+    emoteState.state === 'happy' && emoteState.pets === pets0 + 1 &&
+      ['love', 'heart'].includes(emoteState.kind), JSON.stringify({ pets0, ...emoteState }));
   await cat.screenshot({ path: path.join(OUT, 'cat_live_emote.png') });
 
   // ------------------------------------------------ 9d. v3.5 funny pack: laser pointer toy (live)
@@ -408,7 +432,7 @@ try {
   ok('cat window <title> is MeowCat', catTitle === 'MeowCat', JSON.stringify(catTitle));
   const info = await cat.evaluate(() => (window.meow.appInfo ? window.meow.appInfo() : null));
   ok('AppUserModelID is com.mythos0.meowcat', !!info && info.aumid === 'com.mythos0.meowcat', JSON.stringify(info));
-  ok('app version reported as 3.6.0', !!info && info.version === '3.6.0', info && info.version);
+  ok('app version matches package.json', !!info && info.version === '3.7.0', info && info.version);
 
   // ------------------------------------------------ 10. v3.4: warm settings window self-destroys when idle
   await cat.evaluate(() => window.meow.openWindow('settings'));

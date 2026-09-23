@@ -38,17 +38,19 @@ MeowCat.exe        ← in Task Manager, always. Never "electron".
 
 ## Install
 
-1. Grab `MeowCat-3.6.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
+1. Grab `MeowCat-3.7.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
 2. Run it. A cat appears. That's the whole setup.
 3. Right-click the cat → **Settings…**, or double-click it. Tray icon works too.
+4. **Click the cat** → it meows. For real. That's it, that's the feature.
 
 | | |
 |---|---|
 | **Stack** | Electron 33 · HTML5 Canvas 2D · zero native modules required for the core |
 | **Art** | 100% procedural — palettes + body skeletons + IK pose math, no PNGs |
 | **Sounds** | Real recorded cats (+2 tiny code-synthesized SFX, because the author doesn't own a trampoline) |
-| **Tests** | 270 unit + 89 visual + 86 E2E (real app under Xvfb, every feature exercised live) |
-| **RAM** | ~285 MB PSS, 3× MeowCat.exe processes at rest (main + renderer + helper, all named MeowCat) |
+| **Tests** | 303 unit + 89 visual + 126 E2E (real app under Xvfb, every feature exercised live) |
+| **RAM** | ~277 MB PSS, 3× MeowCat.exe processes at rest (main + renderer + helper, all named MeowCat) |
+| **CPU** | v3.7 halved idle CPU: no slide-flapping, paints freeze while hidden, one PowerShell stream instead of 12/min |
 | **Docs** | [RENDERING](docs/RENDERING.md) · [FEATURES](docs/FEATURES.md) · [BUILD](docs/BUILD.md) · [TESTING](docs/TESTING.md) |
 
 ## Community skins (no recompile!)
@@ -74,7 +76,7 @@ It appears in the Cat Store like any breed. Ship your cat. Open a PR. Famous.
 cd app-electron
 npm install
 npm start        # run the cat
-npm test         # 270 unit + 89 visual checks
+npm test         # 303 unit + 89 visual checks
 npm run dist     # portable Windows exe (MeowCat.exe, honestly named)
 ```
 
@@ -85,6 +87,12 @@ machine (unit-tested), the renderer is a pure draw function (pixel-tested in hea
 and the full app boots under Xvfb where an E2E harness pokes *every feature* — it hogs the CPU
 until the cat panics, feeds it a fake dead battery, makes it stalk a cursor, imports a skin,
 and checks the no-walk zones actually stop the cat. All green, every release.
+
+v3.7's torture pass earned its scars: the hop that used to flap the overlay window on loop
+(zero-width slide band — the "cat is jumping/flushing" bug), a kitten that wandered outside
+the visible window and astral-projected, a render loop that kept painting at 60 FPS while
+hidden, and a Windows sampler that spawned a fresh PowerShell every 5 seconds like it was
+paying per spawn. All measured, all fixed, all regression-tested.
 
 ## License
 
