@@ -4,18 +4,19 @@
 
 | layer | count | runner | what it proves |
 |---|---|---|---|
-| unit | 303 | `node --test` (no browser) | brain gaits & physics, platform hopping, ground-stroll-only (no roaming), emote anchors, window JSON parsing, scanner lifecycle, warm-window pool, economy (paid + unlimited promo), reminder scheduling, topmost enforcer, breed/body integrity (20 breeds / 8 bodies), **v3.5 funny pack: sneeze/hairball/zoomies states, post-meal zoomies gate, full laser-chase cycle incl. timeout, butterfly notice rules, panda hairball exclusion** |
+| unit | 258 | `node --test` (no browser) | brain gaits & physics, platform hopping, ground-stroll-only (no roaming), emote anchors, window JSON parsing, scanner lifecycle, warm-window pool, economy (paid + unlimited promo), reminder scheduling, topmost enforcer, breed/body integrity (20 breeds / 8 bodies), **v3.5 funny pack: sneeze/hairball/zoomies states, post-meal zoomies gate, full laser-chase cycle incl. timeout, butterfly notice rules, panda hairball exclusion** |
 | visual | 89 | Playwright + `test/harness.html` | every state/breed/emote paints, feet stay planted, animation is alive (frames differ), breeds are pixel-distinct, mirror flip is symmetric, panda has black+white anatomy, emote life-cycle, **v3.6: 7 new states, 4 new emotes, seasonal hats, custom-skin palettes** |
 | E2E | 129 | real Electron under Xvfb + CDP | boot → paint → brain advance → IPC actions → coins persist → reminders fire/consume → settings warm-open <300 ms → close keeps pool warm → 20 store cards → premium UI → double-click popup → about page (version + dev link) → free panda unlock → reminders UI → **live window-top jump** → region follow → tap→meow+heart, hold→pet → **v3.5: laser toy chase+pounce+catch (+3 coins), ambient butterfly, MeowCat window title, AppUserModelID, version 3.7.0** → idle self-destroy |
 | E2E v3.6 | 43 | real Electron under Xvfb + CDP (`e2e-v36.mjs`) | **every v3.6 feature live**: 22 toggles round-trip → real CPU-hog stress pulse → music bop sustain/stop → typing burst→pounce (real meter) → cursor stalk+pounce catch (+affection) → cursor-move abort → new-window sniff walk → editor loaf jump → build green/red dance & mope → battery curl/clear → companion nuzzle (+stat) → dance-party ghosts → photo PNG saved to Pictures → affection meter + 2 achievements → pomodoro IPC → no-walk zone respected live → call ducking → community skin import + store card + pumpkin hat → seasonal toggle → time-bias wiring → Win11 settings UI (10 nav pages, 24 switches, 8 achievement cards) |
 | E2E robust | 19 | real Electron under Xvfb + CDP (`e2e-robust.mjs`) | adversarial: real zoom proc hides cat → toggle-off unhides instantly → duck lifts on exit → reminder fires once through the 1s scheduler → hostile setSettings can't poison the store → poisoned region rect rejected → bad photo data rejected → perk activation mid-run → skin-import dedupe → status-file verdict gating → torture pass ends with a healthy renderer |
 | E2E v3.7 | 10 | real Electron under Xvfb + CDP (`e2e-v37.mjs`) | **hop does not flap the region** (jumping-bug fix) → cat never drawn outside the canvas during slides → slides still happen while strolling → companion kitten leashed back and kept visible → **quick tap plays a real meow + heart** → real call app hides cat → **paints freeze while hidden** (CPU win) → `__catVisible` flag → cat returns and painting resumes |
+| E2E v3.9 | 6 | real Electron under Xvfb + CDP (`e2e-v39.mjs`) | **THE chase camera: per-frame origin deltas never spike** (p99 ≤ 16px measured across stroll+zoomies+jump; the old slide moved up to 400px in ONE frame) → cat stays fully visible during a max-legal 400px platform jump → **tracker ride: a dragged border carries the cat at a smooth capped speed** (measured ≤ 800px/s) → tracker vanish: one missed poll tolerated, two = animated fall → `platform-track` IPC retargets on landing/leaving |
 
 Run:
 
 ```bash
 cd app-electron
-npm test                        # unit + visual (359 checks)
+npm test                        # unit + visual (347 checks)
 node scripts/e2e-linux.mjs      # real app E2E (needs Xvfb on Linux)
 ```
 

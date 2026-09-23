@@ -1,4 +1,4 @@
-# MeowCat v3.7 — Feature Reference
+# MeowCat v3.9 — Feature Reference
 
 A procedural desktop pet for Windows 11. Everything about the cat is drawn by code
 (see [RENDERING.md](RENDERING.md)); this page lists the product-level features.
@@ -193,3 +193,46 @@ Cat Store as a first-class breed.
 zones** (work-area-relative rects the cat's body never enters, and whose window tops it never
 lands on), **auto-hide in fullscreen** (window-covering detection from the scanner), plus the
 existing reminders, auto-start, topmost enforcement and warm-pool settings.
+
+## 12. v3.8 — one cat, one voice; walk & jump on real window borders
+
+* **One meow voice.** Spam-clicking the cat can never stack meows: all three meow variants
+  share a single exclusive audio element, so exactly one meow is audible no matter how many
+  clicks land.
+* **Walk & jump on the top border of normal resized windows.** Maximized full-screen windows
+  are never offered as platforms (fresh work-area filter per scan) — restored/resized windows
+  are. The cat strolls, hops along and between borders (sideways hops between window tops
+  included), and rides small border nudges.
+* **Re-bind by geometry.** Windows that move/resize between 4.5s scans no longer teleport the
+  standing cat to the ground: the same physical window is matched by top-border overlap, far
+  drags get a visible catch-up hop, vanished windows get an animated fall with a forward arc.
+* **Reminders deliver their actual message** — in the cat's speech bubble AND in the Windows
+  toast (the old generic "your cat has a message" body is gone).
+* **Bubble/badge clamping** keeps overlays fully inside the visible region (no more half-read
+  reminders at the edge), and growl_real/hiss_real finally load.
+
+## 13. v3.9 — the chase camera & the platform tracker (the jump is dead)
+
+* **The chase camera.** The overlay window and the canvas origin live in two processes joined
+  by async IPC — a one-shot slide of up to 400px could never flip atomically with the canvas,
+  so for one vsync the scene visibly leapt (the "rendering jump" reported three times). Now
+  the origin never makes a big move: it walks toward the same re-centering target at a capped
+  900 px/s (≤15px per frame). A stale frame, when one even lands, is a ≤15px shimmer —
+  imperceptible. Idle/sleep states never move the window at all.
+* **The platform tracker.** One persistent PowerShell (win32, spawned lazily on the first
+  platform landing) polls the hwnd the cat stands on via user32 `GetWindowRect` at ~3 Hz —
+  native P/Invoke, ~0 % CPU, no per-sample spawns, stdin-retargeted, parent-PID heartbeat so
+  it can never outlive the app. The cat is *carried* by its window: dragged/resized borders
+  are followed at a smoothed ≤700 px/s (vertical) / 900 px/s (horizontal) — no floating in
+  the air for up to one scan interval and then snapping. While the tracker is alive it is
+  authoritative: a flaky scan (cloaked window, title blip) can no longer drop the cat off a
+  healthy window; two consecutive "window gone" reports (closed/minimized) still trigger the
+  animated fall. Mid-air border moves correct the in-flight landing target.
+* **Smoothness invariants (e2e-measured).** Per-frame region-origin delta p99 ≤ 16px across
+  stroll + zoomies + platform jumps; the cat stays fully visible during a max-legal 400px
+  jump; a dragged border carries the cat at a measured ≤800px/s; the companion kitten can
+  never leave the visible canvas (it dashes back on-stage at a capped rate instead of
+  vanishing during a violent reel).
+* **More optimization.** Sleep/curl states animate at ~7.5fps (a sleeping cat only breathes);
+  idle CPU unchanged (13 % of a core on the 2-core CI sandbox), sleep −25 % (5.7 %), RAM down
+  to ~165 MB PSS; all 60 render states pixel-identical to v3.8.

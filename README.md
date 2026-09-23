@@ -38,7 +38,7 @@ MeowCat.exe        ← in Task Manager, always. Never "electron".
 
 ## Install
 
-1. Grab `MeowCat-3.8.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
+1. Grab `MeowCat-3.9.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
 2. Run it. A cat appears. That's the whole setup.
 3. Right-click the cat → **Settings…**, or double-click it. Tray icon works too.
 4. **Click the cat** → it meows. For real. Spam-click it → still exactly one cat, one voice, zero overlap.
@@ -48,9 +48,9 @@ MeowCat.exe        ← in Task Manager, always. Never "electron".
 | **Stack** | Electron 33 · HTML5 Canvas 2D · zero native modules required for the core |
 | **Art** | 100% procedural — palettes + body skeletons + IK pose math, no PNGs |
 | **Sounds** | Real recorded cats (+2 tiny code-synthesized SFX, because the author doesn't own a trampoline) |
-| **Tests** | 306 unit + 89 visual + 127 E2E (real app under Xvfb, every feature exercised live) |
-| **RAM** | ~277 MB PSS, 3× MeowCat.exe processes at rest (main + renderer + helper, all named MeowCat) |
-| **CPU** | v3.7 halved idle CPU: no slide-flapping, paints freeze while hidden, one PowerShell stream instead of 12/min |
+| **Tests** | 347 unit + 89 visual + 133 E2E (real app under Xvfb, every feature exercised live) |
+| **RAM** | ~165 MB PSS, 3× MeowCat.exe processes at rest (main + renderer + helper, all named MeowCat) |
+| **CPU** | idle 13% of a core, sleep ~5.7% (7.5fps breathing), paints freeze while hidden, one PowerShell stream instead of 12/min |
 | **Docs** | [RENDERING](docs/RENDERING.md) · [FEATURES](docs/FEATURES.md) · [BUILD](docs/BUILD.md) · [TESTING](docs/TESTING.md) |
 
 ## Community skins (no recompile!)
@@ -103,6 +103,21 @@ snapped back (now a smooth dash), the reminder toast said "your cat has a messag
 the actual message, and long speech bubbles got clipped at the region edge. Plus the headline
 act: the cat properly walks AND jumps along the top border of resized windows — and no longer
 treats a maximized full-screen window as a sidewalk.
+
+v3.9 killed the jump at its structural root. The overlay window and the canvas coordinate
+system live in two processes joined by async IPC, so a one-shot slide of up to 400px could
+never flip together with the canvas origin — for one vsync the window showed stale content
+and the whole scene visibly leapt. Three timing fixes failed to kill it because it was not a
+timing bug. So now the window never makes a big move: the **chase camera** walks the origin
+toward the re-centering target at a capped 900px/s (≤15px per frame — a stale frame, when it
+even happens, is an invisible shimmer instead of a teleport). The **platform tracker** is the
+other half: one persistent PowerShell polls the hwnd the cat stands on with user32
+GetWindowRect (~0% CPU) and the cat is *carried* by its window at a smoothed ≤700px/s while
+you drag or resize it — no more floating in the air for up to 4.5s and then snapping. A flaky
+scan can no longer drop the cat off a healthy window (the tracker is authoritative while
+alive), and the sleeping cat now animates at ~7.5fps because nobody needs 60fps of
+breathing. Measured: identical idle CPU, sleep −25%, RAM down to ~165MB PSS, and all 60
+render states pixel-identical.
 
 ## License
 

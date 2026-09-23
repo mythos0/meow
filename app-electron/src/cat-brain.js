@@ -112,6 +112,9 @@ export class CatBrain {
     this._jump = null;          // { x0, x1, y0, y1, pl } during a directed jump
     this._platformCd = 0;       // seconds until next platform scan
     this.platformT = 0;         // time spent on current platform
+    // v3.9 live platform tracking (see updateTrackedPlatform)
+    this._trackMiss = 0;        // consecutive "window gone" reports from the tracker
+    this._trackAlive = false;   // tracker currently confirming our platform
 
     // contextual emote: { kind, t0 }
     this.emote = null;
@@ -390,29 +393,41 @@ export class CatBrain {
 
     const cur = this.onPlatform;
     if (cur) {
-      const match = matchPlatform(cur, fresh);
+      // v3.9: when the live tracker is confirming the platform we stand on, it
+      // OWNS the geometry (it updates the rect in place ~3Hz with smooth
+      // rides). The 4.5s scan must then neither re-bind/snap us (its rect can
+      // be staler than the tracker's) nor declare the window vanished on one
+      // flaky scan (cloaked-during-drag, title blip) — that scan-flicker used
+      // to drop the cat off a perfectly healthy window.
+      const trackerLive = this._trackAlive && Number.isFinite(cur.id);
+      const match = trackerLive ? cur : matchPlatform(cur, fresh);
       if (match) {
-        // same physical window (it may have been dragged/resized): re-bind
-        // and keep the cat ON its top border at the same relative spot.
-        const rel = cur.w > 0 ? (this.x - cur.x) / cur.w : 0.5;
-        const pad = 30;
-        let nx = match.x + Math.max(0, Math.min(1, rel)) * match.w;
-        nx = Math.max(match.x + pad, Math.min(match.x + match.w - pad, nx));
-        nx = Math.max(this.minX + pad, Math.min(this.maxX - pad, nx));
-        const dy = match.y - cur.y;
-        this.onPlatform = match;
-        if (!this._jump) {
-          if (Math.abs(dy) <= 60) {
-            // border nudged (small resize) — ride along, imperceptible
-            this.x = nx;
-            this.baseY = match.y;
-          } else {
-            // border moved far (drag / resize-from-top): hop back onto it
-            // visibly instead of silently teleporting
-            this._jumpTo(match, 0.6);
+        if (trackerLive) {
+          // tracker owns it — nothing to do here except keep the platform
+          // listed as a hop target. No snaps, no rides, no teleports.
+        } else {
+          // same physical window (it may have been dragged/resized): re-bind
+          // and keep the cat ON its top border at the same relative spot.
+          const rel = cur.w > 0 ? (this.x - cur.x) / cur.w : 0.5;
+          const pad = 30;
+          let nx = match.x + Math.max(0, Math.min(1, rel)) * match.w;
+          nx = Math.max(match.x + pad, Math.min(match.x + match.w - pad, nx));
+          nx = Math.max(this.minX + pad, Math.min(this.maxX - pad, nx));
+          const dy = match.y - cur.y;
+          this.onPlatform = match;
+          if (!this._jump) {
+            if (Math.abs(dy) <= 60) {
+              // border nudged (small resize) — ride along, imperceptible
+              this.x = nx;
+              this.baseY = match.y;
+            } else {
+              // border moved far (drag / resize-from-top): hop back onto it
+              // visibly instead of silently teleporting
+              this._jumpTo(match, 0.6);
+            }
           }
         }
-      } else {
+      } else if (!trackerLive) {
         // window vanished (closed / minimized / excluded): fall with a little
         // forward arc — never the old instant drop to the ground
         this.onPlatform = null;
@@ -420,8 +435,88 @@ export class CatBrain {
         this._jump = { x0: this.x, x1: this.x + dir * 46, y0: this.baseY, y1: this.groundY, pl: null };
         this._enter('jump', 0.5);
       }
+      // trackerLive && !match: scan lost the window but the tracker still sees
+      // it — ghost grace, keep standing (the tracker's own ok:false ×2 rules
+      // the real vanish case).
     }
     this.platforms = fresh;
+  }
+
+  // v3.9 THE PLATFORM TRACKER — the other half of the "rendering jump" fix.
+  // The 4.5s scan left the cat standing on a STALE border for up to one scan
+  // interval while the user dragged/resized its window, then the next scan
+  // snapped/hopped it back — float, then jump. main now polls the tracked
+  // hwnd with user32 GetWindowRect ~3Hz (one persistent PowerShell, no
+  // spawns) and pushes rects here. The platform rect is updated IN PLACE and
+  // the ride is rate-capped, so a dragged border reads as the cat scrambling
+  // along it — continuous motion, never a teleport.
+  //   r: { id, x, y, w, h, ok:true } live rect, or { id, ok:false } gone.
+  updateTrackedPlatform(r) {
+    if (!r || !Number.isFinite(r.id)) return;
+    const pl = this.onPlatform;
+    if (!pl || pl.id !== r.id) return;               // stale line / not standing
+    if (r.ok === false) {
+      this._trackMiss++;
+      if (this._trackMiss >= 2) {
+        // really gone (closed / minimized): animated fall, same as a scan vanish
+        this._trackAlive = false;
+        this.onPlatform = null;
+        const dir = this.dir;
+        this._jump = { x0: this.x, x1: this.x + dir * 46, y0: this.baseY, y1: this.groundY, pl: null };
+        this._enter('jump', 0.5);
+      }
+      return;
+    }
+    if (!(Number.isFinite(r.x) && Number.isFinite(r.y) && r.w > 0 && r.h > 0)) return;
+    this._trackMiss = 0;
+    this._trackAlive = true;
+    // Store the tracker's truth as SMOOTHED TARGETS, not hard positions: the
+    // tracker samples at ~3Hz, so adopting its rect directly would move the
+    // cat in ≤130px steps every 320ms — another visible jump. Instead tick()
+    // glides pl.y/pl.x (and the cat) toward the targets continuously at
+    // ≤700/900 px/s, which reads as the cat being CARRIED by its window.
+    // While airborne the border adopts the TRUE y immediately — the cat is
+    // not touching it, and the in-flight landing must target where the border
+    // WILL be, not where it was when the jump started.
+    if (this._jump) {
+      pl.y = r.y;
+      if (this._jump.pl === pl) this._jump.y1 = pl.y;   // landing follows the CURRENT border
+      pl._ty = null;
+    } else {
+      pl._ty = r.y;
+    }
+    pl._tx = r.x;
+    pl.w = r.w; pl.h = r.h;
+  }
+
+  // v3.9: per-frame glide toward the tracker's target rect (see
+  // updateTrackedPlatform). Runs while standing, in ANY state — the cat is
+  // glued to a moving border and must be carried even while sitting/sleeping.
+  _tickTrackerRide(dt) {
+    const pl = this.onPlatform;
+    if (!pl || this._jump) return;
+    if (Number.isFinite(pl._ty) && pl.y !== pl._ty) {
+      const dy = pl._ty - pl.y;
+      pl.y += Math.sign(dy) * Math.min(Math.abs(dy), 700 * dt);   // ≈11.7px/frame
+      this.baseY = pl.y;                                          // feet glued to the border
+      if (pl.y === pl._ty) pl._ty = null;
+    }
+    if (Number.isFinite(pl._tx)) {
+      const dxp = pl._tx - pl.x;
+      if (dxp !== 0) {
+        const step = Math.sign(dxp) * Math.min(Math.abs(dxp), 900 * dt);   // ≈15px/frame
+        pl.x += step;
+        this.x += step;             // the cat is CARRIED with its window (same spot on the border)
+      }
+      // pad correction for a shrunk/resized border (glide, never snap)
+      const pad = 30;
+      const lo = Math.max(pl.x + pad, this.minX + pad);
+      const hi = Math.min(pl.x + pl.w - pad, this.maxX - pad);
+      if (this.x < lo) this.x = Math.min(lo, this.x + 900 * dt);
+      else if (this.x > hi) this.x = Math.max(hi, this.x - 900 * dt);
+      // clear the target only when the border AND the cat are both settled
+      if (pl.x === pl._tx && this.x >= lo && this.x <= hi) pl._tx = null;
+    }
   }
 
   // v3.8: hop ALONG the top border of the window we are standing on —
@@ -538,6 +633,7 @@ export class CatBrain {
     this.stateT += dt;
     if (this.laser) this._laserAge += dt;   // v3.5: total chase time (incl. pounces)
     const sf = this._speedFactor();         // v3.6: night slows down, stress speeds up
+    this._tickTrackerRide(dt);              // v3.9: smooth carry toward the tracked border
 
     switch (this.state) {
       case 'walk':

@@ -86,6 +86,62 @@ export function slideIfNeeded(origin, region, catX, feetY, workArea, scale) {
   return { x: Math.round(nx), y: Math.round(ny) };
 }
 
+// v3.9 THE CHASE CAMERA — why slides stopped teleporting.
+//
+// Three user reports in a row ("still seeing rendering jump from one place to
+// another place") outlived every timing fix we threw at the slide. The root
+// cause is structural: the overlay window and the canvas coordinate system
+// live in two processes, connected by async IPC. A one-shot slide of 100-400px
+// (vertical re-centering after a platform jump is the worst) can never be
+// atomic with the canvas origin flip, so for at least one vsync the window
+// shows stale content at its NEW position and the whole scene visibly leaps —
+// exactly "a rendering jump from one place to another".
+//
+// The fix: never move the window in one big step. slideIfNeeded still computes
+// the same re-centering TARGET it always did (geometry unchanged, all its unit
+// tests keep passing), but the renderer now WALKS the origin toward the target
+// at a capped speed (chaseStep below). Every step is ≤ CHASE_V·dt ≈ 4-15px, so
+// the worst possible stale frame shows a ≤15px shimmer instead of a 400px
+// teleport. The cat is drawn at (pose − O) every frame with the optimistically
+// advanced O, so on screen the cat simply glides — a camera following a cat,
+// which is what a pet overlay should feel like.
+//
+// Rates were chosen against measured motion: zoomies top out ~220px/s (the
+// camera always catches up), a ground→platform jump covers ~400px in 0.55s
+// (~730px/s average), so 900px/s tracks the arc without the cat ever outrunning
+// the window. Probed on software rendering: continuous window motion costs
+// ~+3% CPU at 30Hz vs a stationary window — paid only while the camera is
+// actually chasing (idle/sleep never move: same-origin requests are skipped).
+export const CHASE_V = 900;   // px/s cap for origin catch-up
+
+// advance `from` toward `to` by at most maxStep px (euclidean); pure.
+// Reaching the target returns it exactly (no float drift).
+export function chaseStep(from, to, maxStep) {
+  const a = from || { x: 0, y: 0 };
+  const b = to || a;
+  const cap = Number.isFinite(maxStep) && maxStep > 0 ? maxStep : Infinity;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const d = Math.hypot(dx, dy);
+  if (d <= cap || d === 0) return { x: b.x, y: b.y };
+  return { x: a.x + (dx / d) * cap, y: a.y + (dy / d) * cap };
+}
+
+// v3.9: the renderer and main must clamp a requested origin IDENTICALLY —
+// the chase is fire-and-forget, so the renderer can't wait for main's answer
+// to learn the clamped rect. This mirrors main.js's region:move clamp exactly
+// (same min sizes, same workArea clamping, same rounding). Unit tests pin the
+// two implementations together.
+export function clampOrigin(rect, curRegion, workArea) {
+  const wa = workArea || { x: 0, y: 0, width: 1600, height: 1000 };
+  const num = (v, dflt) => (Number.isFinite(v) ? v : dflt);
+  const r = curRegion || { w: 480, h: 434 };
+  const w = Math.max(320, Math.min(num(rect?.w, r.w), wa.width));
+  const h = Math.max(280, Math.min(num(rect?.h, r.h), wa.height));
+  const x = Math.max(wa.x, Math.min(wa.x + wa.width - w, num(rect?.x, 0)));
+  const y = Math.max(wa.y, Math.min(wa.y + wa.height - h, num(rect?.y, 0)));
+  return { x: Math.round(x), y: Math.round(y), w, h };
+}
+
 // v3.7: the companion kitten must stay inside the region window that follows
 // the MAIN cat. The renderer leashes the kitten to within `companionLeash`
 // pixels of the main cat and slides using the pair's midpoint — with a leash

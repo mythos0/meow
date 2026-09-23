@@ -10,6 +10,7 @@ import { ReminderScheduler } from './src/reminder-scheduler.js';
 import { createTopmostEnforcer } from './src/topmost.js';
 import { createWindowScanner } from './src/window-scan.js';
 import { createFastWindows } from './src/fast-windows.js';
+import { createPlatformTracker } from './src/platform-tracker.js';
 import { computeRegionSize, initialOrigin } from './src/region.js';
 import { createSysMonitor } from './src/sys-monitor.js';
 import { createMusicWatcher } from './src/music-watcher.js';
@@ -87,6 +88,23 @@ function ensureScanner() {
     });
   }
   scanner.start();
+}
+
+// v3.9: live platform tracker — ONE persistent PowerShell polls the hwnd the
+// cat stands on (user32 GetWindowRect P/Invoke, ~0% CPU) and streams its rect
+// so the cat RIDES dragged/resized window borders in real time instead of
+// floating for up to one scan interval and then snapping (the float-then-jump
+// half of the rendering-jump reports).
+let platTracker = null;
+function ensureTracker() {
+  if (process.platform !== 'win32') return;
+  if (!platTracker) {
+    platTracker = createPlatformTracker({
+      spawnFn: spawn,
+      onRect: r => sendToCat('platform-rect', r),
+    });
+    platTracker.start();
+  }
 }
 
 // ---------------------------------------------------------------- single instance
@@ -475,7 +493,7 @@ let lastPlatSig = '[]';
 let lastGameRoar = 0;
 
 function onWindowScan(plats) {
-  const clean = plats.map(p => ({ x: p.x, y: p.y, w: p.w, h: p.h, title: p.title, proc: p.proc }));
+  const clean = plats.map(p => ({ x: p.x, y: p.y, w: p.w, h: p.h, title: p.title, proc: p.proc, id: p.id }));
   sendToCat('platforms', clean);
 
   // new app opened -> walk over and investigate
@@ -711,6 +729,14 @@ ipcMain.handle('hit-test', (_e, overCat) => {
   return overCat;
 });
 
+// v3.9: the renderer retargets the platform tracker when it lands on /
+// leaves a window top (id = hwnd, or null)
+ipcMain.handle('platform-track', (_e, id) => {
+  ensureTracker();
+  try { platTracker?.track(Number.isFinite(id) ? id : null); } catch { /* dying stream */ }
+  return true;
+});
+
 ipcMain.handle('open-window', (_e, name) => {
   if (name === 'reminders') openReminders();
   else openSettings();
@@ -882,6 +908,7 @@ app.on('before-quit', () => {
   quitting = true;
   enforcer?.stop();
   scanner?.stop();
+  platTracker?.stop();   // v3.9: no orphan PowerShell
   sysMon.stop();
   musicWatcher.stop();
   stopIdleTicker();

@@ -40,7 +40,8 @@ $cb = [MeowWinEnum+EnumProc]{ param($h, $l)
   if ($w -lt 120 -or $hh -lt 80) { return $true }
   $pid2 = [uint32]0
   [MeowWinEnum]::GetWindowThreadProcessId($h, [ref]$pid2) | Out-Null
-  [void]$out.Add(@{ t = $title; x = $r.L; y = $r.T; w = $w; h = $hh; p = $pid2 })
+  # v3.9: expose the hwnd so the platform tracker can poll this exact window
+  [void]$out.Add(@{ t = $title; x = $r.L; y = $r.T; w = $w; h = $hh; p = $pid2; id = [int64]$h })
   return $true
 }
 [MeowWinEnum]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
@@ -73,7 +74,8 @@ export function parseWindowsJson(raw) {
     .filter(w => w && Number.isFinite(w.x) && Number.isFinite(w.y) &&
                  Number.isFinite(w.w) && Number.isFinite(w.h) && w.w > 0 && w.h > 0)
     .map(w => ({ title: String(w.t ?? ''), x: w.x, y: w.y, w: w.w, h: w.h,
-                 proc: typeof w.n === 'string' && w.n ? w.n : undefined }));
+                 proc: typeof w.n === 'string' && w.n ? w.n : undefined,
+                 id: Number.isFinite(w.id) ? w.id : undefined }));
 }
 
 // turn raw windows into platform candidates for the brain.

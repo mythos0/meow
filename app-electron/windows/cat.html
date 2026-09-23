@@ -27,7 +27,7 @@
 <script type="module">
 import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAnchor, CAT_BBOX, registerSkin } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
-import { computeRegionSize, initialOrigin, slideIfNeeded, companionLeash } from '../src/region.js';
+import { computeRegionSize, initialOrigin, slideIfNeeded, companionLeash, chaseStep, clampOrigin, CHASE_V } from '../src/region.js';
 import { batteryCrisis } from '../src/system-reactions.js';
 import { unlockedPerks } from '../src/achievements.js';
 import { zonesToScreen } from '../src/no-walk.js';
@@ -148,6 +148,11 @@ async function init() {
   window.meow.on('reminder-fired', showReminder);
   window.meow.on('laser-start', spawnLaser);
   window.meow.on('platforms', list => { if (brain) brain.setPlatforms(list); });
+  // v3.9: live platform tracking — main polls the tracked window's rect at
+  // ~3Hz (one persistent PowerShell, P/Invoke GetWindowRect) so the cat RIDES
+  // a dragged/resized window in real time instead of floating for up to a
+  // scan interval and then snapping (the other half of the "rendering jump").
+  window.meow.on('platform-rect', r => { if (brain) brain.updateTrackedPlatform(r); });
   // ---------------- v3.6 living-on-your-machine channels ----------------
   window.meow.on('system-event', onSystemEvent);
   window.meow.on('music', onMusic);
@@ -434,13 +439,27 @@ function companionBreedTick(dt) {
   } else {
     c.runSpeed = 150;                                          // back to the default sprint
   }
-  // smooth safety net (never a teleport): if somehow stuck far out — e.g. on
-  // a window top that runs away from the main cat — slide toward the leash
-  // edge at up to 420 px/s, which reads as a frantic dash, not a glitch.
-  const overflow = Math.abs(dx) - (companionLeashPx + 90);
-  if (overflow > 0 && !c._jump) {
-    const step = Math.min(overflow, 420 * dt);
-    c.x += Math.sign(dx) * step;
+  // v3.9: the kitten may NEVER leave the visible region canvas. During a
+  // violent reel the camera chases the pair's midpoint and used to lag the
+  // sprinting kitten — off-canvas = invisible ("friend cat not showing", the
+  // v3.7 complaint). While the kitten is off-canvas we SKIP the reel and glide
+  // it back into view at a single capped rate (850px/s ≈ 14px/frame): it rides
+  // back on-stage smoothly instead of snapping, and once visible the normal
+  // reel takes over. Natural play (dist < 200px) never leaves the band.
+  const kitLo = O.x - 40, kitHi = O.x + REGION.w + 40;
+  const offStage = c.x < kitLo || c.x > kitHi;
+  if (offStage) {
+    if (c.x < kitLo) c.x = Math.min(kitLo, c.x + 850 * dt);
+    else c.x = Math.max(kitHi, c.x - 850 * dt);
+  } else {
+    // smooth safety net (never a teleport): if somehow stuck far out — e.g. on
+    // a window top that runs away from the main cat — slide toward the leash
+    // edge at up to 420 px/s, which reads as a frantic dash, not a glitch.
+    const overflow = Math.abs(dx) - (companionLeashPx + 90);
+    if (overflow > 0 && !c._jump) {
+      const step = Math.min(overflow, 420 * dt);
+      c.x += Math.sign(dx) * step;
+    }
   }
   // nuzzle / play-fight when close and both are calm
   companionCd -= dt;
@@ -798,13 +817,22 @@ const IDLE_STATES = new Set(['idle', 'sit', 'sleep', 'loaf', 'knead', 'groom', '
 let idleFrameSkip = 0;
 let catVisible = true;
 let rafId = 0;
-let slideInFlight = null;   // v3.7: the slide whose window move is still landing
+let lastChaseTs = 0;        // v3.9: chase-camera clock (rate-limited origin catch-up)
+let trackedPlatId = null;   // v3.9: platform hwnd currently tracked in main
 function loop(ts) {
   // v3.7: clamp dt — a renderer stall (window move, GC, system sleep) used to
   // hand the brain a huge step and teleport the cat on the next frame.
   const dt = Math.min(0.11, Math.max(0, (ts - lastTs) / 1000));
-  const throttle = brain && !frozen && IDLE_STATES.has(brain.state) && !dragging;
-  if (throttle && idleFrameSkip < 3) {
+  // v3.9: while the platform tracker is carrying the cat (active ride targets),
+  // never idle-throttle — the throttled 4-frame batching would turn the smooth
+  // ≤700px/s carry into visible 45px lurches.
+  const riding = !!(brain && brain.onPlatform &&
+    (Number.isFinite(brain.onPlatform._ty) || Number.isFinite(brain.onPlatform._tx)));
+  const throttle = brain && !frozen && IDLE_STATES.has(brain.state) && !dragging && !riding;
+  // v3.9: deep-idle states (sleep/curl) animate at ~7.5fps — a sleeping cat
+  // only breathes; 15fps idle throttle used to pay full paint cost for it.
+  const skipMax = (brain && (brain.state === 'sleep' || brain.state === 'curl')) ? 7 : 3;
+  if (throttle && idleFrameSkip < skipMax) {
     idleFrameSkip++;
     rafId = requestAnimationFrame(loop);
     return;
@@ -866,31 +894,41 @@ function loop(ts) {
         if (pc.brain.state !== 'dance') pc.brain._enter('dance', 4);
       }
     }
-    // v3.7: region slide, fully synchronized. The window move is ASYNC —
-    // painting the canvas with the NEW origin before the OS has actually
-    // moved the window made the cat visibly jump for a few frames (the
-    // "cat jumping/flushing" report). So: keep painting with the OLD origin
-    // while the move is in flight; when it lands, flip the origin and repaint
-    // IMMEDIATELY (not on the next rAF — the idle throttle can delay that by
-    // ~67ms, which is visible). Horizontal focus is the main/companion
-    // midpoint so a leashed kitten can never sit outside the region.
-    if (!slideInFlight && !regionResizeInFlight) {
+    // v3.9 THE CHASE CAMERA. The old code requested a one-shot slide of up to
+    // 100-400px and flipped the canvas origin when the async IPC landed — the
+    // window and the origin can never flip atomically across processes, so for
+    // at least one vsync the window showed stale content at its new position
+    // and the whole scene visibly teleported ("rendering jump", reported 3×).
+    // Now the origin WALKS toward the re-centering target at ≤900px/s in
+    // fire-and-forget steps: every step is ≤15px, so the worst stale frame is
+    // an invisible shimmer. The renderer clamps exactly like main (clampOrigin)
+    // and advances O optimistically — no await, no paint freeze, no race.
+    {
       const p0 = brain.pose;
       const wa0 = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
       const focusX = companion ? (p0.x + companion.brain.pose.x) / 2 : p0.x;
-      const cand = slideIfNeeded(O, REGION, focusX, p0.y, wa0, S.size);
-      if (cand) {
-        slideInFlight = cand;
-        window.meow.moveRegion({ x: cand.x, y: cand.y, w: REGION.w, h: REGION.h })
-          .then(res => {
-            if (res) O = { x: res.x, y: res.y };
-            slideInFlight = null;
-            try { paint(); } catch { /* next frame repaints anyway */ }
-          })
-          .catch(() => { slideInFlight = null; });
-      }
+      const feetY = p0.y;   // pose.y is already baseY + jumpY (the live feet point)
+      const cand = slideIfNeeded(O, REGION, focusX, feetY, wa0, S.size);
+      if (cand && !dragging && !frozen && !regionResizeInFlight) {
+        const nowMs = performance.now();
+        const cdt = Math.min(0.1, (nowMs - lastChaseTs) / 1000 || 0.016);
+        lastChaseTs = nowMs;
+        const step = chaseStep(O, cand, CHASE_V * cdt);
+        const clamped = clampOrigin({ x: step.x, y: step.y, w: REGION.w, h: REGION.h }, REGION, wa0);
+        if (clamped.x !== O.x || clamped.y !== O.y) {
+          O = { x: clamped.x, y: clamped.y };
+          window.meow.moveRegion({ x: O.x, y: O.y, w: REGION.w, h: REGION.h });   // fire & forget
+        }
+      } else lastChaseTs = performance.now();
     }
     paint();
+    // v3.9: retarget the platform tracker whenever the cat lands on / leaves
+    // a window top (fire-and-forget; main owns the persistent poller).
+    const platId = brain.onPlatform && Number.isFinite(brain.onPlatform.id) ? brain.onPlatform.id : null;
+    if (platId !== trackedPlatId) {
+      trackedPlatId = platId;
+      window.meow.trackPlatform(platId);
+    }
   }
   if (catVisible) rafId = requestAnimationFrame(loop);
 }
@@ -1012,6 +1050,7 @@ window.__settings = () => S;
 window.__catVisible = () => catVisible;
 window.__lastPlayInfo = () => window.__lastPlay || null;
 window.__playMeow = () => playMeow(0.95);   // v3.8 e2e: exercise the exclusive voice
+window.__trackedPlatId = () => trackedPlatId;   // v3.9 e2e: current tracker target
 window.__activeMeowCount = () => (window.__meowEls ? window.__meowEls.size : 0);
 window.__clampBox = (el, x, y) => clampBox(el, x, y);
 // e2e: dispatch a main-process event through the real handlers
@@ -1029,6 +1068,7 @@ window.__testEvent = (channel, data) => {
     },
     'photo-mode': () => photoMode(), 'dance-party': startDanceParty,
     'reminder-fired': showReminder,
+    'platform-rect': r => { if (brain) brain.updateTrackedPlatform(r); },   // v3.9 e2e
     'time-bias': mode => { if (!S.timeOfDayMood) return; brain?.setTimeBias(mode); },
     'boot-greet': () => brain?.greet(),
   };

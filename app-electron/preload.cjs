@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('meow', {
   appInfo: () => ipcRenderer.invoke('app-info'),
   openExternal: url => ipcRenderer.invoke('open-external', url),
   moveRegion: rect => ipcRenderer.invoke('region:move', rect),
+  trackPlatform: id => ipcRenderer.invoke('platform-track', id),   // v3.9
   // v3.6
   savePhoto: dataUrl => ipcRenderer.invoke('photo:save', dataUrl),
   petAffection: () => ipcRenderer.invoke('affection:pet'),
@@ -39,6 +40,7 @@ contextBridge.exposeInMainWorld('meow', {
       'new-window', 'app-focus', 'duck', 'pomodoro', 'achievement',
       'no-walk-zones', 'photo-mode', 'dance-party', 'time-bias', 'boot-greet',
       'cat-visible',   // v3.7: pause the render loop while the cat is hidden
+      'platform-rect', // v3.9: live rect of the tracked platform window
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));
