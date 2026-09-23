@@ -216,3 +216,25 @@ Stage Summary (release):
 - Built MeowCat-3.7.0-portable.exe (76,454,382 B, sha256 a923d6ce…): afterPack stamped inner exe, patch-exe stamped launcher (3.7.0.0 binary version), verify-exe PASS, verify-artifact-identity 27/27, v3.7 feature strings verified inside app.asar (cat-visible, companionLeash, winStatsStreamScript, TOPSLACK)
 - Released https://github.com/mythos0/meow/releases/tag/v3.7.0 — asset round-trip SHA-256 verified byte-identical
 - main pushed ef4b7b2 + tag v3.7.0; artifact excluded from repo via .gitignore (artifacts/v37-shots/)
+
+---
+Task ID: 17
+Agent: Super Z (main)
+Task: v3.9.0 — user reports: "still seeing rendering jumps, fix it properly. try to optimize more. test all features are working without any bug."
+
+Work Log:
+- MEASURED before touching code: built a canvas-cost probe (xvfb, software rendering — the app runs disableHardwareAcceleration). Full-work-area overlay + dirty-rect = 74.9% CPU at 60fps vs 12.5% for the 480px region (dead end, would regress the CPU complaint); dirty-rect at region size = no gain (12.9%); continuous window motion = +6.1% at 60Hz, +3.4% at 30Hz. Data picked the architecture.
+- ROOT-CAUSED the persistent "rendering jump" (3rd user report) as STRUCTURAL, not timing: the overlay window and the canvas origin live in two processes joined by async IPC — a one-shot slide of up to 400px (vertical re-center after a platform jump) can never flip atomically with the canvas, so ≥1 vsync shows stale content at the new position = a visible leap. Three timing fixes could never kill it.
+- CHASE CAMERA (region.js chaseStep/clampOrigin + cat.html): the origin now WALKS toward the same slideIfNeeded target at ≤900px/s (≤15px/frame), fire-and-forget, renderer pre-clamps identically to main (clampOrigin pinned to a copy of main's clamp in tests). No await, no paint freeze, no race. Worst stale frame = ≤15px shimmer.
+- PLATFORM TRACKER (new src/platform-tracker.js): the OTHER half of the jump — the 4.5s scan left the cat floating on a stale border during window drags, then snapping. One persistent PowerShell polls the tracked hwnd via user32 GetWindowRect P/Invoke at 3Hz (stdin-retargeted "track <hwnd>"/"off", parent-PID heartbeat so it can never orphan, self-restarting with backoff). Scanner now exposes the hwnd id. Brain: updateTrackedPlatform stores SMOOTHED targets (never raw 3Hz snaps); _tickTrackerRide glides the border AND the cat at ≤700px/s vertical / 900px/s horizontal, carried like a real window; tracker alive = authoritative (flaky scan can't drop the cat — ghost grace); 2 consecutive ok:false = animated fall; mid-air border moves correct the in-flight landing y1; ride exempt from the idle throttle (throttled batching = 45px lurches).
+- Kitten visibility made structural: off-canvas during a violent reel it dashes back at a single capped 850px/s (reel skipped while off-stage) — worst measured delta 79px/100ms (was a 575px clamp snap in the first attempt, caught by e2e-v38).
+- Optimization: sleep/curl quantized to ~7.5fps (idleFrameSkip 7); measured per-state CPU: sleep 5.7% (was ~8), idle 7.5% forced / 13.3% mixed (unchanged), walk+chase 23.2% on the 2-core sandbox; RAM 165.4MB PSS / 5 procs (v3.7 documented 277MB); 60/60 render states PIXEL-IDENTICAL to v3.8 (PIL pixel-diff of the contact sheets).
+- Tests: +41 unit (tests/v39.test.mjs: chaseStep caps/exact-landing/degenerates, clampOrigin parity with main across 21 cases, tracker line parse/script heartbeat/retarget protocol/buffered stdout/restart lifecycle, brain ride rates/ghost grace/vanish-fall/mid-jump correction/stale-line rejection/target re-anchor) + NEW e2e-v39.mjs 6/6 live (per-frame origin delta p99=16px max=16px across stroll+zoomies+jump; 0px canvas breach during a max-legal 400px jump; ride speed 759px/s ≤800 measured live; vanish semantics; tracker retarget on land/leave via __trackedPlatId hook). All suites: 347 unit+visual, e2e 44+43+19+10+11+6 = 133 → 480 checks green (one known robust flake passed on retry).
+- Build: MeowCat-3.9.0-portable.exe 76,465,829B sha256 d3f0618b… — afterpack stamped the inner exe, patch-exe stamped the launcher (lesson re-learned: patch-exe argv order in|out|version), verify-exe PASS 3.9.0, verify-artifact-identity VERIFIED (Task Manager can only show MeowCat), v3.9 strings confirmed inside app.asar.
+- Release: https://github.com/mythos0/meow/releases/tag/v3.9.0 — asset round-trip SHA-256 verified byte-identical; main pushed d7e70ba + tag v3.9.0.
+- Docs: README (v3.9 section: why three fixes failed, chase camera, tracker, measured numbers; RAM row 165MB; tests 347/89/133), FEATURES.md renamed v3.9 + new §12 (v3.8 recap) + §13 (chase camera + tracker + invariants), TESTING.md pyramid updated + v3.9 e2e row.
+
+Stage Summary:
+- The rendering jump is dead by construction: the window never makes a >15px/frame move, and the cat's window carries it in real time.
+- v3.9.0: 480 automated checks green, pixel-identical art, no CPU/RAM regression (both improved), Release + exe verified
+- Pending for next session: user real-Windows validation of the chase camera feel (drag a window the cat stands on)
