@@ -23,6 +23,10 @@ export const HUNT_RADIUS = 340;
 // horizontally of the cat and no higher than CATCH_DY above its feet
 export const CATCH_DX = 95;
 export const CATCH_DY = 180;
+// v3.14 the rearing swat: paw-point reach (px) — the cat stands on its hind
+// legs and a swat catches the butterfly when it is within this radius of the
+// striking paw (which hovers ~105px above the feet, just over the head)
+export const SWAT_RADIUS = 66;
 
 const HUES = [28, 96, 200, 320, 48];
 
@@ -61,9 +65,14 @@ export function tickButterfly(bf, { dt, now, lane, groundY, catX, rand = Math.ra
   const wob = bf.wob;
 
   if (bf.state === 'flee') {
-    // dart away fast and climb while scared, then settle back to a cruise
+    // dart away fast and climb while scared, then settle back to a cruise.
+    // v3.14: a swat dodge adds a sharp upward jink (bf.climb) that decays —
+    // the butterfly visibly jinks UP and away from the striking paw
     bf.x += bf.vx * dt;
-    bf.y -= 24 * dt;
+    bf.climb = (bf.climb || 0) * Math.max(0, 1 - 2.6 * dt);
+    bf.y -= (24 + bf.climb) * dt;
+    const ceil = g - 320;                    // never vanish through the ceiling
+    if (bf.y < ceil) bf.y = ceil;
     if (now >= bf.fleeUntil) {
       bf.state = 'cruise';
       bf.vx = Math.sign(bf.vx || 1) * (48 + rand() * 26);
@@ -101,6 +110,28 @@ export function butterflyCatchable(bf, cat) {
   if (!bf || !cat || !Number.isFinite(bf.x) || !Number.isFinite(cat.x)) return false;
   const dy = cat.baseY - bf.y;              // >0: the butterfly is above the feet
   return Math.abs(bf.x - cat.x) <= CATCH_DX && dy <= CATCH_DY && dy >= -40;
+}
+
+// v3.14 the rearing swat — is the butterfly within the striking paw's reach?
+// cat.html computes the paw point (in front of the cat's raised head) and
+// calls this at each swat apex.
+export function swatCatchable(bf, pawX, pawY) {
+  if (!bf || !Number.isFinite(bf.x) || !Number.isFinite(bf.y) ||
+      !Number.isFinite(pawX) || !Number.isFinite(pawY)) return false;
+  return Math.hypot(bf.x - pawX, bf.y - pawY) <= SWAT_RADIUS;
+}
+
+// v3.14 the DODGE: a swat just missed — the butterfly jinks sharply away
+// from the paw and climbs steeply (more dramatic than the pounce startle;
+// a real butterfly escaping a paw seems to vanish sideways and up)
+export function dodgeButterfly(bf, fromX, fromY, now, rand = Math.random) {
+  if (!bf) return false;
+  bf.state = 'flee';
+  const away = bf.x >= fromX ? 1 : -1;
+  bf.vx = away * (300 + rand() * 130);
+  bf.climb = 150 + rand() * 90;
+  bf.fleeUntil = (Number.isFinite(now) ? now : 0) + 0.9 + rand() * 0.45;
+  return true;
 }
 
 // the pounce missed — the butterfly darts away from the cat and climbs

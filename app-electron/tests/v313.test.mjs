@@ -99,10 +99,12 @@ test('startStalk tags the prey kind and moveStalk retargets it', () => {
 test('a butterfly stalk IS auto-pounced when the prey comes in range (tag survives)', () => {
   const b = new CatBrain({ bounds: { x: 0, y: 0, w: 1600, h: 1000 }, groundY: 992 });
   b.startStalk(800, 900, 'butterfly');
-  b.moveStalk(b.x + 30, 900);   // within pounce range
+  b.moveStalk(b.x + 30, 900);   // within paw range
   for (let i = 0; i < 12 && b.state === 'stalk'; i++) b.tick(0.1);   // past the 0.8s aim phase
-  assert.equal(b.state, 'pounce');
-  assert.equal(b.stalk && b.stalk.kind, 'butterfly', 'the tag survives into the pounce (cat.html resolves the catch)');
+  // v3.14: a butterfly hunt REARS onto the hind legs and swats with the front
+  // paws (the real-cat catch) — the pounce is now the cursor-stalk move only
+  assert.equal(b.state, 'rear');
+  assert.equal(b.stalk && b.stalk.kind, 'butterfly', 'the tag survives into the rear (cat.html resolves the swat)');
 });
 
 test('stalkBoost speeds up the hunt creep', () => {

@@ -20,106 +20,148 @@
 <div id="tip">Drag to draw a <b>no-walk zone</b> — the cat will refuse to enter it · <b>Esc</b> to cancel</div>
 <script type="module">
 // zone-select.html — v3.11: Windows Snipping Tool-style area selection for
-// no-walk zones. A fullscreen dimmed transparent overlay with a crosshair;
-// press and drag to draw the rectangle (live outline + size label), release
-// to confirm, Esc or right-click cancels. Works across every display: the
-// window spans the bounding-box union of all work areas.
+// no-walk zones. A dimmed transparent overlay with a crosshair; press and
+// drag to draw the rectangle (live outline + size label), release to confirm,
+// Esc or right-click cancels.
+//
+// v3.14: one overlay PER DISPLAY (the old single union-sized transparent
+// window could crash Windows under software compositing). This page receives
+// its OWN display's origin/size in zone-config and reports the drawn rect in
+// SCREEN coordinates (client + display origin). Every handler is guarded —
+// any renderer-side error cancels the overlay instead of hanging it.
 
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d', { alpha: true });
 const tip = document.getElementById('tip');
 
-let cfg = { union: { x: 0, y: 0, width: 1600, height: 1000 }, primary: null };
+// v3.14: cfg.origin = this overlay's display origin (screen coords).
+// cfg.union is kept only as a legacy fallback for old callers.
+let cfg = { origin: { x: 0, y: 0 }, union: { x: 0, y: 0, width: 1600, height: 1000 }, width: 1600, height: 1000 };
 let anchor = null;         // {x, y} in window-local px
 let cur = null;            // current cursor px while dragging
 let dragging = false;
 let done = false;
 
+function base() { return cfg.origin || { x: cfg.union?.x || 0, y: cfg.union?.y || 0 }; }
+
 function resize() {
-  cv.width = window.innerWidth;
-  cv.height = window.innerHeight;
-  paint();
+  try {
+    cv.width = window.innerWidth;
+    cv.height = window.innerHeight;
+    paint();
+  } catch (e) { failSafe(e); }
 }
 window.addEventListener('resize', resize);
 
 function toLocalScreen(e) {
-  // window-local px -> screen coords (the window may start off-origin on a
-  // multi-monitor union)
-  return { x: e.clientX + cfg.union.x, y: e.clientY + cfg.union.y };
+  // window-local px -> screen coords (this overlay sits at its display origin)
+  const b = base();
+  return { x: e.clientX + b.x, y: e.clientY + b.y };
 }
 
 window.meow.on('zone-config', c => {
-  cfg = { ...cfg, ...c };
-  resize();
+  try {
+    cfg = { ...cfg, ...c };
+    resize();
+  } catch (e) { failSafe(e); }
 });
 
 function paint() {
-  ctx.clearRect(0, 0, cv.width, cv.height);
-  // dim everything, Snipping-Tool style
-  ctx.fillStyle = 'rgba(12,14,20,0.34)';
-  ctx.fillRect(0, 0, cv.width, cv.height);
-  if (dragging && anchor && cur) {
-    const x = Math.min(anchor.x, cur.x), y = Math.min(anchor.y, cur.y);
-    const w = Math.abs(cur.x - anchor.x), h = Math.abs(cur.y - anchor.y);
-    // clear the selected area so it pops out of the dim
-    ctx.clearRect(x, y, w, h);
-    // marching-ants style border
-    ctx.save();
-    ctx.lineWidth = 2;
-    ctx.setLineDash([7, 5]);
-    ctx.lineDashOffset = -(performance.now() / 40) % 12;
-    ctx.strokeStyle = '#ffd28a';
-    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-    ctx.restore();
-    // corner handles
-    ctx.fillStyle = '#ffd28a';
-    for (const [hx, hy] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
-      ctx.fillRect(hx - 3, hy - 3, 6, 6);
+  if (done) return;
+  try {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    // dim everything, Snipping-Tool style
+    ctx.fillStyle = 'rgba(12,14,20,0.34)';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    if (dragging && anchor && cur) {
+      const x = Math.max(0, Math.min(anchor.x, cur.x)), y = Math.max(0, Math.min(anchor.y, cur.y));
+      const w = Math.min(cv.width - x, Math.abs(cur.x - anchor.x)), h = Math.min(cv.height - y, Math.abs(cur.y - anchor.y));
+      if (w > 1 && h > 1) {
+        // clear the selected area so it pops out of the dim
+        ctx.clearRect(x, y, w, h);
+        // marching-ants style border
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.setLineDash([7, 5]);
+        ctx.lineDashOffset = -(performance.now() / 40) % 12;
+        ctx.strokeStyle = '#ffd28a';
+        ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+        ctx.restore();
+        // corner handles
+        ctx.fillStyle = '#ffd28a';
+        for (const [hx, hy] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
+          ctx.fillRect(hx - 3, hy - 3, 6, 6);
+        }
+        // size label
+        const label = `${Math.round(w)} × ${Math.round(h)}`;
+        ctx.font = '600 13px system-ui, sans-serif';
+        const tw = ctx.measureText(label).width + 14;
+        const ly = y > 30 ? y - 28 : y + h + 8;
+        ctx.fillStyle = 'rgba(22,24,30,0.92)';
+        ctx.fillRect(x, ly, tw, 22);
+        ctx.fillStyle = '#ffe9c8';
+        ctx.fillText(label, x + 7, ly + 15);
+      }
     }
-    // size label
-    const label = `${Math.round(w)} × ${Math.round(h)}`;
-    ctx.font = '600 13px system-ui, sans-serif';
-    const tw = ctx.measureText(label).width + 14;
-    const ly = y > 30 ? y - 28 : y + h + 8;
-    ctx.fillStyle = 'rgba(22,24,30,0.92)';
-    ctx.fillRect(x, ly, tw, 22);
-    ctx.fillStyle = '#ffe9c8';
-    ctx.fillText(label, x + 7, ly + 15);
-  }
+  } catch (e) { failSafe(e); }
 }
 
-// repainted on a light rAF only while a selection is live (marching ants)
+// repainted on a light rAF only while a selection is live (marching ants).
+// v3.14: capped at ~30fps — the marching ants read identically but the
+// software rasterizer does half the work on a fullscreen transparent surface.
+let lastPaint = 0;
 function tick() {
   if (done) return;
-  if (dragging) paint();
+  if (dragging) {
+    const now = performance.now();
+    if (now - lastPaint >= 33) { lastPaint = now; paint(); }
+  }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
 
+// v3.14: any unexpected renderer error must tear the overlay down (via main)
+// rather than leave a frozen crosshair on the user's screen.
+function failSafe(e) {
+  done = true;
+  try { console.error('zone-select error', e); } catch { /* nothing */ }
+  try { window.meow.cancelZone(); } catch { /* main is gone */ }
+}
+
 window.addEventListener('mousedown', e => {
-  if (e.button === 2) { e.preventDefault(); cancel(); return; }
-  if (e.button !== 0) return;
-  anchor = { x: e.clientX, y: e.clientY };
-  cur = { ...anchor };
-  dragging = true;
-  tip.style.display = 'none';
+  try {
+    if (done) return;
+    if (e.button === 2) { e.preventDefault(); cancel(); return; }
+    if (e.button !== 0) return;
+    anchor = { x: e.clientX, y: e.clientY };
+    cur = { ...anchor };
+    dragging = true;
+    try { window.meow.zoneDragging(true); } catch { /* cosmetic */ }
+    tip.style.display = 'none';
+  } catch (err) { failSafe(err); }
 });
 
 window.addEventListener('mousemove', e => {
-  if (dragging) cur = { x: e.clientX, y: e.clientY };
+  try {
+    if (dragging && !done) cur = { x: e.clientX, y: e.clientY };
+  } catch (err) { failSafe(err); }
 });
 
 window.addEventListener('mouseup', e => {
-  if (e.button !== 0 || !dragging) return;
-  dragging = false;
-  const w = Math.abs(e.clientX - anchor.x), h = Math.abs(e.clientY - anchor.y);
-  if (w > 12 && h > 12) {
-    done = true;
-    const tl = toLocalScreen({ clientX: Math.min(anchor.x, e.clientX), clientY: Math.min(anchor.y, e.clientY) });
-    window.meow.finishZone({ x: tl.x, y: tl.y, w: Math.round(w), h: Math.round(h) });   // main closes the window
-  } else {
-    paint();   // a click, not a drag — keep waiting
-  }
+  try {
+    if (e.button !== 0 || !dragging || done) return;
+    dragging = false;
+    const w = Math.abs(e.clientX - anchor.x), h = Math.abs(e.clientY - anchor.y);
+    if (w > 12 && h > 12) {
+      done = true;   // stops the rAF loop BEFORE the invoke — no paint races
+      const tl = toLocalScreen({ clientX: Math.min(anchor.x, e.clientX), clientY: Math.min(anchor.y, e.clientY) });
+      try { window.meow.zoneDragging(false); } catch { /* cosmetic */ }
+      window.meow.finishZone({ x: tl.x, y: tl.y, w: Math.round(w), h: Math.round(h) });   // main hides+closes
+    } else {
+      try { window.meow.zoneDragging(false); } catch { /* cosmetic */ }
+      paint();   // a click, not a drag — keep waiting
+    }
+  } catch (err) { failSafe(err); }
 });
 
 window.addEventListener('contextmenu', e => e.preventDefault());
@@ -128,13 +170,16 @@ window.addEventListener('keydown', e => {
 });
 
 function cancel() {
+  if (done) return;
   done = true;
-  window.meow.cancelZone();   // main closes the window
+  try { window.meow.zoneDragging(false); } catch { /* cosmetic */ }
+  window.meow.cancelZone();   // main hides+closes
 }
 
 // test hooks (harmless in production)
 window.__zoneDraw = (ax, ay, cx, cy) => { anchor = { x: ax, y: ay }; cur = { x: cx, y: cy }; dragging = true; paint(); dragging = false; };
 window.__zoneCfg = () => cfg;
+window.__zoneDone = () => done;
 resize();
 </script>
 </body>

@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('meow', {
   selectZone: () => ipcRenderer.invoke('zones:select'),          // v3.11 screenshot-style picker
   finishZone: rect => ipcRenderer.invoke('zone-select:finish', rect),
   cancelZone: () => ipcRenderer.invoke('zone-select:cancel'),
+  zoneDragging: v => ipcRenderer.send('zone-select:dragging', v),   // v3.14: guard display-follow while drawing
   // v3.12 main-driven drag: main polls the real global cursor so the cat can
   // be dragged across monitor boundaries even where renderer mousemove dies
   dragStart: grab => ipcRenderer.invoke('drag:start', grab),
@@ -41,6 +42,10 @@ contextBridge.exposeInMainWorld('meow', {
   injectKeys: n => ipcRenderer.invoke('keys:inject', n),
   quickAction: act => ipcRenderer.invoke('quick-action', act),
   browseStatusFile: () => ipcRenderer.invoke('status:browse'),
+  // v3.14 the hidden execution log (unlocked via feedback "1234")
+  submitFeedback: payload => ipcRenderer.invoke('feedback:submit', payload),
+  execLogGet: () => ipcRenderer.invoke('exec-log:get'),
+  execLogPush: entry => ipcRenderer.send('exec-log:push', entry),
   on: (channel, fn) => {
     const allowed = [
       'do-action', 'reminder-fired', 'settings-changed', 'workarea-changed',
@@ -54,6 +59,7 @@ contextBridge.exposeInMainWorld('meow', {
       'zone-config',   // v3.11: union bounds for the zone-selection overlay
       'drag-pos',      // v3.12: main-driven drag cursor stream
       'heartbeat',     // v3.12: liveness ping from main
+      'exec-log:entry',// v3.14: real-time execution-log stream
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));

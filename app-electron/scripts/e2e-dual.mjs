@@ -259,53 +259,66 @@ ok('the lane window is display-1 sized (≤1600 wide)',
 
 // ------------------------------------------------ 5. zone base fix (union-relative)
 {
-  // v3.12: driven directly through the same IPC the Settings button uses —
-  // this suite targets the UNION geometry; the settings-UI path is covered
-  // by e2e-v311's zone test on a single display.
+  // v3.12: driven directly through the same IPC the Settings button uses.
+  // v3.14: ONE overlay follows the cursor across displays — select on
+  // display 1, move the (fake) cursor to display 2, the overlay re-arms
+  // there; a zone drawn at local 200 = screen 1800 = union-relative 1800.
   let zone = null;
   let sel = null;
   for (let attempt = 0; attempt < 3 && !zone; attempt++) {
-    sel = await cat.evaluate(() => window.meow.selectZone());
-    zone = await findPage('zone-select.html', 10);
+    try { sel = await cat.evaluate(() => window.meow.selectZone()); } catch { await new Promise(r => setTimeout(r, 600)); continue; }
+    for (let k = 0; k < 10 && !zone; k++) {
+      await new Promise(r => setTimeout(r, 400));
+      for (const ctx of browser.contexts()) {
+        for (const p of ctx.pages()) {
+          if (p.isClosed?.() || !p.url().endsWith('zone-select.html')) continue;
+          try { await p.evaluate(() => 1); zone = p; break; } catch { /* stale */ }
+        }
+        if (zone) break;
+      }
+    }
     if (!zone) {
       await cat.evaluate(() => window.meow.cancelZone()).catch(() => {});
       await new Promise(r => setTimeout(r, 700));
     }
   }
-  ok('zone overlay opened across the union', !!zone, `selectZone=${sel}`);
-  let cfg = null;
+  ok('zone overlay opened (single following overlay)', !!zone, `selectZone=${sel}`);
   if (zone) {
-    await zone.waitForFunction('window.__zoneCfg && window.__zoneCfg().union', null, { timeout: 8000 }).catch(() => {});
-    try {
-      cfg = await zone.evaluate(() => {
-        const c = window.__zoneCfg();
-        return c && c.union && c.union.width > 0 ? c : null;
-      });
-    } catch { /* overlay died */ }
-  }
-  ok('zone overlay received the 3200px union', !!cfg && cfg.union.width === 3200, JSON.stringify(cfg && cfg.union));
-  if (zone && cfg) {
-    let drawn = false;
-    try {
-      await zone.evaluate(() => {
-        const fire = (type, x, y) => window.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }));
-        fire('mousedown', 1800, 300);
-        fire('mousemove', 2050, 470);
-        fire('mouseup', 2050, 470);
-      });
-      drawn = true;
-    } catch {
-      // the overlay closes itself on mouseup (zone-select:finish) — the
-      // evaluate can die after the events were already dispatched. The
-      // stored-zone assertion below is the ground truth either way.
-      drawn = true;
+    // move the cursor onto display 2 — the overlay must re-arm there
+    await cat.evaluate(() => window.meow.devMoveCursor({ x: 1800, y: 400 }));
+    let cfg = null;
+    for (let i = 0; i < 20 && !cfg; i++) {
+      await new Promise(r => setTimeout(r, 300));
+      try {
+        cfg = await zone.evaluate(() => {
+          const c = window.__zoneCfg();
+          return c && c.origin && c.origin.x === 1600 ? c : null;
+        });
+      } catch { /* transient — retry */ }
     }
-    await new Promise(r => setTimeout(r, 600));
-    const zones = await cat.evaluate(async () => (await window.meow.getSettings()).noWalkZoneList);
-    ok('zone drawn on display 2 is stored UNION-relative (x=1800)',
-      drawn && Array.isArray(zones) && zones.length >= 1 && zones[zones.length - 1].x === 1800,
-      JSON.stringify(zones));
-    try { await zone.evaluate(() => window.meow.cancelZone()); } catch {}
+    if (!cfg) console.error('ZONE FORENSICS:', appLog.split('\n').filter(l => /zone|gone|crashed/i.test(l)).slice(-8).join('\n') || '(no zone lines)');
+    ok('overlay FOLLOWED the cursor onto display 2 (origin 1600, same single window)',
+      !!cfg && cfg.origin.x === 1600 && cfg.width === 1600, JSON.stringify(cfg && { origin: cfg && cfg.origin, w: cfg && cfg.width }));
+    if (cfg) {
+      let drawn = false;
+      try {
+        await zone.evaluate(() => {
+          const fire = (type, x, y) => window.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }));
+          fire('mousedown', 200, 300);     // local 200 + origin 1600 = screen 1800
+          fire('mousemove', 450, 470);
+          fire('mouseup', 450, 470);
+        });
+        drawn = true;
+      } catch {
+        drawn = true;   // the overlay closes itself on mouseup — events already dispatched
+      }
+      await new Promise(r => setTimeout(r, 600));
+      const zones = await cat.evaluate(async () => (await window.meow.getSettings()).noWalkZoneList);
+      ok('zone drawn on display 2 is stored UNION-relative (x=1800)',
+        drawn && Array.isArray(zones) && zones.length >= 1 && zones[zones.length - 1].x === 1800,
+        JSON.stringify(zones));
+      try { await zone.evaluate(() => window.meow.cancelZone()); } catch {}
+    }
   }
 }
 

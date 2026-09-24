@@ -29,6 +29,9 @@ export const ACTIONS = [
   'sneeze', 'hairball', 'zoomies', 'laser',
   // v3.6 living-on-your-machine pack
   'stalk', 'bop', 'mope', 'nuzzle', 'investigate', 'sniff', 'curl',
+  // v3.14 the real-cat butterfly catch: rears onto the hind legs and swats
+  // up with the front paws (never randomly selected — hunt-driven only)
+  'rear',
 ];
 
 // v3.8: is platform `b` (from the newest scan) the same physical window as
@@ -59,7 +62,7 @@ export const EMOTE_ON = {
   zoomies: 'exclaim', hairball: 'sweat', loaf: 'bread',
   // v3.6
   bop: 'note', investigate: 'question', sniff: 'question', nuzzle: 'heart',
-  curl: 'zzz', mope: 'sad', stalk: null,
+  curl: 'zzz', mope: 'sad', stalk: null, rear: null,
 };
 
 const CAT_WEIGHTS = {
@@ -133,6 +136,7 @@ export class CatBrain {
     this.musicOn = false;         // music playing -> bop
     this.stalk = null;            // { x, y, kind } cursor/butterfly being stalked
     this.stalkBoost = 1;          // v3.13: creep-speed multiplier for butterfly hunts
+    this._rearSwats = 0;          // v3.14: swats fired in the current rear-up
     this._inv = null;             // { x } new-window investigation target
     this._batteryLow = false;     // low battery -> curl up to save energy
     this._zones = [];             // no-walk zones (screen coords)
@@ -141,6 +145,10 @@ export class CatBrain {
 
   // ---------- v3.6 tuning API (called by cat.html via IPC events) ----------
   setScale(s) { if (Number.isFinite(s) && s > 0) this._scale = s; }
+  // v3.14: proper event-handler registration. Callers used to "register" via
+  // brain.onEvent(fn) — which CALLS the (no-op) property instead of setting
+  // it, so no brain event ever reached the renderer. This method is the fix.
+  setEventHandler(fn) { if (typeof fn === 'function') this.onEvent = fn; }
   setTimeBias(mode) { this.timeBiasMode = mode === 'night' ? 'night' : 'day'; }
   setStress(on, ms = 12000) {
     this.stressUntil = on ? this.t + ms / 1000 : 0;
@@ -728,8 +736,42 @@ export class CatBrain {
           // sleepy cursor-stalk (a butterfly will not wait all day)
           this._moveX(Math.sign(dxs) * Math.min(Math.abs(dxs), this.speed * 0.55 * (this.stalkBoost || 1) * sf * dt));
           this.jumpY = -Math.abs(Math.sin(this.t * 8)) * 1.5;   // slinky low bob
+        } else if (this.stalk.kind === 'butterfly') {
+          // v3.14 THE REAL-CAT CATCH: in paw reach — the cat rears up onto
+          // its HIND legs and tries to grab the butterfly with its FRONT
+          // paws (cat.html resolves each swat: catch vs dodge).
+          this._rearSwats = 0;
+          this.jumpY = 0;
+          this._enter('rear', 1.7);
+          this.onEvent('butterfly:rear');
         } else {
           this._enter('pounce', 1.9);   // cat.html resolves the "catch"
+        }
+        break;
+      }
+      case 'rear': {
+        // v3.14: standing on the hind legs, swiping up with the front paws.
+        // The renderer draws the reared pose from stateT; here we only face
+        // the prey and fire the two swat events the caller resolves.
+        if (!this.stalk) {
+          // v3.14: the hunt ended mid-rear (a swat CONNECTED!) — hold the
+          // pose through the drop phase instead of snapping out mid-air
+          if (this.stateT < 1.35) break;
+          this._nextAction();
+          break;
+        }
+        const dxr = this.stalk.x - this.x;
+        if (dxr !== 0) this.dir = dxr > 0 ? 1 : -1;
+        if (Math.abs(dxr) > 150) {
+          // the prey escaped the paw zone — drop to all fours and chase
+          this._rearSwats = 0;
+          this._enter('stalk', 6);
+          break;
+        }
+        const swatAt = [0.55, 1.05];   // matches the pose's paw apexes
+        while (this._rearSwats < swatAt.length && this.stateT >= swatAt[this._rearSwats]) {
+          this._rearSwats++;
+          this.onEvent('rear:swat', this._rearSwats);
         }
         break;
       }
@@ -821,7 +863,13 @@ export class CatBrain {
       // v3.6.1: during a battery crisis the cat stays curled — it used to wake
       // up after each curl and randomly stroll around while "saving energy"
       if (this.state === 'curl' && this._batteryLow) { this._enter('curl', 20 + this.rand() * 15); return; }
-      if (this.state === 'bop' && this.musicOn) this._enter('bop', 3);   // keep the beat
+      // v3.14: the rear ended without a catch and the butterfly is still
+      // live — back on all fours and after it (the chase continues)
+      if (this.state === 'rear' && this.stalk && this.stalk.kind === 'butterfly') {
+        this._rearSwats = 0;
+        this._enter('stalk', 6);
+      }
+      else if (this.state === 'bop' && this.musicOn) this._enter('bop', 3);   // keep the beat
       else this._nextAction();
     }
   }
@@ -849,6 +897,7 @@ export class CatBrain {
     return {
       x: Math.round(this.x), y: Math.round(this.baseY + this.jumpY),
       state: this.state, dir: this.dir, t: this.t, jumpP: this.jumpP,
+      stateT: this.stateT, stateDur: this.stateDur,   // v3.14: rear/swat phase
     };
   }
 }

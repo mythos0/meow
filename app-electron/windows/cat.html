@@ -31,7 +31,7 @@ import { computeRegionSize, initialOrigin, slideIfNeeded, companionLeash, chaseS
 import { batteryCrisis } from '../src/system-reactions.js';
 import { unlockedPerks } from '../src/achievements.js';
 import { zonesToScreen } from '../src/no-walk.js';
-import { spawnButterfly as bflySpawn, tickButterfly as bflyTick, butterflyCatchable, startleButterfly, HUNT_RADIUS as BFLY_HUNT_RADIUS } from '../src/butterfly.js';
+import { spawnButterfly as bflySpawn, tickButterfly as bflyTick, butterflyCatchable, startleButterfly, swatCatchable, dodgeButterfly, HUNT_RADIUS as BFLY_HUNT_RADIUS } from '../src/butterfly.js';
 
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d', { alpha: true });
@@ -57,6 +57,7 @@ let butterflyTimer = null;
 let bflyAttempts = 0;         // pounces the current butterfly has endured
 let bflyHuntCd = 0;           // seconds until a new hunt may start
 let bflyCaughtPending = false;// a caught butterfly awaiting the pounce-landing reward
+let bflyPin = null;           // v3.14 e2e seam: pin the butterfly at a fixed point
 let prevState = null;
 // v3.6 companion + party
 let companion = null;         // { brain, breed }
@@ -248,7 +249,7 @@ async function init() {
     breed: S.breed,
   });
   brain.setScale(S.size);
-  brain.onEvent(onBrainEvent);
+  brain.setEventHandler(onBrainEvent);   // v3.14: real registration (the old brain.onEvent(fn) call was a silent no-op)
   syncRegion();
   scheduleAmbientMeow();   // v3.11: the cat meows on its own at random times
   window.meow.on('settings-changed', applySettings);
@@ -340,9 +341,16 @@ function registerCustomSkins(list) {
   }
 }
 
-function onBrainEvent(ev) {
-  // wired for future side-effects; stats are handled via state transitions below
-  void ev;
+function onBrainEvent(ev, data) {
+  // v3.14: the rearing swat — each apex is resolved here (catch vs dodge)
+  if (ev === 'rear:swat') resolveButterflySwat(data);
+  else if (ev === 'butterfly:rear') sfx('chirp', 0.35);   // the excited leap-up
+}
+
+// v3.14: renderer-side execution log — real brain/hunt/drag events stream
+// into main's ring buffer and appear live in the hidden terminal
+function xlog(tag, msg, data) {
+  try { window.meow.execLogPush({ src: 'cat', tag, msg, data, ts: Date.now() }); } catch { /* bridge gone */ }
 }
 
 // ---------------------------------------------------------- hats / skins
@@ -548,6 +556,7 @@ function applyCompanion(on) {
     b.setScale(S.size * 0.62);
     b.setPlatforms(brain.platforms);   // v3.13: the kitten may follow onto window tops
     companion = { brain: b, breed: 'ginger_kitten', hat: currentHat };
+    xlog('companion', `companion kitten spawned at ${Math.round(b.x)}`, { breed: 'ginger_kitten' });
   } else if (!on) companion = null;
 }
 
@@ -590,7 +599,7 @@ function companionBreedTick(dt) {
     c._enter('idle', 0.8);                     // wake — the friend left without me
   }
   if (brain.onPlatform && !c.onPlatform && !c._jump && vGap > 110 && c._joinCd <= 0 &&
-      !['pounce', 'stalk', 'laser'].includes(c.state)) {
+      !['pounce', 'stalk', 'laser', 'rear'].includes(c.state)) {
     c._jumpTo(brain.onPlatform, 0.6 + Math.min(0.85, vGap / 460));   // leap up to the big cat
     c._joinCd = 2.5;
   }
@@ -811,6 +820,7 @@ function tickButterfly(dt, now) {
     catX: brain.x,
   });
   if (culled) { butterfly = null; bflyAttempts = 0; return; }
+  if (bflyPin) { butterfly.x = bflyPin.x; butterfly.y = bflyPin.y; butterfly.state = bflyPin.state || butterfly.state; }   // e2e determinism
   // the hunt died without a pounce (timeout, laser, drag) — calm down again
   if (butterfly.state === 'hunted' && !(brain.stalk && brain.stalk.kind === 'butterfly')) {
     butterfly.state = 'cruise';
@@ -831,6 +841,7 @@ function tickButterfly(dt, now) {
     butterfly.state = 'hunted';
     brain.stalkBoost = 2.3;          // a butterfly will not wait all day
     sfx('chirp', 0.4);               // the excited "I see it!" chirp
+    xlog('hunt', `butterfly noticed at ${Math.round(butterfly.x)},${Math.round(butterfly.y)} — stalking begins`, { hue: butterfly.hue });
   }
 }
 
@@ -845,11 +856,53 @@ function resolveButterflyPounce() {
     bflyCaughtPending = true;
     brain.emote = { kind: 'heart', t0: brain.t };
     sfx('chirp', 0.6);
+    xlog('hunt', 'pounce connected — butterfly caught mid-leap');
   } else {
     // missed — the butterfly darts away; the cat may try again (up to 3)
     bflyAttempts++;
     bflyHuntCd = 1.8;
+    xlog('hunt', `pounce missed (${bflyAttempts}/3) — butterfly darts away`);
     if (butterfly) startleButterfly(butterfly, brain.x, performance.now() / 1000);
+  }
+}
+
+// v3.14 THE REARING SWAT — the cat stands on its hind legs and a front paw
+// strikes at the butterfly above its head. The brain fires 'rear:swat' at
+// each paw apex (two per rear); we judge the geometry at that instant.
+function resolveButterflySwat() {
+  if (!butterfly || !brain) return;
+  // paw point: in front of the raised head, ~105px above the feet
+  const pawX = brain.x + brain.dir * 26;
+  const pawY = brain.baseY - 104;
+  if (swatCatchable(butterfly, pawX, pawY)) {
+    // CAUGHT with the paws — the hunt is over; stop stalking so the rear
+    // flows straight into the celebration instead of more creeping
+    butterfly = null;
+    bflyAttempts = 0;
+    bflyCaughtPending = true;
+    brain.stopStalk();
+    brain.stalkBoost = 1;
+    brain.emote = { kind: 'heart', t0: brain.t };
+    sfx('chirp', 0.6);
+    xlog('hunt', 'SWAT CONNECTED — butterfly seized with the front paws', { paw: { x: Math.round(pawX), y: Math.round(pawY) } });
+  } else {
+    // DODGED — the butterfly jinks away and up; the cat drops and chases
+    bflyAttempts++;
+    bflyHuntCd = 1.6;
+    sfx('chirp', 0.3);
+    if (bflyAttempts >= 3) {
+      // three swats missed — the cat gives up, the butterfly lives
+      brain.stopStalk();
+      brain.stalkBoost = 1;
+      bflyAttempts = 0;
+      bflyHuntCd = 12;
+      dodgeButterfly(butterfly, pawX, pawY, performance.now() / 1000);
+      butterfly.fleeUntil = performance.now() / 1000 + 2.2;   // really gone
+      xlog('hunt', 'three swats missed — the cat gives up, the butterfly escapes');
+    } else {
+      dodgeButterfly(butterfly, pawX, pawY, performance.now() / 1000);
+      xlog('hunt', `swat ${bflyAttempts} missed — butterfly dodges up and away`, { paw: { x: Math.round(pawX), y: Math.round(pawY) } });
+    }
   }
 }
 
@@ -1104,6 +1157,7 @@ function loop(ts) {
       brain.tick(dt);
       // ------- state-transition bookkeeping (stats + contextual sfx) -------
       if (before !== brain.state) {
+        xlog('action', `${before} → ${brain.state}`, { x: brain.x, feetY: Math.round(brain.baseY), dir: brain.dir });
         if (brain.state === 'jump') sfx('squeak', 0.42);   // boing! (v3.12: via sfx)
         if (before === 'jump' && brain.jumpP === 0) {
           window.meow.bumpStat('jumps', 1);
@@ -1115,6 +1169,16 @@ function loop(ts) {
         if (before === 'stalk' && brain.state === 'pounce' &&
             brain.stalk && brain.stalk.kind === 'butterfly') {
           resolveButterflyPounce();
+        }
+        // v3.14: the REAR ended (caught or gave up) — deliver the reward here
+        if (before === 'rear' && brain.state !== 'rear' && bflyCaughtPending) {
+          bflyCaughtPending = false;
+          brain.pet();
+          window.meow.addCoins(2);
+          window.meow.bumpStat('butterflies', 1);
+          showBubble('🦋 got it! the cat is very proud', 3200);
+          xlog('reward', 'butterfly caught — +2 coins, butterflies stat +1');
+          scheduleButterfly(9 + Math.random() * 7);   // the next visitor soon
         }
         if (before === 'pounce' && stalkWasCursor) {
           // the cursor-stalk pounce landed: happy cat, tiny affection boost
@@ -1250,6 +1314,7 @@ function paint() {
   const opts = {
     t: p.t, state: p.state, dir: p.dir, breed: S.breed,
     scale: S.size, alpha: S.opacity, jumpP: p.jumpP, hat: currentHat,
+    stateT: p.stateT, stateDur: p.stateDur,
   };
   drawCat(ctx, opts);
   drawParticles(ctx, opts);
@@ -1269,7 +1334,7 @@ function paint() {
     const cp = companion.brain.pose;
     ctx.save();
     ctx.translate(cp.x - O.x, cp.y - O.y);
-    drawCat(ctx, { t: cp.t, state: cp.state, dir: cp.dir, breed: companion.breed, scale: S.size * 0.62, alpha: S.opacity, jumpP: cp.jumpP, hat: companion.hat });
+    drawCat(ctx, { t: cp.t, state: cp.state, dir: cp.dir, breed: companion.breed, scale: S.size * 0.62, alpha: S.opacity, jumpP: cp.jumpP, hat: companion.hat, stateT: cp.stateT, stateDur: cp.stateDur });
     drawParticles(ctx, { t: cp.t, state: cp.state, breed: companion.breed, scale: S.size * 0.62 });
     ctx.restore();
   }
@@ -1321,6 +1386,7 @@ init();
 
 // test instrumentation (harmless in production)
 window.__catBooted = true;
+xlog('cat', `renderer alive — breed ${S.breed}, size ${S.size}, pid window ready`);
 window.__pose = () => brain ? JSON.parse(JSON.stringify(brain.pose)) : null;
 window.__doAction = act => doAction(act);
 window.__brain = () => brain;
@@ -1341,6 +1407,7 @@ window.__setButterfly = (x, y) => { if (butterfly) { butterfly.x = x; butterfly.
 window.__bflyHuntState = () => ({ hunting: !!(brain && brain.stalk && brain.stalk.kind === 'butterfly'), attempts: bflyAttempts, caughtPending: bflyCaughtPending });
 window.__dragState = () => ({ dragging, mainDragActive, downOnCat, dragMoved, hasPendingPet: !!pendingPet, overCat });
 window.__stopButterfly = () => { clearTimeout(butterflyTimer); butterflyTimer = null; return true; };   // e2e: pin spawns to manual (deterministic suites)
+window.__pinButterfly = (x, y) => { bflyPin = (Number.isFinite(x) && Number.isFinite(y)) ? { x, y } : null; return !!bflyPin; };
 // ---------------- v3.6 test hooks ----------------
 window.__setBattery = (level, charging) => { battery = { level, charging, source: 'test' }; };
 window.__battery = () => battery;

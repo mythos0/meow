@@ -60,10 +60,13 @@ export const DEFAULTS = {
   affection: 0,              // lifetime pet count -> affection meter
   unlocked: [],              // achievement ids
   customSkins: [],           // [{id, name, def}] imported community skins
+  // v3.14 hidden execution log — unlocked ONLY by feedback with message "1234"
+  execLogUnlocked: false,
+  feedbackList: [],          // [{message, contact, rating, ts}] real user feedback
 };
 
 const OBJECT_KEYS = new Set(['stats']);
-const ARRAY_KEYS = new Set(['noWalkZoneList', 'customSkins', 'unlocked']);
+const ARRAY_KEYS = new Set(['noWalkZoneList', 'customSkins', 'unlocked', 'feedbackList']);
 
 export const BREED_PRICES = {
   grey_tabby: 0, orange_tabby: 100, siamese: 200, calico: 300, persian: 400, tuxedo: 500,
@@ -134,6 +137,18 @@ export function createSettings(backend) {
         }
       } else if (k === 'unlocked') {
         if (Array.isArray(p.unlocked)) d.unlocked = [...new Set(p.unlocked.filter(x => typeof x === 'string'))];
+      } else if (k === 'feedbackList') {
+        if (Array.isArray(p.feedbackList)) {
+          d.feedbackList = p.feedbackList.filter(f => f && typeof f.message === 'string').slice(-50)
+            .map(f => ({
+              message: String(f.message).slice(0, 2000),
+              contact: String(f.contact || '').slice(0, 120),
+              rating: Number.isFinite(f.rating) ? Math.max(1, Math.min(5, f.rating | 0)) : null,
+              ts: Number.isFinite(f.ts) ? f.ts : 0,
+            }));
+        }
+      } else if (k === 'execLogUnlocked') {
+        d.execLogUnlocked = p.execLogUnlocked === true;   // only ever latch ON via feedback
       } else if (k === 'coins') {
         // economy guard: strictly numeric, non-negative, capped
         if (typeof p.coins === 'number' && Number.isFinite(p.coins) && p.coins >= 0) {

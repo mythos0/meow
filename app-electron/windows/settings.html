@@ -9,6 +9,78 @@
   body { padding: 0; }
   section.page { display: none; }
   section.page.on { display: block; }
+
+  /* ---------------- v3.14 the hidden execution-log terminal ---------------- */
+  #page-execlog { color-scheme: dark; }
+  #page-execlog.on { display: flex; flex-direction: column; }
+  .term {
+    flex: 1; min-height: 340px; display: flex; flex-direction: column;
+    background: #030805; border: 1px solid #123a22; border-radius: 10px;
+    box-shadow: 0 0 0 1px rgba(0,255,136,0.06), 0 0 34px rgba(0,255,136,0.07) inset;
+    font-family: "Cascadia Mono", "Fira Code", Consolas, Menlo, monospace;
+    position: relative; overflow: hidden;
+  }
+  .term::after {            /* CRT scanlines + faint vignette */
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 3;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,0.44) 100%);
+  }
+  .term-banner {
+    padding: 10px 14px 6px; color: #00ff88; white-space: pre; overflow-x: auto;
+    text-shadow: 0 0 7px rgba(0,255,136,0.55); line-height: 1.22; font-size: 12px;
+    border-bottom: 1px solid #0e2f1c; user-select: none;
+  }
+  .term-toolbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 7px 12px; border-bottom: 1px solid #0e2f1c; background: rgba(0,255,136,0.03);
+  }
+  .term-toolbar input {
+    flex: 1; min-width: 130px; background: #06120b; color: #7dffb2;
+    border: 1px solid #14492b; border-radius: 6px; padding: 5px 9px;
+    font: 12px/1.4 Consolas, Menlo, monospace; outline: none;
+  }
+  .term-toolbar input:focus { border-color: #00ff88; box-shadow: 0 0 8px rgba(0,255,136,0.35); }
+  .term-toolbar .tbtn {
+    background: #06120b; color: #39d98a; border: 1px solid #14492b; border-radius: 6px;
+    padding: 5px 10px; cursor: pointer; font: 12px Consolas, Menlo, monospace;
+  }
+  .term-toolbar .tbtn:hover { background: #0a2415; color: #8dffc0; }
+  .term-toolbar .tbtn.on { color: #0b1f12; background: #00ff88; border-color: #00ff88; font-weight: 700; }
+  .term-body {
+    flex: 1; overflow-y: auto; padding: 8px 12px 10px; font-size: 12.5px; line-height: 1.5;
+    color: #49d68f; scrollbar-color: #14532d #050d08; scrollbar-width: thin;
+  }
+  .term-body::-webkit-scrollbar { width: 9px; }
+  .term-body::-webkit-scrollbar-thumb { background: #14532d; border-radius: 5px; }
+  .ln { white-space: pre-wrap; word-break: break-word; }
+  .ln .ts  { color: #1f9e60; }
+  .ln .src { font-weight: 700; }
+  .ln .src.main { color: #00ff88; }
+  .ln .src.cat { color: #7dffb2; }
+  .ln .src.companion { color: #62d0ff; }
+  .ln .src.sys { color: #d8b4ff; }
+  .ln .tag  { color: #b0ffd6; background: rgba(0,255,136,0.08); border-radius: 4px; padding: 0 5px; }
+  .ln .msg  { color: #49d68f; }
+  .ln .dat  { color: #147a48; }
+  .ln.err .msg { color: #ff5f6d; } .ln.err .src, .ln.err .tag { color: #ff5f6d; }
+  .ln.warn .msg { color: #ffb454; }
+  .ln.boot { color: #8dffc0; }
+  .term-cursor { display: inline-block; width: 8px; height: 14px; background: #00ff88;
+    vertical-align: -2px; animation: tblink 1.05s steps(1) infinite; }
+  @keyframes tblink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  .term-status {
+    display: flex; gap: 14px; align-items: center; padding: 6px 12px;
+    border-top: 1px solid #0e2f1c; color: #1f9e60; font-size: 11.5px;
+    background: rgba(0,255,136,0.03); flex-wrap: wrap;
+  }
+  .term-status .live { color: #00ff88; font-weight: 700; }
+  .term-status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #00ff88; margin-right: 5px; animation: tblink 1.4s steps(1) infinite; }
+  @media (max-width: 700px) {
+    .term-banner { font-size: 9px; }
+    .term-body { font-size: 11.5px; padding: 6px 8px; }
+  }
 </style>
 </head>
 <body>
@@ -31,6 +103,7 @@
     <div class="item" data-page="focus">🍅 <span class="lab">Focus &amp; Reminders</span></div>
     <div class="item" data-page="hotkeys">⌨️ <span class="lab">Hotkeys &amp; Privacy</span></div>
     <div class="item" data-page="achieve">🏆 <span class="lab">Achievements</span></div>
+    <div class="item" data-page="execlog" id="navExecLog" style="display:none">&gt;_ <span class="lab">Execution Log</span></div>
     <div class="spacer"></div>
     <div class="item" data-page="about">ℹ️ <span class="lab">About</span></div>
   </nav>
@@ -326,6 +399,28 @@
       <div class="ach-grid" id="achGrid"></div>
     </section>
 
+    <!-- ============ v3.14 HIDDEN: EXECUTION LOG TERMINAL ============ -->
+    <section class="page" id="page-execlog">
+      <div class="term">
+        <div class="term-banner" id="termBanner"></div>
+        <div class="term-toolbar">
+          <span style="color:#1f9e60;font:12px Consolas,monospace">grep:</span>
+          <input id="termGrep" type="text" placeholder="filter lines (substring) — e.g. hunt / zone / action" spellcheck="false">
+          <button class="tbtn on" id="termFollow" title="auto-scroll to the newest line">▼ follow</button>
+          <button class="tbtn" id="termPause" title="pause / resume the live stream">⏸ pause</button>
+          <button class="tbtn" id="termClear" title="clear the view (the cat keeps its real log)">✕ clear</button>
+        </div>
+        <div class="term-body" id="termBody"></div>
+        <div class="term-status">
+          <span class="live"><span class="dot"></span>LIVE TAIL</span>
+          <span id="termCount">0 lines</span>
+          <span id="termFilterInfo"></span>
+          <span style="flex:1"></span>
+          <span id="termMeta"></span>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ ABOUT ============ -->
     <section class="page" id="page-about">
       <h1 class="fl-h1">About</h1>
@@ -346,6 +441,19 @@
         <div class="hint" style="margin-top:8px;">
           Runtime: Electron <span id="verElectron"></span> · Canvas 2D renderer · 24 breeds · 31 actions · 16 emotes<br>
           Sounds recorded from real cats. MIT License © 2026 mythos0.
+        </div>
+      </div>
+      <div class="fl-card" style="margin-top:10px">
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Send feedback</div>
+            <div class="l2">Bugs, ideas, love letters — the cat reads everything.</div></div>
+        </div>
+        <textarea id="fbMsg" rows="3" placeholder="type your feedback here…" spellcheck="false"
+          style="width:100%;box-sizing:border-box;margin-top:6px;background:var(--card2,#f6f7fa);color:inherit;border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:8px 10px;font:13px/1.45 system-ui,sans-serif;resize:vertical"></textarea>
+        <div class="row" style="margin-top:6px;display:flex;gap:8px;align-items:center">
+          <input id="fbContact" placeholder="contact (optional) — email or @handle" spellcheck="false"
+            style="flex:1;background:var(--card2,#f6f7fa);color:inherit;border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:7px 10px;font:13px system-ui,sans-serif">
+          <button class="ghost" id="fbSend">Send</button>
         </div>
       </div>
       <div class="row" style="margin-top:10px">
@@ -752,6 +860,145 @@ renderReminders();
 $('lnkDev').onclick = () => window.meow.openExternal('https://github.com/mythos0');
 $('lnkRepo').onclick = () => window.meow.openExternal('https://github.com/mythos0/MeowCat');
 $('lnkIssues').onclick = () => window.meow.openExternal('https://github.com/mythos0/MeowCat/issues');
+
+// ---------------- v3.14 feedback + the hidden execution-log terminal ----------------
+const REPO_URL = 'https://github.com/mythos0/MeowCat';
+
+$('fbSend').onclick = async () => {
+  const message = $('fbMsg').value.trim();
+  if (!message) { toast('Type some feedback first', false); return; }
+  try {
+    const r = await window.meow.submitFeedback({ message, contact: $('fbContact').value.trim() });
+    if (!r || !r.ok) { toast('Could not send feedback', false); return; }
+    $('fbMsg').value = '';
+    if (r.unlockedNow) {
+      toast('Feedback received. Hidden section unlocked — check the menu.');
+      xlogUnlockReveal(true);
+    } else if (r.unlocked) {
+      toast('Feedback received.');
+    } else {
+      toast('Feedback received. Thank you!');
+    }
+  } catch { toast('Could not send feedback', false); }
+};
+
+// ----- terminal state -----
+let termAll = [];            // every entry we know about (real data only)
+let termSeenSeq = new Set();
+let termUnlocked = false;
+let termStarted = false;     // initial dump loaded?
+let termPaused = false;
+let termFollow = true;
+let termInfo = null;         // { pid, version, unlocked }
+
+const TERM_BANNER = [
+  '╔══════════════════════════════════════════════════════════════════════╗',
+  '║  M E W C A T   ::   E X E C U T I O N   L O G   ::   /var/log/cat    ║',
+  '║  every frame the cat draws · every action the brain takes · REAL     ║',
+  '╚══════════════════════════════════════════════════════════════════════╝',
+].join('\n');
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtTs(ts) {
+  const d = new Date(ts);
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+function entryClass(e) {
+  const tag = String(e.tag || '');
+  if (/gone|crash|fail|blocked|timeout|stall|signal|died/.test(tag + ' ' + (e.msg || ''))) return 'err';
+  if (/blocked-auto-quit|quit/.test(tag)) return 'warn';
+  if (tag === 'boot' || tag === 'access') return 'boot';
+  return '';
+}
+function entryLine(e) {
+  const data = e.data && Object.keys(e.data).length ? ' ' + JSON.stringify(e.data) : '';
+  return `<div class="ln ${entryClass(e)}" data-seq="${e.seq}">` +
+    `<span class="ts">[${fmtTs(e.ts)}]</span> <span class="src ${esc(e.src)}">${esc(e.src).padEnd(9)}</span>` +
+    `<span class="tag">${esc(e.tag)}</span> <span class="msg">${esc(e.msg)}</span>` +
+    (data ? `<span class="dat">${esc(data)}</span>` : '') + `</div>`;
+}
+function termPasses(e) {
+  const q = $('termGrep').value.trim().toLowerCase();
+  if (!q) return true;
+  return (e.msg || '').toLowerCase().includes(q) ||
+         (e.tag || '').toLowerCase().includes(q) ||
+         (e.src || '').toLowerCase().includes(q) ||
+         JSON.stringify(e.data || {}).toLowerCase().includes(q);
+}
+function termAppend(e) {
+  const body = $('termBody');
+  const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+  body.insertAdjacentHTML('beforeend', entryLine(e));
+  if (termFollow && (nearBottom || termFollow)) body.scrollTop = body.scrollHeight;
+}
+function termRefreshCount() {
+  const shown = $('termBody').childElementCount;
+  $('termCount').textContent = shown + ' line' + (shown === 1 ? '' : 's');
+  const q = $('termGrep').value.trim();
+  $('termFilterInfo').textContent = q ? `grep "${q}" — ${shown}/${termAll.length} shown` : '';
+}
+function termRenderAll() {
+  const body = $('termBody');
+  body.innerHTML = termAll.filter(termPasses).map(entryLine).join('');
+  if (termFollow) body.scrollTop = body.scrollHeight;
+  termRefreshCount();
+}
+function ingest(e) {
+  if (!e || termSeenSeq.has(e.seq)) return;
+  termSeenSeq.add(e.seq);
+  termAll.push(e);
+  if (termAll.length > 1500) {
+    termAll.splice(0, termAll.length - 1500);
+    if ($('page-execlog').classList.contains('on')) termRenderAll();
+  }
+  if ($('page-execlog').classList.contains('on') && !termPaused && termPasses(e)) {
+    termAppend(e);
+    termRefreshCount();
+  }
+}
+function xlogUnlockReveal(alsoNavigate = false) {
+  termUnlocked = true;
+  $('navExecLog').style.display = '';
+  if (alsoNavigate) {
+    document.querySelectorAll('#nav .item').forEach(x => x.classList.remove('on'));
+    document.querySelectorAll('section.page').forEach(p => p.classList.remove('on'));
+    $('navExecLog').classList.add('on');
+    $('page-execlog').classList.add('on');
+  }
+  // first unlock in this window: pull the FULL real history now
+  if (!termStarted) loadExecLog();
+  else if (alsoNavigate) termRenderAll();
+}
+async function loadExecLog() {
+  try {
+    const r = await window.meow.execLogGet();
+    termInfo = r || {};
+    termUnlocked = !!r.unlocked;
+    if (termUnlocked) {
+      $('navExecLog').style.display = '';
+      $('termMeta').textContent = `pid ${r.pid} · v${r.version} · ring 600`;
+      for (const e of (r.entries || [])) ingest(e);
+      termStarted = true;
+      if ($('page-execlog').classList.contains('on')) termRenderAll();
+    }
+    return termUnlocked;
+  } catch { return false; }
+}
+async function startExecLog() {
+  await loadExecLog();
+  window.meow.on('exec-log:entry', e => ingest(e));
+}
+$('navExecLog').addEventListener('click', () => { if (termStarted) termRenderAll(); });
+$('termGrep').addEventListener('input', termRenderAll);
+$('termFollow').onclick = () => { termFollow = !termFollow; $('termFollow').classList.toggle('on', termFollow); if (termFollow) $('termBody').scrollTop = $('termBody').scrollHeight; };
+$('termPause').onclick = () => { termPaused = !termPaused; $('termPause').classList.toggle('on', termPaused); $('termPause').textContent = termPaused ? '▶ resume' : '⏸ pause'; };
+$('termClear').onclick = () => { $('termBody').innerHTML = ''; termRefreshCount(); };
+$('termBanner').textContent = TERM_BANNER;
+$('termGrep').value = '';
+startExecLog();
 
 refresh();
 </script>

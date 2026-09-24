@@ -343,7 +343,7 @@ export function drawCat(ctx, opts) {
   ctx.scale(dir * scale, scale);
   ctx.globalAlpha = opts.alpha ?? 1;
 
-  const P = poseFor(state, t, jumpP, B, pal);
+  const P = poseFor(state, t, jumpP, B, pal, opts.stateT || 0);
   const bodyY = B.standY + P.bodyY + P.bobY;
   const sqx = 1 + P.sqx, sqy = 1 + P.sqy;
 
@@ -618,7 +618,7 @@ export function registerSkin(def, id) {
 }
 
 // ---------------------------------------------------------------- pose
-function poseFor(state, t, jumpP, B, pal) {
+function poseFor(state, t, jumpP, B, pal, stateT) {
   B = B || BODIES.normal;
   const panda = !!(pal && pal.pandaFace);
   const P = {
@@ -976,6 +976,50 @@ function poseFor(state, t, jumpP, B, pal) {
         P.tailMode = 'spiral';
       }
       P.eyeState = 'open';
+      break;
+    }
+    case 'rear': {     // v3.14: rears onto the HIND legs and swats up at the
+                       // butterfly with the FRONT paws — the real-cat catch
+      const T = stateT || 0;
+      const RISE = 0.30, SWAT1 = 0.55, SWAT1END = 0.72, SWAT2 = 0.90, SWAT2END = 1.07, DROP = 1.30;
+      const k = Math.min(1, T / RISE);              // rise onto the haunches
+      const up = k * k * (3 - 2 * k);               // smoothstep
+      let pawNear = -52 * up, pawFar = -48 * up;
+      let pawFxN = F[0] + 6 * up, pawFxF = F[1] + 5 * up;
+      P.bodyY = -10 * up;                            // stands tall
+      P.bodyRot = -0.52 * up;                        // torso pitches up
+      P.sqx = -0.05 * up; P.sqy = 0.04 * up;
+      P.headY = -15 * up; P.headX = 2 * up; P.headRot = -0.24 * up;   // eyes on the prey
+      P.legs[2].fx = F[2] - 2 * up; P.legs[3].fx = F[3] - 2 * up;     // hind paws planted
+      P.tailMode = up > 0.5 ? 'stream' : 'spiral';   // tail out for balance
+      P.eyeState = 'open';
+      const swat = (w, t0, t1) => (w < t0 || w > t1) ? 0 : Math.sin(((w - t0) / (t1 - t0)) * Math.PI);
+      const s1 = swat(T, SWAT1, SWAT1END);           // near paw swipes first
+      const s2 = swat(T, SWAT2, SWAT2END);           // far paw takes its turn
+      if (s1 > 0) {
+        pawNear = -52 * up - s1 * 58; pawFxN = F[0] + 6 * up + s1 * 8;
+        P.bodyRot = -0.52 * up - s1 * 0.06; P.sqy = 0.04 * up + s1 * 0.05;
+      }
+      if (s2 > 0) {
+        pawFar = -48 * up - s2 * 62; pawFxF = F[1] + 5 * up + s2 * 9;
+        P.bodyRot = -0.52 * up - s2 * 0.06; P.sqy = 0.04 * up + s2 * 0.05;
+      }
+      // between swats the paws hover at chest height, trembling with excitement
+      const tremble = (T > SWAT1END && T < SWAT2) ? Math.sin(T * 40) * 2.2 : 0;
+      P.legs[0].fx = pawFxN; P.legs[0].fy = pawNear + tremble;
+      P.legs[1].fx = pawFxF; P.legs[1].fy = pawFar - tremble;
+      P.mouth = (s1 > 0.4 || s2 > 0.4) ? 'open' : 'closed';
+      if (T > SWAT2END && T <= DROP) P.bobY = Math.sin(T * 9) * 1.2;   // straining
+      if (T > DROP) {                                // not caught — all fours again
+        const q = Math.min(1, (T - DROP) / 0.4);
+        const d = 1 - q * q;
+        P.bodyY = -10 * d; P.bodyRot = -0.52 * d;
+        P.headY = -15 * d; P.headX = 2 * d; P.headRot = -0.24 * d;
+        P.sqx = -0.05 * d; P.sqy = 0.04 * d;
+        P.legs[0].fx = F[0] + 6 * d; P.legs[0].fy = -52 * d;
+        P.legs[1].fx = F[1] + 5 * d; P.legs[1].fy = -48 * d;
+        P.tailMode = 'sway';
+      }
       break;
     }
     case 'bop': {       // music playing: sway to the beat

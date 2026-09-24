@@ -272,12 +272,13 @@ try {
     const zone = await findPage('zone-select.html');
     ok('screenshot-style zone overlay opened', !!zone);
     if (zone) {
-      await zone.waitForFunction('window.__zoneCfg && window.__zoneCfg().union', null, { timeout: 8000 }).catch(() => {});
+      // v3.14: per-display overlays — the page now receives origin/width/height
+      await zone.waitForFunction('window.__zoneCfg && window.__zoneCfg().origin', null, { timeout: 8000 }).catch(() => {});
       const cfgOk = await zone.evaluate(() => {
         const c = window.__zoneCfg();
-        return c && c.union && c.union.width > 0;
+        return c && c.origin && Number.isFinite(c.origin.x) && c.width > 0 && c.height > 0;
       });
-      ok('zone overlay received the display union', !!cfgOk);
+      ok('zone overlay received its display bounds', !!cfgOk);
       // the mouseup triggers finishZone, which closes the overlay — the page
       // can vanish while this evaluate is still resolving, so tolerate that
       try {

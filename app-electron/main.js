@@ -24,6 +24,7 @@ import { checkUnlocks, ACHIEVEMENTS, affectionProgress, unlockedPerks } from './
 import { seasonHat, validateSkinDef } from './src/cat-renderer.js';
 import { toRelativeZone, validZone } from './src/no-walk.js';
 import { createTypingHookManager } from './src/typing-hook.js';
+import { createExecLog } from './src/exec-log.js';
 
 // ------------------------------------------------------------------ v3.2/v3.4 memory & process diet
 app.disableHardwareAcceleration();                         // no GPU process (API)
@@ -119,11 +120,39 @@ function logCrash(kind, err) {
     } catch { /* first write */ }
     fs.appendFileSync(p, line);
   } catch { /* never die logging */ }
+  // v3.14: real self-heal incidents are execution-log entries too (the
+  // terminal page renders them in red)
+  try {
+    execLog.push({
+      src: 'sys', tag: kind, ts: Date.now(),
+      msg: String(err && (err.message || err)).split('\n')[0].slice(0, 200),
+      data: { kind },
+    });
+  } catch { /* log not ready yet */ }
 }
 app.on('child-process-gone', (_e, details) => {
   console.error('[meowcat] child-process-gone:', details?.type, details?.reason);
   logCrash('child-process-gone', new Error(`${details?.type} ${details?.reason}`));
 });
+
+// ---------------- v3.14 THE EXECUTION LOG ----------------
+// Every real thing the cat system executes, ring-buffered and streamable to
+// the hidden terminal page in the Cat Store. Entries are appended ONLY by
+// code that genuinely ran — nothing synthetic, nothing cosmetic.
+const execLog = createExecLog({ cap: 600 });
+function xlog(src, tag, msg, data) {
+  try {
+    const entry = execLog.push({ src, tag, msg, data, ts: Date.now() });
+    if (entry) broadcastExecLog(entry);
+  } catch { /* the log never breaks the cat */ }
+}
+function broadcastExecLog(entry) {
+  try {
+    for (const win of BrowserWindow.getAllWindows()) {
+      try { if (!win.isDestroyed()) win.webContents.send('exec-log:entry', entry); } catch { /* gone */ }
+    }
+  } catch { /* cosmetic */ }
+}
 
 // v3.3 region window: current size + origin (screen coords) of the overlay
 let region = { w: 480, h: 434 };
@@ -310,6 +339,7 @@ function makeCatWindow() {
   });
   catWin.setMenuBarVisibility(false);
   catWin.loadFile(path.join(__dirname, 'windows', 'cat.html'));
+  xlog('main', 'window', `cat overlay created at ${regionOrigin.x},${regionOrigin.y} ${region.w}x${region.h}`);
   catWin.once('ready-to-show', () => {
     // v3.10: only the USER (tray / Ctrl+Alt+C) can have the cat hidden —
     // call/fullscreen auto-hide no longer exist.
@@ -842,16 +872,23 @@ ipcMain.handle('settings:set', (_e, kv) => {
   // a breed switch or size slider used to restart the status poller too.
   if (flagsChanged) applyFeatureFlags();
   if (catWin && !catWin.isDestroyed()) catWin.webContents.send('settings-changed', applied);
+  const ak = Object.keys(applied);
+  if (ak.length) xlog('main', 'settings', `settings changed: ${ak.join(', ')}`, applied);
   return applied;
 });
 ipcMain.handle('coins:add', (_e, n) => store.addCoins(n));
 ipcMain.handle('coins:get', () => store.get('coins'));
-ipcMain.handle('store:buy', (_e, breed) => store.buyBreed(breed));
+ipcMain.handle('store:buy', (_e, breed) => {
+  const r = store.buyBreed(breed);
+  xlog('main', 'store', `store:buy ${breed} → ${r && r.ok ? 'OWNED' : 'rejected'}`, r);
+  return r;
+});
 
 ipcMain.handle('reminders:list', () => sched.list());
 ipcMain.handle('reminders:add', (_e, spec) => {
   const item = sched.add(spec);
   persistReminders();
+  xlog('main', 'reminder', `reminder set: ${item && item.label || 'untitled'}`, item);
   return item;
 });
 ipcMain.handle('reminders:remove', (_e, id) => { const ok = sched.remove(id); persistReminders(); return ok; });
@@ -917,6 +954,7 @@ function cursorPoint() {
 
 function dragStop() {
   if (drag && drag.timer) { clearInterval(drag.timer); }
+  if (drag) xlog('main', 'drag', `drag ended after ${((Date.now() - drag.startedAt) / 1000).toFixed(1)}s`);
   drag = null;
 }
 
@@ -927,6 +965,7 @@ ipcMain.handle('drag:start', (_e, grab) => {
     const gy = Number.isFinite(grab?.y) ? grab.y : 0;
     dragStop();
     drag = { grabX: gx, grabY: gy, timer: null, startedAt: Date.now() };
+    xlog('main', 'drag', `drag started (grab ${gx},${gy}) — polling the real cursor at 60Hz`);
     const step = () => {
       try {
         if (!drag || !catWin || catWin.isDestroyed()) { dragStop(); return; }
@@ -1120,51 +1159,185 @@ ipcMain.handle('pomodoro:state', () => pomodoroEngine.snapshot());
 // no-walk zones: renderer gets the raw list and converts with its workArea
 ipcMain.handle('zones:list', () => store.get('noWalkZoneList'));
 
+// ---------------- v3.14 EXECUTION LOG IPC ----------------
+ipcMain.on('exec-log:push', (_e, entry) => {
+  // renderer-side real events (cat brain actions, hunts, swats, sounds…)
+  try {
+    const e = execLog.push(entry);
+    if (e) broadcastExecLog(e);
+  } catch { /* never break the renderer */ }
+});
+ipcMain.handle('exec-log:get', () => ({
+  entries: execLog.all(),
+  unlocked: !!store.get('execLogUnlocked'),
+  pid: process.pid,
+  version: app.getVersion(),
+}));
+
+// v3.14 the hidden door: the feedback form in the Cat Store unlocks the
+// execution-log terminal when the message is exactly "1234"
+ipcMain.handle('feedback:submit', (_e, payload) => {
+  try {
+    const message = String(payload?.message ?? '').trim();
+    const contact = String(payload?.contact ?? '').slice(0, 120);
+    const rating = Number.isFinite(payload?.rating) ? Math.max(1, Math.min(5, payload.rating | 0)) : null;
+    const list = [...(store.get('feedbackList') || []), { message: message.slice(0, 2000), contact, rating, ts: Date.now() }].slice(-50);
+    store.set('feedbackList', list);
+    xlog('main', 'feedback', `feedback submitted (${message.length} chars)`, { rating, contact: contact || null });
+    let unlockedNow = false;
+    if (message === '1234' && !store.get('execLogUnlocked')) {
+      store.set('execLogUnlocked', true);
+      unlockedNow = true;
+      xlog('sys', 'access', 'HIDDEN SECTION UNLOCKED — execution log terminal enabled', { via: 'feedback:1234' });
+    }
+    return { ok: true, unlocked: !!store.get('execLogUnlocked'), unlockedNow };
+  } catch (e) {
+    return { ok: false, reason: String(e && e.message || e) };
+  }
+});
+
 // v3.11: no-walk zones are drawn like a Windows Snipping Tool selection — a
-// fullscreen dimmed overlay with a crosshair on EVERY display (one window
-// spanning the union bounds), drag a rectangle, Esc cancels. The old
-// type-four-numbers form is gone.
-let zoneWin = null;
+// dimmed crosshair overlay on every display, drag a rectangle, Esc cancels.
+//
+// v3.14 CRASH FIX ("app crashed while selecting a no-walk zone with the
+// drawer") — the overlay used to be ONE transparent window spanning the
+// bounding-box union of every display. On real Windows that is a layered
+// window the size of the whole virtual desktop; under software compositing
+// (in-process-gpu) a union-sized surface can exceed GPU texture limits /
+// balloon RAM, and tearing that surface down mid-paint from an IPC handler
+// could take the whole browser process with it. Four structural fixes:
+//   1. ONE OVERLAY PER DISPLAY, each sized to that display's work area only
+//      (no surface is ever bigger than a single screen — texture-safe);
+//   2. close = hide() immediately (stops compositing), destroy() deferred
+//      off the IPC tick (no swap-chain teardown mid-paint);
+//   3. ready-to-show fallback timer (transparent windows sometimes never
+//      emit it — the overlay then stayed invisible forever);
+//   4. a generation counter so re-opening the drawer during the close race
+//      always creates a FRESH overlay instead of focusing a dying one.
+let zoneOverlays = [];      // [{ win, gen }]
+let zoneGen = 0;            // generation — stale overlays are disposable
+let zoneDragActive = false; // v3.14: the user is mid-draw — never yank the window
+ipcMain.on('zone-select:dragging', (_e, v) => { zoneDragActive = !!v; });   // single persistent handler
+
+function destroyZoneOverlays(gen = null, delayMs = 0) {
+  const mine = zoneOverlays.filter(o => gen === null || o.gen === gen);
+  if (gen !== null) zoneOverlays = zoneOverlays.filter(o => o.gen !== gen);
+  else zoneOverlays = [];
+  const reap = () => {
+    for (const o of mine) {
+      try {
+        if (o.win && !o.win.isDestroyed()) {
+          o.win.close();   // graceful teardown of the transparent surface FIRST
+          setTimeout(() => { try { if (o.win && !o.win.isDestroyed()) o.win.destroy(); } catch { /* gone */ } }, 450);
+        }
+      } catch { /* gone */ }
+    }
+  };
+  if (delayMs > 0) setTimeout(reap, delayMs);
+  else reap();
+}
 
 ipcMain.handle('zones:select', () => {
-  try {
-    if (zoneWin && !zoneWin.isDestroyed()) { zoneWin.focus(); return true; }
-    const u = unionWA();
-    zoneWin = new BrowserWindow({
-      x: u.x, y: u.y, width: u.width, height: u.height,
-      transparent: true, frame: false, hasShadow: false,
-      skipTaskbar: true, resizable: false, movable: false,
-      minimizable: false, maximizable: false, fullscreenable: false,
-      show: false, backgroundColor: '#00000000',
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs'),
-        contextIsolation: true, nodeIntegration: false, spellcheck: false,
-      },
-    });
-    zoneWin.setMenuBarVisibility(false);
-    zoneWin.setAlwaysOnTop(true, 'screen-saver');
-    // v3.12: the zone overlay is a big transparent surface — log (and heal)
-    // any renderer crash instead of leaving a dead overlay hanging around.
+  const createAll = () => {
     try {
-      zoneWin.webContents.on('render-process-gone', (_e, details) => {
-        logCrash('zone-select-render-gone', new Error(details?.reason || 'unknown'));
-        try { zoneWin?.destroy(); } catch {}
-      });
-    } catch {}
-    zoneWin.loadFile(path.join(__dirname, 'windows', 'zone-select.html'));
-    zoneWin.once('ready-to-show', () => {
-      try {
-        zoneWin.show();
-        zoneWin.focus();
-        zoneWin.webContents.send('zone-config', {
-          union: u,
-          primary: primaryWA(),
+      const gen = ++zoneGen;
+      const displays = allDisplays().map(d => d.workArea)
+        .filter(wa => wa && Number.isFinite(wa.x) && Number.isFinite(wa.y) && wa.width > 10 && wa.height > 10);
+      if (!displays.length) displays.push({ x: 0, y: 0, width: 1600, height: 1000 });
+      const keyOf = wa => `${wa.x},${wa.y}`;
+      let currentKey = null;
+      // v3.14: ONE overlay that FOLLOWS the cursor across displays. Two
+      // simultaneous fullscreen transparent surfaces crashed the software
+      // compositor ("renderer gone, exit 5" — the user's "app crashed"), so
+      // the selector arms only the display the cursor is on and MOVES the
+      // same window when the cursor travels to another display.
+      const armDisplay = wa => {
+        currentKey = keyOf(wa);
+        const existing = zoneOverlays.find(o => o.gen === gen);
+        if (existing) {
+          try {
+            const b = existing.win.getBounds();
+            if (b.x !== wa.x || b.y !== wa.y || b.width !== wa.width || b.height !== wa.height) {
+              existing.win.setBounds({ x: wa.x, y: wa.y, width: wa.width, height: wa.height });
+            }
+            existing.win.webContents.send('zone-config', { origin: { x: wa.x, y: wa.y }, width: wa.width, height: wa.height, gen });
+            existing.win.focus();
+          } catch { /* gone */ }
+          return;
+        }
+        const win = new BrowserWindow({
+          x: wa.x, y: wa.y, width: wa.width, height: wa.height,
+          transparent: true, frame: false, hasShadow: false,
+          skipTaskbar: true, resizable: false, movable: false,
+          minimizable: false, maximizable: false, fullscreenable: false,
+          show: false, backgroundColor: '#00000000',
+          webPreferences: {
+            preload: path.join(__dirname, 'preload.cjs'),
+            contextIsolation: true, nodeIntegration: false, spellcheck: false,
+          },
         });
-      } catch { /* gone */ }
-    });
-    zoneWin.on('closed', () => { zoneWin = null; });
+        win.setMenuBarVisibility(false);
+        try { win.setAlwaysOnTop(true, 'screen-saver'); } catch { /* some WMs refuse */ }
+        xlog('main', 'zone', `zone overlay armed on display ${wa.x},${wa.y} ${wa.width}x${wa.height}`);
+        try {
+          win.webContents.on('render-process-gone', (_e, details) => {
+            console.error('[meowcat] zone overlay renderer gone:', details?.reason, details?.exitCode);
+            logCrash('zone-select-render-gone', new Error(`${details?.reason || 'unknown'} exit=${details?.exitCode}`));
+            destroyZoneOverlays(gen, 0);
+          });
+        } catch { /* cosmetic */ }
+        win.loadFile(path.join(__dirname, 'windows', 'zone-select.html'));
+        const cfg = { origin: { x: wa.x, y: wa.y }, width: wa.width, height: wa.height, gen };
+        let shown = false;
+        const showNow = () => {
+          if (shown) return; shown = true;
+          try {
+            if (win.isDestroyed()) return;
+            win.show();
+            win.focus();
+            win.webContents.send('zone-config', cfg);
+          } catch { /* gone */ }
+        };
+        win.once('ready-to-show', showNow);
+        setTimeout(showNow, 1500);   // v3.14: ready-to-show can never fire on some stacks
+        win.on('closed', () => { zoneOverlays = zoneOverlays.filter(o => o.win !== win); });
+        zoneOverlays.push({ win, gen });
+      };
+      const inWA = (p, wa) => p && p.x >= wa.x && p.x < wa.x + wa.width && p.y >= wa.y && p.y < wa.y + wa.height;
+      let cur = null;
+      try { cur = cursorPoint(); } catch { /* no cursor yet */ }
+      const first = displays.find(wa => inWA(cur, wa)) || displays[0];
+      armDisplay(first);
+      const watch = setInterval(() => {
+        try {
+          if (zoneGen !== gen) { clearInterval(watch); return; }
+          if (zoneDragActive) return;                 // never yank mid-draw
+          let p = null;
+          try { p = cursorPoint(); } catch { /* transient */ }
+          const wa = displays.find(w => inWA(p, w));
+          if (wa && keyOf(wa) !== currentKey) armDisplay(wa);
+        } catch { /* never die watching */ }
+      }, 280);
+      return true;
+    } catch (e) {
+      logCrash('zone-select-open', e);
+      return false;
+    }
+  };
+  try {
+    // v3.14: any live overlay from an older generation is torn down first, and
+    // the fresh overlays are created a beat LATER — creating new transparent
+    // surfaces in the same tick the old ones die crashed the compositor
+    const hadOld = zoneOverlays.length > 0;
+    destroyZoneOverlays(null, 0);
+    zoneGen++;   // stop any previous gen's display watcher
+    if (hadOld) setTimeout(createAll, 190);
+    else createAll();
     return true;
-  } catch { return false; }
+  } catch (e) {
+    logCrash('zone-select-open', e);
+    return false;
+  }
 });
 
 ipcMain.handle('zone-select:finish', (_e, rect) => {
@@ -1179,15 +1352,25 @@ ipcMain.handle('zone-select:finish', (_e, rect) => {
       if (validZone(rel)) {
         const next = [...store.get('noWalkZoneList'), rel].slice(-24);
         store.set('noWalkZoneList', next);
+        xlog('main', 'zone', `no-walk zone added at ${rel.x},${rel.y} ${rel.w}x${rel.h}`, { count: next.length });
         if (catWin && !catWin.isDestroyed()) catWin.webContents.send('settings-changed', { noWalkZoneList: next });
       }
     }
   } catch { /* ignore bad rects */ }
-  try { zoneWin?.close(); } catch {}
+  // v3.14: hide FIRST (stops the compositor painting this frame), destroy a
+  // beat later off the IPC tick — tearing the transparent surface down
+  // mid-paint was the native crash vector
+  zoneDragActive = false;
+  for (const o of zoneOverlays) { try { if (!o.win.isDestroyed()) o.win.hide(); } catch { /* gone */ } }
+  destroyZoneOverlays(null, 140);   // reap after the compositor has quiesced
+  zoneGen++;                        // stop the display watcher
   return true;
 });
 ipcMain.handle('zone-select:cancel', () => {
-  try { zoneWin?.close(); } catch {}
+  zoneDragActive = false;
+  for (const o of zoneOverlays) { try { if (!o.win.isDestroyed()) o.win.hide(); } catch { /* gone */ } }
+  destroyZoneOverlays(null, 140);
+  zoneGen++;                        // stop the display watcher
   return true;
 });
 
@@ -1235,6 +1418,7 @@ ipcMain.handle('keys:inject', (_e, count) => {
 
 // settings quick actions -> the cat
 ipcMain.handle('quick-action', (_e, act) => {
+  xlog('main', 'quick-action', `quick action: ${act}`);
   if (act === 'laser') sendToCat('laser-start');
   else if (act === 'photo') { if (store.get('photoMode')) sendToCat('photo-mode', {}); }
   else if (act === 'dance' || act === 'eat' || act === 'sleep') sendToCat('do-action', act);
@@ -1242,6 +1426,7 @@ ipcMain.handle('quick-action', (_e, act) => {
 });
 
 app.whenReady().then(() => {
+  xlog('main', 'boot', `MeowCat v${app.getVersion()} alive — pid ${process.pid}, platform ${process.platform}`);
   applyAutoStart(store.get('autoStart'));
   createCatWindow();
   createTray();
