@@ -34,11 +34,11 @@ Smokey Kitten, Midnight Kitten — plus Sakura, Mochi, the waddling panda and fr
 | 🎵 **Hear your music** | Bops to the beat while Spotify/YouTube plays; new track = excited hop (Windows SMTC) |
 | 💻 **Judge your job** | Loafs on your code editor while you type; happy-dances when your build file goes green, mopes when it's red |
 | ⌨️ **Chase your workload** | Fast typing burst → pounces toward the keyboard · mouse idle nearby → classic red-dot stalking (it remembers) |
-| 🔊 **Speak cat** | Quick tap = one natural single meow · double-click = the classic meow · at random times it meows on its own — sometimes a whole burst (toggle in Settings → Sounds, with an **All sounds** master switch) |
+| 🔊 **Speak cat** | Quick tap = one natural single meow · double-click = the classic meow (sound only — nothing opens) · at random times it meows on its own — sometimes a whole burst. Every sound has its own toggle in Settings → Sounds, under an **All sounds** master switch; random meows never play while a click meow is sounding, and the cat walks in silence (footsteps removed) |
 | 🔋 **Save the planet** | Battery under 20% → curls into a ball. When you plug in, it pretends that was the plan all along |
 | ❤️ **Be loved** | Pet it (hold) → purrs + affection meter → unlocks rainbow emotes and, at Lv.4, a boot-time greeting |
 | 🐈 **Have friends** | Companion cat mode: nuzzling, play-fighting, and cursor-related rivalry |
-| 🖱️ **Go anywhere** | Drag it across your whole desktop — including **onto your 2nd monitor** — and it stays visible the entire way |
+| 🖱️ **Go anywhere** | Drag it across your whole desktop — including **onto your 2nd monitor** — and it stays visible the entire way. It also **walks there by itself**: strolling past a screen edge hops the camera and the cat keeps going on the next monitor |
 | 📸 **Be famous** | Photo mode (Ctrl+Alt+P) freezes the pose and exports a transparent PNG sticker |
 | 🏆 **Brag** | 8 achievements — "Purring Machine" (100 pets), "Dot Exterminator" (5 laser catches)… |
 | 🍅 **Manage your time** | Pomodoro companion: supervises focus rounds, celebrates with a dance when you finish |
@@ -70,10 +70,10 @@ No-walk zone selection looks like taking a screenshot — because it should:
 
 ## Install
 
-1. Grab `MeowCat-3.11.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
+1. Grab `MeowCat-3.12.0-portable.exe` from [Releases](https://github.com/mythos0/meow/releases).
 2. Run it. A ginger kitten appears. That's the whole setup.
 3. Right-click the cat → **Settings…**, or double-click it. Tray icon works too.
-4. **Click the cat** → one natural single meow. Double-click → the classic meow + Settings.
+4. **Click the cat** → one natural single meow. Double-click → the classic meow, sound only. Hold → purring. Right-click → the full menu.
 
 | | |
 |---|---|

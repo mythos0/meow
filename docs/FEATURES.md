@@ -1,4 +1,4 @@
-# MeowCat v3.11 — Feature Reference
+# MeowCat v3.12 — Feature Reference
 
 A procedural desktop pet for Windows 11. Everything about the cat is drawn by code
 (see [RENDERING.md](RENDERING.md)); this page lists the product-level features.
@@ -292,3 +292,42 @@ lands on), plus the existing reminders, auto-start, topmost enforcement and warm
   installer scripts) were removed from the repository; the README screenshots are regenerated
   from the real running app.
 
+## 15. v3.12 — multi-monitor roaming, sound discipline, the hard quit gate
+
+* **Main-driven drag.** While you hold the cat, main polls the TRUE global cursor
+  (`screen.getCursorScreenPoint`, ~60Hz) and streams cat position + window origin to the
+  renderer. The old renderer-mousemove follow dies the instant the cursor leaves the overlay —
+  exactly what happens at a monitor boundary — which is why dragging onto the 2nd monitor
+  failed on real machines. The renderer keeps a chase fallback for a stalled stream, and drag
+  intent (tap vs drag) comes from the authoritative cursor stream, never from client mousemove
+  noise (hover-recompute events under a moving window used to swallow quick taps).
+* **The lane hop — the cat WALKS onto the 2nd monitor.** Ground strolls still never move the
+  window per-frame (the v3.11 anti-flicker architecture). When the stroller comes within 130px
+  of the lane's edge and re-centering would put the window somewhere new, ONE awaited window
+  move re-centers the lane and the stroll continues — the cat visibly crosses the monitor seam.
+  Single-display machines: the union IS the lane, so no hop ever fires and walking stays 100%
+  stationary.
+* **Sound discipline.** Three independent voices — the click meow, the double-click classic
+  voice (one element per variant, no mid-play `src` switching, which was the cancel-churn
+  behind "the random sound tries to play and cancels 2-3 times"), and a 3-slot ambient pool.
+  Random meows are SKIPPED (never cut) while a click meow sounds; a user click stops the
+  ambient voice first. Footstep sounds (patter, run-patter, glass paw-taps) are removed — the
+  cat walks in silence. Settings → Sounds now has a toggle for everything: All sounds (master),
+  Single-click meow, Double-click meow, Random meows, Contextual sounds, Reminder chime.
+* **The hard quit gate.** `before-quit` REVERSES any quit that was not preceded by the explicit
+  user Quit action (tray / context menu) and journals the culprit's stack trace into
+  `meowcat-crash.log`; `app.exit` and `process.exit` are patched to the same gate;
+  SIGINT/SIGTERM/SIGHUP are ignored until the user quits (the cat outlives its terminal);
+  window creation retries forever; a 5s heartbeat watchdog detects a hung or blank overlay
+  (paint counter frozen while awake+visible → DWM hide/show kick → reload) and repairs it;
+  `did-fail-load` retries the page load on its own.
+* **Zone base fix.** No-walk zones are stored relative to the display UNION — the same base the
+  renderer converts them back with — so a zone drawn on any monitor lands exactly where drawn
+  (they used to be primary-relative and missed on multi-monitor setups).
+* **Chase polish.** The chase camera's effective interval is clamped to one painted frame, so an
+  idle-throttle burst can no longer produce a single 60-90px camera leap; ground strolls never
+  chase horizontally (the lane hop owns horizontal coverage).
+* **E2E on a simulated dual display.** `e2e-dual.mjs` boots the real app with two virtual
+  displays (`MEOWCAT_FAKE_DISPLAYS`) and a deterministic cursor (`MEOWCAT_FAKE_CURSOR`) and
+  proves the drag across the seam, the auto-walk hop, the zone base, the sound toggles + mutual
+  exclusion, the silent walk, and the quit gate — 29 checks.

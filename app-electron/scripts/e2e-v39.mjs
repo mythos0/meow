@@ -73,14 +73,17 @@ const chase = await cat.evaluate(async () => {
   const pl = b.platforms[0];
   // sample the region origin EVERY animation frame while we orchestrate
   // stroll → zoomies → platform jump → fall, i.e. every slide-prone moment
-  const deltas = [];
-  let last = { ...window.__region() };
+  // v3.12: assert the TRUE contract — the camera's SPEED cap (px/s) — instead
+  // of per-frame px, which silently depends on the sandbox's frame rate.
+  const samples = [];
+  let last = { ...window.__region(), t: performance.now() };
   let running = true;
   (function sample() {
     if (!running) return;
+    const t = performance.now();
     const r = window.__region();
-    deltas.push(Math.hypot(r.x - last.x, r.y - last.y));
-    last = { ...r };
+    samples.push({ d: Math.hypot(r.x - last.x, r.y - last.y), ms: Math.max(1, t - last.t) });
+    last = { ...r, t };
     requestAnimationFrame(sample);
   })();
   const seq = async () => {
@@ -96,12 +99,12 @@ const chase = await cat.evaluate(async () => {
   await seq();
   running = false;
   await new Promise(r => setTimeout(r, 100));
-  deltas.sort((a, b2) => a - b2);
-  const p99 = deltas[Math.floor(deltas.length * 0.99)];
-  return { n: deltas.length, max: Math.round(deltas[deltas.length - 1]), p99: Math.round(p99) };
+  const rates = samples.filter(x => x.ms >= 4).map(x => x.d / x.ms * 1000).sort((a, b2) => a - b2);
+  const p99 = rates[Math.floor(rates.length * 0.99)];
+  return { n: samples.length, p99rate: Math.round(p99), maxRate: Math.round(rates[rates.length - 1]) };
 });
-ok('chase camera: region origin never teleports (per-frame delta capped)',
-  chase.n > 200 && chase.p99 <= 20 && chase.max <= 70,
+ok('chase camera: region origin never teleports (camera rate capped at ~900px/s)',
+  chase.n > 200 && chase.p99rate <= 990 && chase.maxRate <= 1050,
   JSON.stringify(chase));
 
 // ---------------- 2. cat stays fully visible during a HIGH (legal, 400px) jump ----------------

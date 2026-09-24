@@ -27,7 +27,7 @@
 <script type="module">
 import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAnchor, CAT_BBOX, registerSkin } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
-import { computeRegionSize, initialOrigin, slideIfNeeded, companionLeash, chaseStep, clampOrigin, CHASE_V, DRAG_CHASE_V, dragChaseTarget, unionWorkAreas } from '../src/region.js';
+import { computeRegionSize, initialOrigin, slideIfNeeded, companionLeash, chaseStep, clampOrigin, CHASE_V, DRAG_CHASE_V, dragChaseTarget, dragWindowTarget, laneHopTarget, unionWorkAreas } from '../src/region.js';
 import { batteryCrisis } from '../src/system-reactions.js';
 import { unlockedPerks } from '../src/achievements.js';
 import { zonesToScreen } from '../src/no-walk.js';
@@ -102,59 +102,96 @@ function play(name, vol = 0.9) {
   } catch {}
 }
 
-// v3.8: ONE meow voice. Clicking the cat used to fan out through the 3-slot
-// audio pool AND across 3 different meow samples, so rapid petting stacked
-// several overlapping meows (reported as "overlapping clicks make overlapping
-// meow sound"). All meow variants now share a single exclusive element:
-// starting a new meow stops the previous one, so no matter how many clicks
-// land, exactly one meow is audible at any moment.
-const MEOW_VARIANTS = ['meow_real', 'meow_real2', 'meow_real3'];
-let meowVoice = null;
-function playMeow(vol = 0.95) {
-  if (!S.sounds) return;
-  try {
-    if (!meowVoice) {
-      meowVoice = audio[MEOW_VARIANTS[0]].cloneNode();
-      // e2e instrumentation: how many DISTINCT meow elements are playing right
-      // now (a Set — restarts of the same element don't double-count)
-      window.__meowEls = new Set();
-      meowVoice.addEventListener('play', () => window.__meowEls.add(meowVoice));
-      meowVoice.addEventListener('ended', () => window.__meowEls.delete(meowVoice));
-    }
-    const pick = MEOW_VARIANTS[Math.floor(Math.random() * MEOW_VARIANTS.length)];
-    if (meowVoice.src.indexOf(`/${pick}.wav`) === -1) meowVoice.src = `../sounds/${pick}.wav`;
-    meowVoice.volume = Math.max(0, Math.min(1, vol));
-    try { meowVoice.currentTime = 0; } catch {}
-    meowVoice.play().catch(() => {});
-    window.__lastPlay = { name: pick, t: performance.now() / 1000, exclusive: 'meow' };
-  } catch {}
+// v3.12 SOUND ARCHITECTURE — three independent voices, ZERO cancellation.
+// The old design played random/ambient meows through the SAME exclusive
+// element as the classic voice and switched its src mid-playback: every new
+// meow aborted the previous one ("the double click sound tries to play and
+// cancels 2-3 times, and then playing — it is messy"). Now:
+//   · CLICK voice        — the natural single meow, dedicated element
+//   · DOUBLE-CLICK voice — the classic variants, one element per variant
+//   · AMBIENT voice      — a 3-slot rotating pool of natural meows
+// Mutual exclusion (user rule): while a click/double-click meow is sounding,
+// ambient meows are SKIPPED — never stacked, never cut. A user click first
+// silences the ambient voice, so the two can never fight.
+const CLICK_KEY = 'meow_single';
+const DBL_KEYS = ['meow_real', 'meow_real2', 'meow_real3'];
+let voiceClick = null;
+let voiceDbl = [];          // one element per classic variant
+let ambientPool = [];       // 3 rotating natural-meow clones
+let ambientIdx = 0;
+const activeVoices = new Set();   // every voice element currently audible
+
+function buildVoices() {
+  voiceClick = audio[CLICK_KEY] ? audio[CLICK_KEY].cloneNode() : null;
+  voiceDbl = DBL_KEYS.filter(k => audio[k]).map(k => audio[k].cloneNode());
+  ambientPool = voiceClick ? [voiceClick.cloneNode(), voiceClick.cloneNode(), voiceClick.cloneNode()] : [];
+  for (const el of [voiceClick, ...voiceDbl, ...ambientPool].filter(Boolean)) {
+    el.preload = 'auto';
+    el.addEventListener('play', () => activeVoices.add(el));
+    el.addEventListener('ended', () => activeVoices.delete(el));
+    el.addEventListener('pause', () => { if (el.ended || (el.currentTime || 0) <= 0.01) activeVoices.delete(el); });
+  }
+  window.__meowEls = activeVoices;   // e2e instrumentation (kept from v3.8)
 }
 
-// v3.11: THE SINGLE-CLICK VOICE. One quick tap on the cat plays ONE natural
-// single meow — a dedicated real-cat recording (meow_single.wav, fetched and
-// normalized), distinct from the double-click voice below which keeps the
-// exact v3.8 variant rotation the user asked to preserve.
+const elPlaying = el => !!el && !el.paused && !el.ended;
+// a USER meow (click / double-click) is sounding right now
+function meowBusy() { return elPlaying(voiceClick) || voiceDbl.some(elPlaying); }
+
+function stopAmbient() { for (const el of ambientPool) { try { el.pause(); } catch {} } }
+
+// v3.11 kept: ONE natural single meow per quick tap (meow_single.wav).
+// v3.12: dedicated element + its own toggle + it stops ambient meows first.
 function playMeowSingle(vol = 0.95) {
-  if (!S.sounds || !audio.meow_single) return;
+  if (!S.sounds || !S.soundClickMeow || !voiceClick) return;
   try {
-    const a = audio.meow_single;
-    a.volume = Math.max(0, Math.min(1, vol));
-    try { a.currentTime = 0; } catch {}
-    a.play().catch(() => {});
+    stopAmbient();
+    voiceClick.volume = Math.max(0, Math.min(1, vol));
+    try { voiceClick.currentTime = 0; } catch {}
+    voiceClick.play().catch(() => {});
     window.__lastPlay = { name: 'meow_single', t: performance.now() / 1000, exclusive: 'meow' };
   } catch {}
 }
 function stopMeowSingle() {
+  try { if (voiceClick) { voiceClick.pause(); try { voiceClick.currentTime = 0; } catch {} } } catch {}
+}
+
+// The DOUBLE-CLICK voice — the classic v3.8 variant rotation, kept exactly
+// as it sounded (user request), now with dedicated elements: rapid restarts
+// replace each other cleanly instead of aborting a pending src load.
+function playMeow(vol = 0.95) {
+  if (!S.sounds || !S.soundDblClickMeow || !voiceDbl.length) return;
   try {
-    const a = audio.meow_single;
-    if (a) { a.pause(); try { a.currentTime = 0; } catch {} }
+    stopMeowSingle();
+    stopAmbient();
+    const idx = Math.floor(Math.random() * voiceDbl.length);
+    const el = voiceDbl[idx];
+    for (const other of voiceDbl) if (other !== el) { try { other.pause(); } catch {} }
+    el.volume = Math.max(0, Math.min(1, vol));
+    try { el.currentTime = 0; } catch {}
+    el.play().catch(() => {});
+    window.__lastPlay = { name: DBL_KEYS[idx], t: performance.now() / 1000, exclusive: 'meow' };
   } catch {}
 }
 
-// v3.11: AMBIENT MEOWS — at random times the cat meows on its own: usually a
-// natural single meow, occasionally (30%) a continuous burst of 2–4 meows at
-// random spacing. Sleeping cats don't meow. Runs only while sounds + the new
-// "Random meows" setting are both on.
+// AMBIENT voice — one natural meow from the rotating pool. A note never
+// cancels another (no src switching, no shared element), which is what made
+// random meows sound broken before.
+function ambientNote(vol = 0.75) {
+  if (!ambientPool.length) return;
+  const el = ambientPool[ambientIdx++ % ambientPool.length];
+  try {
+    el.volume = Math.max(0, Math.min(1, vol));
+    try { el.currentTime = 0; } catch {}
+    el.play().catch(() => {});
+    window.__lastPlay = { name: 'meow_single', t: performance.now() / 1000, exclusive: 'ambient' };
+  } catch {}
+}
+
+// v3.11 kept: AMBIENT MEOWS at random times — usually one natural meow,
+// occasionally (30%) a burst of 2–4. v3.12: every note is SKIPPED (not cut)
+// while a user meow is sounding, so random meows can never trample the
+// click voice or spam cancel/start cycles.
 let ambientMeowTimer = null;
 function scheduleAmbientMeow() {
   clearTimeout(ambientMeowTimer);
@@ -163,17 +200,17 @@ function scheduleAmbientMeow() {
 }
 function fireAmbientMeow() {
   try {
-    if (S.sounds && S.randomMeows && brain && !frozen && !['sleep', 'curl'].includes(brain.state)) {
+    if (S.sounds && S.randomMeows && brain && !frozen && !['sleep', 'curl'].includes(brain.state) && !meowBusy()) {
       if (Math.random() < 0.3) {
         // continuous meowing: a short burst at random spacing
         const n = 2 + Math.floor(Math.random() * 3);   // 2–4
         let t = 0;
         for (let i = 0; i < n; i++) {
-          setTimeout(() => { if (S.sounds && S.randomMeows) playMeow(0.8); }, t);
+          setTimeout(() => { if (S.sounds && S.randomMeows && !meowBusy()) ambientNote(0.8); }, t);
           t += 340 + Math.random() * 320;
         }
       } else {
-        playMeowSingle(0.7);
+        ambientNote(0.7);
       }
       if (Math.random() < 0.5) brain.emote = { kind: 'note', t0: brain.t };
     }
@@ -193,6 +230,7 @@ function primaryBounds(s) {
 }
 async function init() {
   loadSounds();
+  buildVoices();   // v3.12: the three independent meow voices
   S = { ...S, ...await window.meow.getSettings() };
   registerCustomSkins(S.customSkins);
   const wa = primaryBounds(S);
@@ -261,6 +299,19 @@ async function init() {
     if (catVisible) { lastTs = performance.now(); rafId = requestAnimationFrame(loop); }
     else cancelAnimationFrame(rafId);
   });
+  // v3.12: liveness watchdog — answer main's ping with the paint counter +
+  // state so main can reload a hung/blank overlay instead of showing the user
+  // a silently vanished cat.
+  window.meow.on('heartbeat', () => {
+    try {
+      window.meow.heartbeatPong({
+        paintCount: window.__paintCount || 0,
+        state: brain ? brain.state : 'boot',
+        visible: catVisible,
+        t: Date.now(),
+      });
+    } catch { /* never die on the watchdog */ }
+  });
   if (S.timeOfDayMood) brain.setTimeBias((new Date().getHours() >= 22 || new Date().getHours() < 7) ? 'night' : 'day');
   rafId = requestAnimationFrame(loop);
 }
@@ -321,11 +372,11 @@ function onSystemEvent(ev) {
     brain.emote = { kind: 'exclaim', t0: brain.t };
   } else if (ev.type === 'build-ok') {
     brain.celebrate();
-    play('chirp', 0.6);
+    sfx('chirp', 0.6);
     showBubble('✅ build green — the cat approves', 3600);
   } else if (ev.type === 'build-bad') {
     brain.mopeNow();
-    play('growl_real', 0.18);
+    sfx('growl_real', 0.18);
     showBubble('❌ build red — the cat is not amused', 3600);
   } else if (ev.type === 'battery') {
     // v3.6.1: real battery samples from main (sysfs / Win32_Battery)
@@ -354,7 +405,7 @@ function applyBatteryCrisis() {
 
 function onMusic(m) {
   if (!brain) return;
-  if (m.action === 'bop') { brain.setMusic(true); play('dance_loop', 0.18); }
+  if (m.action === 'bop') { brain.setMusic(true); sfx('dance_loop', 0.18); }
   else if (m.action === 'excited') { brain.emote = { kind: 'star', t0: brain.t }; }
   else if (m.action === 'stop') { brain.setMusic(false); }
 }
@@ -409,8 +460,8 @@ function onPomodoro(p) {
   if (!brain) return;
   if (p.event === 'focus-done') {
     brain.celebrate();
-    play('coin', 0.7);
-    setTimeout(() => play('chirp', 0.7), 350);
+    sfx('coin', 0.7);
+    setTimeout(() => sfx('chirp', 0.7), 350);
   } else if (p.event === 'break-done') {
     showBubble('☕ break over — the cat is watching 👀', 4000);
   } else if (p.event === 'start' && p.mode === 'focus') {
@@ -420,7 +471,7 @@ function onPomodoro(p) {
 
 function showAchievement(a) {
   showBubble(`${a.icon} Achievement: ${a.name} — ${a.desc}`, 5200);
-  play('coin', 0.8);
+  sfx('coin', 0.8);
   // v3.6.1: perks arrive with the unlock event (main computes them from the
   // fresh unlocked list) — rainbow pets etc. activate the moment they land
   if (a.perks) perks = { ...perks, ...a.perks };
@@ -448,7 +499,7 @@ function startDanceParty() {
     partyCats.push({ brain: b, breed: b.breed, alpha: 0.85 });
   }
   partyUntil = performance.now() / 1000 + 24;
-  play('dance_loop', 0.3);
+  sfx('dance_loop', 0.3);
 }
 
 // ---------------------------------------------------------- photo mode
@@ -550,7 +601,7 @@ function companionBreedTick(dt) {
     }
   }
 }
-function playSfxSafe(n, v) { play(n, v); }
+function playSfxSafe(n, v) { sfx(n, v); }
 
 // ---------------------------------------------------------- region sync
 // v3.8: fully synchronized like the slide path — the canvas origin + size
@@ -630,7 +681,7 @@ function spawnLaser() {
   const y = groundY - 20 - Math.random() * 90;
   laser = { x, y, vx: 0, vy: 0, born: performance.now() / 1000 };
   brain.startLaser(x, y);
-  play('patter', 0.2);
+  sfx('patter', 0.2);
 }
 
 function killLaser() {
@@ -669,15 +720,19 @@ function gagSounds() {
   const st = brain.state;
   if (_gagFlags.state !== st) _gagFlags = { state: st };
   if (st === 'sneeze' && !_gagFlags.blast && brain.stateT >= 0.72) {
-    _gagFlags.blast = true; play('whoosh', 0.55);
+    _gagFlags.blast = true; sfx('whoosh', 0.55);
   }
   if (st === 'hairball' && !_gagFlags.growl) {
-    _gagFlags.growl = true; play('growl_real', 0.22);
+    _gagFlags.growl = true; sfx('growl_real', 0.22);
   }
   if (st === 'zoomies' && !_gagFlags.chirp) {
-    _gagFlags.chirp = true; play('chirp', 0.5);
+    _gagFlags.chirp = true; sfx('chirp', 0.5);
   }
 }
+
+// v3.12: contextual one-shots (jumps, coins, gags, toys) honor the
+// "Contextual sounds" toggle; meows and purrs have their own toggles.
+function sfx(name, vol) { if (!S.contextualSounds) return; play(name, vol); }
 
 // ---------------------------------------------------- v3.5 butterfly
 function scheduleButterfly() {
@@ -710,7 +765,7 @@ function tickButterfly(dt, now) {
   if (Math.hypot(butterfly.x - brain.x, butterfly.y - (brain.baseY - 40)) < 150) {
     if (brain.noticeButterfly(butterfly.x, butterfly.y)) {
       butterfly.vx = (butterfly.vx >= 0 ? 1 : -1) * (150 + Math.random() * 60);
-      play('chirp', 0.4);
+      sfx('chirp', 0.4);
     }
   }
   const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
@@ -759,7 +814,8 @@ function showReminder(item) {
   bubble.textContent = '⏰ ' + item.label;
   bubble.style.display = 'block';
   clampBox(bubble, p.x - 20 - 110 - O.x, p.y - 150 * scale - 70 - O.y);
-  play('chirp', 0.8);
+  // v3.12: the reminder chime has its own toggle in the Sounds settings
+  if (S.sounds && S.soundReminders) play('chirp', 0.8);
   clearTimeout(bubbleTimer);
   bubbleTimer = setTimeout(() => { bubble.style.display = 'none'; }, 8000);
 }
@@ -769,7 +825,9 @@ let overCat = false;
 let dragging = false;
 let dragDX = 0, dragDY = 0;
 let downX = 0, downY = 0;
+let downSX = 0, downSY = 0;   // v3.12: grab point in SCREEN coords (see mousemove)
 let pendingPet = null;
+let dragMoved = false;        // v3.12: authoritative drag-intent flag
 let downOnCat = false;   // v3.7: quick click = real meow
 
 function toScreen(cx, cy) { return { x: cx + O.x, y: cy + O.y }; }
@@ -785,17 +843,56 @@ function catHit(mx, my) {
   return mx >= x0 && mx <= x1 && my >= y0 && my <= y1;
 }
 
+// v3.12 MAIN-DRIVEN DRAG — mousedown hands the drag to main, which streams
+// the REAL global cursor (screen.getCursorScreenPoint at ~60Hz). This is the
+// cross-monitor fix: renderer mousemove dies the moment the cursor leaves
+// the window, which is exactly what happens at a monitor boundary.
+let mainDragActive = false;
+let lastDragPosTs = 0;
+window.meow.on('drag-pos', p => {
+  if (!brain || !dragging) return;
+  lastDragPosTs = performance.now();
+  brain._jump = null;
+  brain.onPlatform = null;
+  brain.x = Math.max(brain.bounds.x + 60, Math.min(brain.bounds.x + brain.bounds.w - 60, p.x));
+  brain.baseY = Math.max(brain.bounds.y + 120, Math.min(brain.bounds.y + brain.bounds.h - 8, p.y));
+  brain.jumpY = 0;
+  // v3.12: the poller is the AUTHORITATIVE cursor source — real cursor motion
+  // is drag intent. Renderer-synthesized hover mousemoves (which fire when the
+  // cat/window shifts under a STATIC cursor) are noise and are ignored.
+  if (Math.hypot((p.x + dragDX) - downSX, (p.y + dragDY) - downSY) > 6) dragMoved = true;
+  if (dragMoved && pendingPet) { clearTimeout(pendingPet); pendingPet = null; }
+  if (Number.isFinite(p.ox) && Number.isFinite(p.oy)) {
+    // v3.12 e2e instrumentation parity: the window "moved" whenever main
+    // lands it on a new origin (the drag follow metric used by e2e)
+    if (p.ox !== O.x || p.oy !== O.y) window.__regionMoves = (window.__regionMoves || 0) + 1;
+    O = { x: p.ox, y: p.oy };   // window already moved by main
+  }
+});
+
 window.addEventListener('mousemove', e => {
   const m = toScreen(e.clientX, e.clientY);
   const hit = dragging || catHit(m.x, m.y);
   if (hit !== overCat) { overCat = hit; window.meow.hitTest(hit); }
   if (dragging) {
-    const moved = Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY);
-    if (moved > 6 && pendingPet) { clearTimeout(pendingPet); pendingPet = null; }
+    // v3.12: while MAIN drives the drag, client mousemoves are not trusted —
+    // they include hover-recompute noise generated when the cat/window moves
+    // under a static cursor, and that noise used to cancel the pending
+    // pet/meow of every quick tap. Intent comes from the drag-pos stream.
+    // When main is NOT driving (headless/dev fallback), screen-space deltas
+    // (window-movement-invariant) decide drag intent.
+    if (!mainDragActive) {
+      const moved = Math.abs(m.x - downSX) + Math.abs(m.y - downSY);
+      if (moved > 6) dragMoved = true;
+      if (dragMoved && pendingPet) { clearTimeout(pendingPet); pendingPet = null; }
+    }
     // v3.6.1: grabbing the cat mid-jump must cancel the flight, or the jump
     // lerp would fight the drag and teleport the cat on landing
     brain._jump = null;
     brain.onPlatform = null;
+    // v3.12: while main drives the drag this is a no-op mirror (main already
+    // clamps with identical margins); it stays as the fallback when the
+    // drag-pos stream is unavailable (e.g. headless dev).
     brain.x = Math.max(brain.bounds.x + 60, Math.min(brain.bounds.x + brain.bounds.w - 60, m.x - dragDX));
     brain.baseY = Math.max(brain.bounds.y + 120, Math.min(brain.bounds.y + brain.bounds.h - 8, m.y - dragDY));
     brain.jumpY = 0;
@@ -807,9 +904,15 @@ window.addEventListener('mousedown', e => {
   if (e.button !== 0) return;
   downOnCat = true;   // v3.7: click-vs-pet discrimination on release
   downX = e.clientX; downY = e.clientY;
+  downSX = m.x; downSY = m.y;   // v3.12: screen-space tap anchor
+  dragMoved = false;            // v3.12: a new press starts with no drag intent
   dragDX = m.x - brain.x;
   dragDY = m.y - brain.baseY;
   dragging = true;
+  // v3.12: main takes over the follow with the true global cursor
+  mainDragActive = true;
+  lastDragPosTs = performance.now();
+  try { window.meow.dragStart({ x: dragDX, y: dragDY }); } catch { mainDragActive = false; }
   if (pendingPet) clearTimeout(pendingPet);
   pendingPet = setTimeout(async () => {
     pendingPet = null;
@@ -828,12 +931,13 @@ window.addEventListener('mousedown', e => {
 window.addEventListener('mouseup', e => {
   if (dragging) brain.dropAt(brain.x, brain.baseY);
   dragging = false;
+  if (mainDragActive) { mainDragActive = false; try { window.meow.dragEnd(); } catch {} }
   // v3.7: a quick click on the cat = a real meow + a tiny heart. Holding the
   // button past 280ms is the pet (pendingPet fires); a drag cancels both via
-  // the move guard in mousemove. A double-click still opens Settings —
-  // v3.11: the QUICK CLICK plays the natural SINGLE meow (meow_single),
-  // while a double-click cuts it and plays the classic meow voice (kept
-  // exactly as it sounded before, per request).
+  // the move guard in mousemove.
+  // v3.11: the QUICK CLICK plays the natural SINGLE meow (meow_single).
+  // v3.12: a double-click NO LONGER opens anything — it only plays the
+  // classic meow voice (kept exactly as it sounded before, per request).
   if (pendingPet && downOnCat) {
     clearTimeout(pendingPet); pendingPet = null;
     // v3.11: ONE natural single meow per click — the new dedicated voice
@@ -843,46 +947,37 @@ window.addEventListener('mouseup', e => {
   }
   downOnCat = false;
 });
+window.addEventListener('blur', () => {
+  // v3.12: never leave the main-side cursor poller running on a lost window
+  if (dragging) { try { brain.dropAt(brain.x, brain.baseY); } catch {} }
+  dragging = false;
+  if (mainDragActive) { mainDragActive = false; try { window.meow.dragEnd(); } catch {} }
+});
 window.addEventListener('dblclick', e => {
   const m = toScreen(e.clientX, e.clientY);
   if (!catHit(m.x, m.y)) return;
   if (pendingPet) { clearTimeout(pendingPet); pendingPet = null; }
   dragging = false;
-  // v3.11: the double-click keeps the CURRENT meow sound (the classic v3.8
-  // exclusive voice) — the single-click meow is cut so only one voice plays.
+  // v3.12 USER RULE: double click ONLY plays the sound — the Cat Store /
+  // Settings no longer open here (they stay in the tray + context menu).
   stopMeowSingle();
   playMeow(0.95);
-  window.meow.openWindow('settings');
 });
 window.addEventListener('contextmenu', e => {
   e.preventDefault();
   window.meow.contextMenu({ x: e.clientX, y: e.clientY });
 });
 
-// footsteps / contextual sounds
+// v3.12: FOOTSTEP SOUNDS REMOVED (user request) — the constant patter while
+// walking/running/zoomies and the glass paw-taps on window edges are gone;
+// the cat moves in silence. Scratch keeps its sound (a deliberate action,
+// not locomotion), still gated by the Contextual sounds toggle.
 let lastStepPhase = 0;
 function stepSounds() {
   if (!brain) return;
-  if (brain.state === 'walk') {
-    const ph = Math.floor(brain.t * 7 * 2);
-    if (ph !== lastStepPhase) {
-      lastStepPhase = ph;
-      // v3.6: paws on a window edge tap the glass
-      if (brain.onPlatform && S.contextualSounds) play('glass_real', 0.16);
-      else play('patter', 0.12);
-    }
-  } else if (brain.state === 'run') {
-    const ph = Math.floor(brain.t * 12.5 * 2);
-    if (ph !== lastStepPhase) { lastStepPhase = ph; play('run_patter', 0.15); }
-  } else if (brain.state === 'zoomies') {
-    const ph = Math.floor(brain.t * 17 * 2);
-    if (ph !== lastStepPhase) { lastStepPhase = ph; play('run_patter', 0.22); }
-  } else if (brain.state === 'laser') {
-    const ph = Math.floor(brain.t * 10 * 2);
-    if (ph !== lastStepPhase) { lastStepPhase = ph; play('patter', 0.14); }
-  } else if (brain.state === 'scratch') {
+  if (brain.state === 'scratch') {
     const ph = Math.floor(brain.t * 10.5);
-    if (ph !== lastStepPhase) { lastStepPhase = ph; play('scratch', 0.35); }
+    if (ph !== lastStepPhase) { lastStepPhase = ph; sfx('scratch', 0.35); }
   } else lastStepPhase = -1;
 }
 
@@ -894,6 +989,10 @@ let catVisible = true;
 let rafId = 0;
 let lastChaseTs = 0;        // v3.9: chase-camera clock (rate-limited origin catch-up)
 let trackedPlatId = null;   // v3.9: platform hwnd currently tracked in main
+// v3.12: ground states stroll along the lane — horizontal coverage comes from
+// the lane hop (one move per monitor crossing), never from the chase.
+const GROUND_STATES = new Set(['walk', 'run', 'waddle', 'zoomies', 'stalk', 'laser']);
+let lastHopAt = 0;          // v3.12: lane-hop cooldown clock
 function loop(ts) {
   // v3.7: clamp dt — a renderer stall (window move, GC, system sleep) used to
   // hand the brain a huge step and teleport the cat on the next frame.
@@ -923,10 +1022,10 @@ function loop(ts) {
       brain.tick(dt);
       // ------- state-transition bookkeeping (stats + contextual sfx) -------
       if (before !== brain.state) {
-        if (brain.state === 'jump' && S.contextualSounds) play('squeak', 0.42);   // boing!
+        if (brain.state === 'jump') sfx('squeak', 0.42);   // boing! (v3.12: via sfx)
         if (before === 'jump' && brain.jumpP === 0) {
           window.meow.bumpStat('jumps', 1);
-          if (perks.sparkleLand) play('land', 0.5); else play('land', 0.35);
+          if (perks.sparkleLand) sfx('land', 0.5); else sfx('land', 0.35);
         }
         if (before === 'eat') window.meow.bumpStat('fish', 1);
         if (before === 'pounce' && stalkWasCursor) {
@@ -948,7 +1047,7 @@ function loop(ts) {
       if (laser && prevState === 'pounce' && brain.state !== 'pounce' && brain.laser) {
         const d = Math.hypot(laser.x - brain.x, laser.y - brain.baseY);
         if (d < 95) {
-          play('coin', 0.8);
+          sfx('coin', 0.8);
           brain.emote = { kind: 'star', t0: brain.t };
           window.meow.addCoins(3);
           window.meow.bumpStat('lasers', 1);
@@ -972,21 +1071,52 @@ function loop(ts) {
     // v3.9 THE CHASE CAMERA — see region.js. v3.11 turns the overlay into a
     // full-width GROUND LANE so ordinary walking never moves the window at
     // all (the walking-flicker root cause), and keeps the chase for the rare
-    // vertical cases. v3.11 DRAG FOLLOW: the chase now ALSO runs while the
-    // user drags the cat — toward a cat-centered target at DRAG_CHASE_V — so
-    // the sprite always has canvas under it ("cat goes hidden outside a box
-    // area while dragging, shows again on drop" — fixed by construction).
+    // vertical cases.
+    // v3.12: while the user drags, MAIN drives the window from the true
+    // global cursor (the cross-monitor fix) — the renderer only mirrors the
+    // positions it streams. The chase stays as a fallback for a stalled
+    // stream. Ground strolling gains the LANE HOP: one discrete window move
+    // when the walk reaches the lane's edge with another monitor beyond it —
+    // so the cat can WALK onto the 2nd monitor while single-display walking
+    // keeps its zero-moves guarantee.
     {
       const p0 = brain.pose;
       const wa0 = roamBounds(S);
       const focusX = companion ? (p0.x + companion.brain.pose.x) / 2 : p0.x;
       const feetY = p0.y;   // pose.y is already baseY + jumpY (the live feet point)
-      const cand = dragging
-        ? dragChaseTarget(O, REGION, focusX, feetY, wa0)
-        : slideIfNeeded(O, REGION, focusX, feetY, wa0, S.size);
+      const mainDragFresh = dragging && mainDragActive && (performance.now() - lastDragPosTs < 250);
+      const ground = GROUND_STATES.has(brain.state);
+      const nowMs0 = performance.now();
+      const hopT = (!dragging && ground && !frozen && !regionResizeInFlight && nowMs0 - lastHopAt > 400)
+        ? laneHopTarget(O, REGION, p0.x, wa0) : null;
+      let cand = null;
+      if (dragging) {
+        if (!mainDragFresh) cand = dragChaseTarget(O, REGION, focusX, feetY, wa0);
+      } else if (hopT) {
+        // THE LANE HOP — one awaited move, then the stroll continues on the
+        // next display with the cat mid-lane again.
+        lastHopAt = nowMs0;
+        regionResizeInFlight = true;
+        window.__hops = (window.__hops || 0) + 1;   // e2e instrumentation
+        (async (tgt) => {
+          try {
+            const res = await window.meow.moveRegion({ x: tgt.x, y: tgt.y, w: REGION.w, h: REGION.h });
+            if (res && Number.isFinite(res.x) && Number.isFinite(res.y)) O = { x: res.x, y: res.y };
+            try { paint(); } catch { /* next frame repaints anyway */ }
+          } catch { /* window gone — keep local values */ }
+          finally { regionResizeInFlight = false; }
+        })(hopT);
+      } else {
+        cand = slideIfNeeded(O, REGION, focusX, feetY, wa0, S.size,
+          ground ? { horizontal: false } : undefined);
+      }
       if (cand && !frozen && !regionResizeInFlight) {
         const nowMs = performance.now();
-        const cdt = Math.min(0.1, (nowMs - lastChaseTs) / 1000 || 0.016);
+        // v3.12: clamp the effective interval to ONE painted frame (33ms).
+        // After an idle-throttle burst the wall-clock gap used to hand the
+        // chase a 60-100ms cdt — a single 60-90px camera leap, i.e. exactly
+        // the "small rendering jump" this camera exists to prevent.
+        const cdt = Math.min(0.033, Math.max(0.008, (nowMs - lastChaseTs) / 1000 || 0.016));
         lastChaseTs = nowMs;
         const cap = (dragging ? DRAG_CHASE_V : CHASE_V) * cdt;
         const step = chaseStep(O, cand, cap);
@@ -1125,10 +1255,13 @@ window.__frozen = () => frozen;
 window.__settings = () => S;
 window.__catVisible = () => catVisible;
 window.__lastPlayInfo = () => window.__lastPlay || null;
-window.__playMeow = () => playMeow(0.95);   // v3.8 e2e: exercise the exclusive voice
+window.__playMeow = () => playMeow(0.95);   // v3.8 e2e: exercise the classic voice
 window.__playMeowSingle = () => playMeowSingle(0.95);   // v3.11 e2e: the single-click voice
 window.__fireAmbientMeow = () => fireAmbientMeow();     // v3.11 e2e: ambient meow burst
 window.__ambientPending = () => !!ambientMeowTimer;     // v3.11 e2e: scheduler armed
+window.__meowBusy = () => meowBusy();                   // v3.12 e2e: user-voice busy flag
+window.__mainDragActive = () => mainDragActive && dragging;   // v3.12 e2e
+window.__hops = window.__hops || 0;                     // v3.12 e2e: lane-hop counter
 window.__trackedPlatId = () => trackedPlatId;   // v3.9 e2e: current tracker target
 window.__activeMeowCount = () => (window.__meowEls ? window.__meowEls.size : 0);
 window.__clampBox = (el, x, y) => clampBox(el, x, y);

@@ -85,16 +85,21 @@ function clampNum(v, lo, hi) {
 // (platform jumps, far above the slack) still slide.
 const TOPSLACK = 80;
 
-export function slideIfNeeded(origin, region, catX, feetY, workArea, scale) {
+export function slideIfNeeded(origin, region, catX, feetY, workArea, scale, opts) {
   const wa = workArea || { x: 0, y: 0, width: 1600, height: 1000 };
   const r = region || { w: 480, h: 434 };
   const o = origin || { x: wa.x, y: wa.y };
   const mX = Math.min(140, Math.round(r.w * 0.3));
   const top = aboveFeet(scale);
   const bottom = belowFeet();
+  // v3.12: while the cat GROUND-WALKS, horizontal coverage is the lane-hop's
+  // job (one discrete move per monitor crossing). The chase stays vertical
+  // only, so ordinary strolling can never reintroduce per-frame window moves
+  // — the exact artifact the v3.11 lane was built to kill.
+  const allowH = !(opts && opts.horizontal === false);
 
-  const outLeft = catX < o.x + mX;
-  const outRight = catX > o.x + r.w - mX;
+  const outLeft = allowH && catX < o.x + mX;
+  const outRight = allowH && catX > o.x + r.w - mX;
   const outTop = feetY - (top - TOPSLACK) < o.y;   // headroom breached (with slack)
   const outBottom = feetY + bottom > o.y + r.h;
 
@@ -105,6 +110,41 @@ export function slideIfNeeded(origin, region, catX, feetY, workArea, scale) {
   if (outTop || outBottom) ny = clampNum(feetY + bottom - r.h, wa.y, wa.y + wa.height - r.h);
   if (nx === o.x && ny === o.y) return null;
   return { x: Math.round(nx), y: Math.round(ny) };
+}
+
+// v3.12 THE LANE HOP — how the cat WALKS onto the 2nd monitor.
+//
+// The v3.11 ground lane spans the primary work area (≤1920 wide) and walking
+// never moves the window — that is the walking-flicker fix, and it must stay.
+// But the brain roams the UNION of all displays, so on a multi-monitor setup
+// the cat could reach the lane's right edge with a whole second monitor
+// waiting beyond it. The lane hop covers that ONE case: when the stroller is
+// within HOP_EDGE of the lane's edge and the union really extends past it,
+// the renderer moves the window ONCE (a single setPosition, cat re-centered
+// near the near edge) and the stroll continues inside the new lane — the cat
+// visibly walks across the monitor seam. Single-display machines: the union
+// IS the lane, no hop is ever returned, and walking remains 100% stationary
+// (the v3.11 contract, pinned by e2e).
+export const HOP_EDGE = 130;      // how close to the lane edge a hop triggers
+
+// The rule is COVERAGE: whenever the stroller comes within HOP_EDGE of the
+// lane's edge (either edge) and re-centering the window on the cat would put
+// it somewhere new, the window hops once. A hop always leaves the cat
+// mid-lane, so strolling never re-triggers per-frame moves — and when the
+// window is already as far as the union allows, the target equals the origin
+// and nothing happens. Single-display machines: the lane IS the union, so no
+// hop is ever returned (the v3.11 zero-moves contract, pinned by e2e).
+export function laneHopTarget(origin, region, catX, workArea) {
+  const wa = workArea || { x: 0, y: 0, width: 1600, height: 1000 };
+  const r = region || { w: 480, h: 434 };
+  const o = origin || { x: wa.x, y: wa.y };
+  if (!(r.w < wa.width)) return null;             // lane already spans the union
+  const nearRight = catX > o.x + r.w - HOP_EDGE;
+  const nearLeft = catX < o.x + HOP_EDGE;
+  if (!nearRight && !nearLeft) return null;
+  const nx = clampNum(catX - r.w / 2, wa.x, wa.x + wa.width - r.w);
+  if (Math.round(nx) === Math.round(o.x)) return null;   // window already maximally moved
+  return { x: Math.round(nx), y: Math.round(o.y) };
 }
 
 // v3.9 THE CHASE CAMERA — why slides stopped teleporting.
@@ -174,6 +214,22 @@ export function clampOrigin(rect, curRegion, workArea) {
 // CENTERS the cat, at a higher cap (drags are human-speed; the window must
 // keep up) — the sprite always has canvas under it.
 export const DRAG_CHASE_V = 2400;   // px/s cap while the user drags the cat
+
+// v3.12: main-driven drag — main polls screen.getCursorScreenPoint() at
+// ~60Hz while the user drags, so the cat tracks the REAL cursor even when it
+// races across a monitor boundary (renderer mousemove stops firing the
+// instant the cursor leaves the window — the old renderer-only follow could
+// stall exactly there, which is why dragging onto the 2nd monitor failed).
+// This pure helper is the window placement used every poll tick: center the
+// lane on the cat, clamped to the union. Mirrors dragChaseTarget minus the
+// no-change check (main throttles identical rects itself).
+export function dragWindowTarget(region, catX, feetY, workArea) {
+  const wa = workArea || { x: 0, y: 0, width: 1600, height: 1000 };
+  const r = region || { w: 480, h: 434 };
+  const nx = clampNum(catX - r.w / 2, wa.x, wa.x + wa.width - r.w);
+  const ny = clampNum(feetY + belowFeet() - r.h, wa.y, wa.y + wa.height - r.h);
+  return { x: Math.round(nx), y: Math.round(ny) };
+}
 
 export function dragChaseTarget(origin, region, catX, feetY, workArea) {
   const wa = workArea || { x: 0, y: 0, width: 1600, height: 1000 };

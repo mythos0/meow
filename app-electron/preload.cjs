@@ -30,6 +30,13 @@ contextBridge.exposeInMainWorld('meow', {
   selectZone: () => ipcRenderer.invoke('zones:select'),          // v3.11 screenshot-style picker
   finishZone: rect => ipcRenderer.invoke('zone-select:finish', rect),
   cancelZone: () => ipcRenderer.invoke('zone-select:cancel'),
+  // v3.12 main-driven drag: main polls the real global cursor so the cat can
+  // be dragged across monitor boundaries even where renderer mousemove dies
+  dragStart: grab => ipcRenderer.invoke('drag:start', grab),
+  dragEnd: () => ipcRenderer.invoke('drag:end'),
+  devMoveCursor: p => ipcRenderer.invoke('dev:move-cursor', p),   // v3.12 e2e-only seam
+  devForceQuit: () => ipcRenderer.invoke('dev:force-quit'),       // v3.12 e2e-only: must be BLOCKED by the quit gate
+  heartbeatPong: info => ipcRenderer.invoke('heartbeat:pong', info),   // v3.12 liveness
   importSkin: jsonText => ipcRenderer.invoke('skins:import', jsonText),
   injectKeys: n => ipcRenderer.invoke('keys:inject', n),
   quickAction: act => ipcRenderer.invoke('quick-action', act),
@@ -45,6 +52,8 @@ contextBridge.exposeInMainWorld('meow', {
       'cat-visible',   // v3.7: pause the render loop while the cat is hidden
       'platform-rect', // v3.9: live rect of the tracked platform window
       'zone-config',   // v3.11: union bounds for the zone-selection overlay
+      'drag-pos',      // v3.12: main-driven drag cursor stream
+      'heartbeat',     // v3.12: liveness ping from main
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));

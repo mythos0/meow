@@ -1,15 +1,15 @@
 {
   "name": "meowcat",
   "productName": "MeowCat",
-  "version": "3.11.0",
-  "description": "MeowCat \u2014 a smooth procedural desktop cat for Windows 11: real-time 2D canvas animation, no sprite frames",
+  "version": "3.12.0",
+  "description": "MeowCat \u2014 a smooth procedural desktop cat for Windows 11: real-time 2D canvas animation, no sprite frames, multi-monitor roaming",
   "main": "main.js",
   "type": "module",
   "author": "mythos0",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node --test tests/brain.test.mjs tests/robust.test.mjs tests/brain-v36.test.mjs tests/funny.test.mjs tests/features.test.mjs tests/pomodoro.test.mjs tests/store-features.test.mjs tests/scheduler.test.mjs tests/store.test.mjs tests/topmost.test.mjs tests/platforms.test.mjs tests/stroll.test.mjs tests/window-scan.test.mjs tests/fastwindows.test.mjs tests/breeds.test.mjs tests/region.test.mjs tests/v38.test.mjs tests/v39.test.mjs tests/v310.test.mjs tests/v311.test.mjs && node --test tests/renderer.test.mjs",
+    "test": "node --test tests/v312.test.mjs tests/brain.test.mjs tests/robust.test.mjs tests/brain-v36.test.mjs tests/funny.test.mjs tests/features.test.mjs tests/pomodoro.test.mjs tests/store-features.test.mjs tests/scheduler.test.mjs tests/store.test.mjs tests/topmost.test.mjs tests/platforms.test.mjs tests/stroll.test.mjs tests/window-scan.test.mjs tests/fastwindows.test.mjs tests/breeds.test.mjs tests/region.test.mjs tests/v38.test.mjs tests/v39.test.mjs tests/v310.test.mjs tests/v311.test.mjs tests/v312.test.mjs && node --test tests/renderer.test.mjs",
     "dist": "electron-builder --win portable --publish never"
   },
   "build": {

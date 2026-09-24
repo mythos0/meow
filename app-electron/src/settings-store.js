@@ -9,6 +9,9 @@ export const DEFAULTS = {
   size: 1.0,            // 0.5 .. 2.0
   opacity: 1.0,         // 0.3 .. 1
   sounds: true,
+  soundClickMeow: true,    // v3.12: the quick-tap natural single meow
+  soundDblClickMeow: true, // v3.12: the double-click classic meow
+  soundReminders: true,    // v3.12: the reminder chime
   randomMeows: true,    // v3.11: ambient meows — a natural single meow at random
                         // times, occasionally a burst of several in a row
   autoStart: false,

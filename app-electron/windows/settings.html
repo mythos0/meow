@@ -204,18 +204,30 @@
 
       <div class="fl-card">
         <div class="fl-row">
-          <div class="txt"><div class="l1">All sounds (master)</div><div class="l2">One switch for everything: meows, purrs, paws, gags, chimes. Off = a completely silent cat.</div></div>
+          <div class="txt"><div class="l1">All sounds (master)</div><div class="l2">One switch for everything: meows, purrs, toys, gags, chimes. Off = a completely silent cat.</div></div>
           <label class="sw"><input type="checkbox" id="sounds"><span class="tr"><span class="kn"></span></span></label>
         </div>
         <div class="fl-row">
-          <div class="txt"><div class="l1">Contextual sounds</div><div class="l2">Glass paw-taps on window edges, toy squeaks on jumps. (Needs All sounds on.)</div></div>
+          <div class="txt"><div class="l1">Single-click meow</div><div class="l2">One quick tap on the cat plays one natural single meow. (Needs All sounds on.)</div></div>
+          <label class="sw"><input type="checkbox" id="soundClickMeow"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Double-click meow</div><div class="l2">A double-click plays the classic meow — and nothing else (no window opens). (Needs All sounds on.)</div></div>
+          <label class="sw"><input type="checkbox" id="soundDblClickMeow"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Random meows</div><div class="l2">At random times the cat meows on its own — usually one natural meow, sometimes a burst of several. Never plays while a click meow is sounding. (Needs All sounds on.)</div></div>
+          <label class="sw"><input type="checkbox" id="randomMeows"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Contextual sounds</div><div class="l2">Toy squeaks on jumps, coins, achievement chimes, purrs from petting, build reactions. (Needs All sounds on.)</div></div>
           <label class="sw"><input type="checkbox" id="contextualSounds"><span class="tr"><span class="kn"></span></span></label>
         </div>
         <div class="fl-row">
-          <div class="txt"><div class="l1">Random meows</div><div class="l2">At random times the cat meows on its own — usually one natural meow, sometimes a burst of several. (Needs All sounds on.)</div></div>
-          <label class="sw"><input type="checkbox" id="randomMeows"><span class="tr"><span class="kn"></span></span></label>
+          <div class="txt"><div class="l1">Reminder chime</div><div class="l2">The little chirp when a reminder fires — the message bubble itself is unaffected. (Needs All sounds on.)</div></div>
+          <label class="sw"><input type="checkbox" id="soundReminders"><span class="tr"><span class="kn"></span></span></label>
         </div>
-        <div class="hint">Quick tap = one natural single meow · double-click = the classic meow · pet (hold) = purring.</div>
+        <div class="hint">Footstep pattering is gone — the cat walks in silence (v3.12). Quick tap = one natural single meow · double-click = the classic meow · pet (hold) = purring.</div>
       </div>
     </section>
 
@@ -588,6 +600,9 @@ bindSwitch('stalkCursor', 'stalkCursor');
 bindSwitch('reactMusic', 'reactMusic');
 bindSwitch('contextualSounds', 'contextualSounds');
 bindSwitch('randomMeows', 'randomMeows');
+bindSwitch('soundClickMeow', 'soundClickMeow');
+bindSwitch('soundDblClickMeow', 'soundDblClickMeow');
+bindSwitch('soundReminders', 'soundReminders');
 bindSwitch('pomodoro', 'pomodoro');
 bindSwitch('reactBuildStatus', 'reactBuildStatus');
 bindSwitch('globalHotkeys', 'globalHotkeys');
@@ -607,7 +622,8 @@ function syncControls() {
     ['reactNewWindows', 'reactNewWindows'], ['reactApps', 'reactApps'],
     ['reactTyping', 'reactTyping'], ['stalkCursor', 'stalkCursor'],
     ['reactMusic', 'reactMusic'], ['contextualSounds', 'contextualSounds'],
-    ['randomMeows', 'randomMeows'],
+    ['randomMeows', 'randomMeows'], ['soundClickMeow', 'soundClickMeow'],
+    ['soundDblClickMeow', 'soundDblClickMeow'], ['soundReminders', 'soundReminders'],
     ['pomodoro', 'pomodoro'], ['reactBuildStatus', 'reactBuildStatus'],
     ['globalHotkeys', 'globalHotkeys'], ['photoMode', 'photoMode'], ['achievements', 'achievements'],
   ]) $(id).checked = S[key] !== undefined ? !!S[key] : false;

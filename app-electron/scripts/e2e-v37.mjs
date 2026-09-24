@@ -36,7 +36,7 @@ if (!process.env.DISPLAY) {
 const electronBin = path.join(ROOT, 'node_modules', '.bin', 'electron');
 const app = spawn(electronBin, ['.', '--remote-debugging-port=9229', '--no-sandbox', '--disable-gpu'], {
   cwd: ROOT,
-  env: { ...process.env, DISPLAY: process.env.DISPLAY, MEOW_WARM_IDLE_MS: '3000' },
+  env: { ...process.env, DISPLAY: process.env.DISPLAY, MEOW_WARM_IDLE_MS: '3000', MEOWCAT_TEST: '1', MEOWCAT_FAKE_CURSOR: '{"x":800,"y":500}' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let appLog = '';
@@ -164,12 +164,16 @@ try {
   // pin a long idle so no footstep sound can overwrite __lastPlay mid-assert
   await cat.evaluate(() => { const b = window.__brain(); b._enter('idle', 30); });
   await sleep(200);
+  // v3.12: keep the first-pet achievement chime out of the tap assertion
+  await cat.evaluate(() => window.meow.setSettings({ achievements: false }));
   await cat.evaluate(() => { window.__lastPlay = null; });
   const tap = await cat.evaluate(async () => {
     // dispatch a REAL mouse flow on the cat's pose position
     const p = window.__pose();
     const r = window.__region();
     const lx = p.x - r.x, ly = p.y - r.y;
+    // coherent pointer: park the cursor EXACTLY at the mousedown point
+    await window.meow.devMoveCursor({ x: p.x, y: p.y });
     const kd = (type, x, y) => window.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }));
     kd('mousemove', lx, ly); kd('mousedown', lx, ly);
     await new Promise(r2 => setTimeout(r2, 60));
@@ -179,6 +183,7 @@ try {
   });
   ok('quick tap plays the natural single meow + heart',
     !!tap.lastPlay && tap.lastPlay.name === 'meow_single' && tap.emote === 'heart', JSON.stringify(tap));
+  await cat.evaluate(() => window.meow.setSettings({ achievements: true }));
 
   // ---------------- 5. v3.10: a call app changes NOTHING ----------------
   // the old pipeline (teams -> sysMonitor -> parseProcessList -> findCallApp

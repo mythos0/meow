@@ -11,7 +11,7 @@ import { createTopmostEnforcer } from './src/topmost.js';
 import { createWindowScanner } from './src/window-scan.js';
 import { createFastWindows } from './src/fast-windows.js';
 import { createPlatformTracker } from './src/platform-tracker.js';
-import { computeRegionSize, initialOrigin, unionWorkAreas } from './src/region.js';
+import { computeRegionSize, initialOrigin, unionWorkAreas, dragWindowTarget } from './src/region.js';
 import { createSysMonitor } from './src/sys-monitor.js';
 import { createMusicWatcher } from './src/music-watcher.js';
 import {
@@ -46,6 +46,61 @@ process.on('unhandledRejection', err => {
   console.error('[meowcat] unhandledRejection (cat keeps running):', err);
   logCrash('unhandledRejection', err);
 });
+
+// v3.12 THE HARD QUIT GATE — layer two of the auto-quit fix. v3.11 removed
+// the native crash path (keyboard hook → utilityProcess) and v3.10 swallowed
+// JS exceptions, yet the cat could still vanish on real machines. From this
+// release the process refuses to die unless the USER pressed Quit: every
+// other path into before-quit (a stray app.quit() from any code path, the OS
+// closing the last window, a future regression) is intercepted, logged with
+// the culprit's stack trace into the crash journal, and REVERSED. The only
+// exits that pass are the explicit tray/context-menu Quit (quitting=true)
+// and the duplicate-launcher deference at boot.
+app.on('before-quit', e => {
+  if (!quitting) {
+    e.preventDefault();
+    console.error('[meowcat] BLOCKED an automatic quit — the cat stays alive');
+    logCrash('blocked-auto-quit', new Error('before-quit with no user Quit action\n' + new Error().stack));
+    return;
+  }
+  logCrash('user-quit', new Error('explicit Quit — cleaning up'));
+  onExplicitShutdown();
+});
+
+// v3.12: app.exit() and process.exit() bypass before-quit — they are patched
+// to the same gate so a stray call cannot kill the cat either.
+const __realAppExit = app.exit.bind(app);
+app.exit = code => {
+  if (!quitting) {
+    logCrash('blocked-app-exit', new Error('app.exit(' + code + ') with no user Quit action\n' + new Error().stack));
+    return;
+  }
+  __realAppExit(code);
+};
+const __realProcessExit = process.exit.bind(process);
+process.exit = code => {
+  if (!quitting) {
+    logCrash('blocked-process-exit', new Error('process.exit(' + code + ') with no user Quit action\n' + new Error().stack));
+    return;
+  }
+  __realProcessExit(code);
+};
+
+// v3.12: console/terminal signals must not take the cat down either — the
+// cat outlives the terminal that launched it (SIGINT/SIGTERM/SIGHUP are
+// ignored until the user actually quits; only SIGKILL/TerminateProcess,
+// which nothing legitimate uses, remains).
+for (const __sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  try {
+    process.on(__sig, () => {
+      if (!quitting) {
+        logCrash('signal-ignored', new Error(__sig + ' received with no user Quit action — cat stays alive'));
+        return;
+      }
+      __realProcessExit(0);
+    });
+  } catch { /* some signals may be unavailable */ }
+}
 
 // v3.11: persistent crash/diagnostic journal. Every self-healed incident is
 // appended to userData/meowcat-crash.log (capped) so "the cat disappeared"
@@ -82,7 +137,26 @@ let scanner = null;
 let schedTimer = null;
 let coinTimer = null;
 let quitTimer = null;
-let quitting = false;
+let quitting = false;   // true ONLY after the user pressed Quit (or a duplicate launcher defers)
+
+// v3.12: teardown shared by the real quit path (before-quit with quitting=true).
+function onExplicitShutdown() {
+  try { enforcer?.stop(); } catch {}
+  try { scanner?.stop(); } catch {}
+  try { platTracker?.stop(); } catch {}   // v3.9: no orphan PowerShell
+  try { sysMon.stop(); } catch {}
+  try { musicWatcher.stop(); } catch {}
+  stopIdleTicker();
+  stopCursorWatch();
+  stopTypingHook();
+  applyHotkeys(false);
+  if (statusPoller) clearInterval(statusPoller);
+  try { fastWins.closeAll(); } catch {}
+  if (schedTimer) clearInterval(schedTimer);
+  if (coinTimer) clearInterval(coinTimer);
+  if (quitTimer) clearInterval(quitTimer);
+  dragStop();   // v3.12: no drag poller outlives the app
+}
 
 // ---------------------------------------------------------------- settings backend (fs)
 const settingsFile = () => path.join(app.getPath('userData'), 'meowcat-settings.json');
@@ -148,7 +222,8 @@ function ensureTracker() {
 // ---------------------------------------------------------------- single instance
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-  app.quit();   // a second launcher defers to the RUNNING cat — it never stops it
+  quitting = true;   // v3.12: a duplicate launcher defers to the RUNNING cat — a legitimate quit
+  app.quit();
 } else {
   app.on('second-instance', () => {
     if (hiddenByUser) { hiddenByUser = false; updateCatVisibility(); }
@@ -157,22 +232,61 @@ if (!gotLock) {
   });
 }
 
-// ---------------------------------------------------------------- displays (v3.11 multi-monitor)
+// ---------------------------------------------------------------- displays (v3.11 multi-monitor, v3.12 test seam)
 // The cat roams the bounding-box UNION of every display's work area — that is
 // how it can finally be dragged onto the 2nd monitor. Single-display machines
 // get exactly the old behavior (the union IS the primary work area).
+// v3.12: MEOWCAT_FAKE_DISPLAYS (JSON array of work-area rects) overrides the
+// real monitor list so the e2e suite can exercise true multi-display
+// geometry (drag + lane hop + zone base) inside a single-X-screen sandbox.
+function allDisplays() {
+  const raw = process.env.MEOWCAT_FAKE_DISPLAYS;
+  if (raw) {
+    try {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length &&
+          arr.every(d => d && Number.isFinite(d.x) && Number.isFinite(d.y) &&
+                         Number.isFinite(d.width) && Number.isFinite(d.height))) {
+        return arr.map((d, i) => ({ id: i + 1, workArea: { x: d.x, y: d.y, width: d.width, height: d.height } }));
+      }
+    } catch { /* malformed — fall through to real displays */ }
+  }
+  return screen.getAllDisplays();
+}
 function unionWA() {
-  try { return unionWorkAreas(screen.getAllDisplays().map(d => d.workArea)); }
+  try { return unionWorkAreas(allDisplays().map(d => d.workArea)); }
   catch { try { return screen.getPrimaryDisplay().workArea; } catch { return { x: 0, y: 0, width: 1600, height: 1000 }; } }
 }
 function primaryWA() {
-  try { return screen.getPrimaryDisplay().workArea; } catch { return { x: 0, y: 0, width: 1600, height: 1000 }; }
+  try { const ds = allDisplays(); return ds[0]?.workArea || screen.getPrimaryDisplay().workArea; }
+  catch { return { x: 0, y: 0, width: 1600, height: 1000 }; }
 }
 
 // ---------------------------------------------------------------- cat overlay window
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
+let catWinRetryTimer = null;
 function createCatWindow() {
+  // v3.12: window creation is on the critical "cat exists" path — a throw
+  // here used to leave the app alive but catless forever (the closed→recreate
+  // chain died with the exception). Now every failure is logged and retried
+  // forever until the cat is back on the desktop.
+  try {
+    makeCatWindow();
+    if (catWinRetryTimer) { clearTimeout(catWinRetryTimer); catWinRetryTimer = null; }
+  } catch (e) {
+    logCrash('create-cat-window', e);
+    if (!catWinRetryTimer) {
+      catWinRetryTimer = setTimeout(() => {
+        catWinRetryTimer = null;
+        if (!catWin && !quitting) createCatWindow();
+      }, 1500);
+      catWinRetryTimer.unref?.();
+    }
+  }
+}
+
+function makeCatWindow() {
   try { enforcer?.stop(); } catch {}   // v3.6.1: never leak an interval at a destroyed window
   const wa = primaryWA();
   const scale = Number(store.get('size')) || 1.0;
@@ -215,7 +329,19 @@ function createCatWindow() {
     catWin.webContents.on('render-process-gone', (_e, details) => {
       if (quitting) return;
       console.error('[meowcat] renderer gone:', details?.reason, '— reviving the cat');
+      logCrash('render-process-gone', new Error(details?.reason || 'unknown'));
       try { catWin?.destroy(); } catch {}   // 'closed' handler recreates it
+    });
+  } catch {}
+  // v3.12: a failed first load (AV file lock, disk hiccup) used to leave a
+  // blank overlay forever — retry the load on our own.
+  try {
+    catWin.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => {
+      if (!isMain || quitting) return;
+      logCrash('did-fail-load', new Error(`${code} ${desc} ${url || ''}`));
+      setTimeout(() => {
+        try { if (catWin && !catWin.isDestroyed()) catWin.webContents.loadFile(path.join(__dirname, 'windows', 'cat.html')); } catch {}
+      }, 800);
     });
   } catch {}
 
@@ -695,10 +821,10 @@ function applyHotkeys(on) {
 // ================================================================ IPC
 ipcMain.handle('settings:get', () => ({
   ...store.all,
-  workArea: screen.getPrimaryDisplay().workArea,
+  workArea: primaryWA(),
   // v3.11: every display's work area — the renderer roams the union so the
   // cat can walk and be dragged onto the 2nd monitor
-  workAreas: screen.getAllDisplays().map(d => d.workArea),
+  workAreas: allDisplays().map(d => d.workArea),
   season: seasonHat(new Date().getMonth()),
 }));
 ipcMain.handle('settings:set', (_e, kv) => {
@@ -763,6 +889,142 @@ ipcMain.handle('hit-test', (_e, overCat) => {
     try { catWin.setIgnoreMouseEvents(!overCat, { forward: true }); } catch {}
   }
   return overCat;
+});
+
+// ---------------- v3.12 MAIN-DRIVEN DRAG ----------------
+// The old drag relied on renderer mousemove, which stops firing the instant
+// the cursor leaves the overlay window — exactly what happens at a monitor
+// boundary before the window has caught up, and why the cat could never be
+// pulled onto the 2nd monitor. Now main polls the REAL global cursor
+// (screen.getCursorScreenPoint) at ~60Hz while a drag is active: it streams
+// the cat position + the window origin to the renderer and moves the window
+// itself, clamped against the union of every display. The renderer keeps a
+// chase fallback if the stream ever stalls.
+let drag = null;          // { grabX, grabY, timer, startedAt }
+let lastDragSentAt = 0;   // diagnostics
+
+// v3.12 e2e seam: a deterministic fake cursor for drag tests. Real machines
+// never set MEOWCAT_TEST — screen.getCursorScreenPoint stays authoritative.
+let fakeCursor = null;
+try {
+  const raw = process.env.MEOWCAT_FAKE_CURSOR;
+  if (raw) { const p = JSON.parse(raw); if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) fakeCursor = { x: p.x, y: p.y }; }
+} catch { /* malformed env — real cursor */ }
+function cursorPoint() {
+  if (fakeCursor) return fakeCursor;
+  try { return screen.getCursorScreenPoint(); } catch { return { x: 0, y: 0 }; }
+}
+
+function dragStop() {
+  if (drag && drag.timer) { clearInterval(drag.timer); }
+  drag = null;
+}
+
+ipcMain.handle('drag:start', (_e, grab) => {
+  try {
+    if (!catWin || catWin.isDestroyed()) return false;
+    const gx = Number.isFinite(grab?.x) ? grab.x : 0;
+    const gy = Number.isFinite(grab?.y) ? grab.y : 0;
+    dragStop();
+    drag = { grabX: gx, grabY: gy, timer: null, startedAt: Date.now() };
+    const step = () => {
+      try {
+        if (!drag || !catWin || catWin.isDestroyed()) { dragStop(); return; }
+        if (Date.now() - drag.startedAt > 120_000) { dragStop(); return; }   // safety cap
+        const p = cursorPoint();
+        const u = unionWA();
+        // identical margins to the renderer's brain.x/baseY clamps
+        const catX = Math.max(u.x + 60, Math.min(u.x + u.width - 60, p.x - drag.grabX));
+        const catY = Math.max(u.y + 120, Math.min(u.y + u.height - 8, p.y - drag.grabY));
+        const t = dragWindowTarget(region, catX, catY, u);
+        if (t.x !== regionOrigin.x || t.y !== regionOrigin.y) {
+          regionOrigin = t;
+          try { catWin.setPosition(t.x, t.y, false); } catch { /* gone */ }
+        }
+        lastDragSentAt = Date.now();
+        sendToCat('drag-pos', { x: catX, y: catY, ox: t.x, oy: t.y, t: lastDragSentAt });
+      } catch { /* cursor read hiccup — the next tick retries */ }
+    };
+    step();
+    drag.timer = setInterval(step, 16);
+    drag.timer.unref?.();
+    return true;
+  } catch { return false; }
+});
+ipcMain.handle('drag:end', () => { dragStop(); return true; });
+
+// v3.12 e2e-only: teleport the (fake) cursor so drag tests are deterministic.
+// Guarded behind MEOWCAT_TEST=1; a no-op in production.
+ipcMain.handle('dev:move-cursor', (_e, p) => {
+  if (process.env.MEOWCAT_TEST !== '1') return false;
+  if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) { fakeCursor = { x: p.x, y: p.y }; return true; }
+  return false;
+});
+
+// ---------------- v3.12 LIVENESS WATCHDOG ----------------
+// One ping every 5s; the renderer answers with its paint counter + state.
+//   · no pong for 15s            → the renderer is hung/dead → reload it
+//   · awake + visible, paints frozen for ~10s → DWM kick (hide/show)
+//   · still frozen after the kick → reload
+// This is the "cat vanished but the process lives" guard: a blank transparent
+// overlay is indistinguishable from a quit for the user, so we now detect and
+// repair it on our own.
+let hbTimer = null;
+let lastPongAt = 0;
+let lastPongInfo = null;
+let lastPaintCount = -1;
+let paintStalls = 0;
+
+function startHeartbeat() {
+  if (hbTimer) return;
+  lastPongAt = Date.now();
+  hbTimer = setInterval(() => {
+    try {
+      if (!catWin || catWin.isDestroyed()) return;
+      catWin.webContents.send('heartbeat', { t: Date.now() });
+      if (!lastPongInfo) return;   // still booting
+      const silentFor = Date.now() - lastPongAt;
+      if (silentFor > 15_000) {
+        logCrash('heartbeat-timeout', new Error(`no renderer pong for ${silentFor}ms — reloading the cat`));
+        lastPongAt = Date.now();
+        lastPongInfo = null;
+        try { catWin.webContents.reload(); } catch {}
+        return;
+      }
+      const st = lastPongInfo.state;
+      const awake = lastPongInfo.visible && !['sleep', 'curl'].includes(st);
+      if (awake) {
+        if (lastPongInfo.paintCount === lastPaintCount) {
+          paintStalls++;
+          if (paintStalls === 2) {
+            logCrash('paint-stall', new Error('canvas frozen while awake+visible — DWM kick'));
+            try { catWin.hide(); setTimeout(() => { try { catWin && !catWin.isDestroyed() && catWin.show(); } catch {} }, 120); } catch {}
+          } else if (paintStalls >= 4) {
+            paintStalls = 0;
+            logCrash('paint-stall', new Error('canvas still frozen after kick — reloading the cat'));
+            try { catWin.webContents.reload(); } catch {}
+          }
+        } else {
+          paintStalls = 0;
+          lastPaintCount = lastPongInfo.paintCount;
+        }
+      }
+    } catch { /* the watchdog never kills the cat */ }
+  }, 5000);
+  hbTimer.unref?.();
+}
+ipcMain.handle('heartbeat:pong', (_e, info) => {
+  lastPongAt = Date.now();
+  if (info && typeof info === 'object') lastPongInfo = info;
+  return true;
+});
+
+// v3.12 e2e-only: prove the quit gate by attempting a NON-explicit quit.
+// Guarded behind MEOWCAT_TEST=1 so production never sees it.
+ipcMain.handle('dev:force-quit', () => {
+  if (process.env.MEOWCAT_TEST !== '1') return false;
+  app.quit();   // quitting=false → the gate must block this
+  return true;
 });
 
 // v3.9: the renderer retargets the platform tracker when it lands on /
@@ -881,6 +1143,14 @@ ipcMain.handle('zones:select', () => {
     });
     zoneWin.setMenuBarVisibility(false);
     zoneWin.setAlwaysOnTop(true, 'screen-saver');
+    // v3.12: the zone overlay is a big transparent surface — log (and heal)
+    // any renderer crash instead of leaving a dead overlay hanging around.
+    try {
+      zoneWin.webContents.on('render-process-gone', (_e, details) => {
+        logCrash('zone-select-render-gone', new Error(details?.reason || 'unknown'));
+        try { zoneWin?.destroy(); } catch {}
+      });
+    } catch {}
     zoneWin.loadFile(path.join(__dirname, 'windows', 'zone-select.html'));
     zoneWin.once('ready-to-show', () => {
       try {
@@ -901,7 +1171,11 @@ ipcMain.handle('zone-select:finish', (_e, rect) => {
   try {
     if (rect && Number.isFinite(rect.x) && Number.isFinite(rect.y) &&
         Number.isFinite(rect.w) && Number.isFinite(rect.h) && rect.w > 12 && rect.h > 12) {
-      const rel = toRelativeZone({ x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.w), h: Math.round(rect.h) }, primaryWA());
+      // v3.12 FIX: zones are relative to the UNION the cat roams (the same
+      // base the renderer converts them back with). They used to be stored
+      // relative to the PRIMARY work area, so a zone drawn anywhere but the
+      // top-left monitor landed offset on multi-monitor setups.
+      const rel = toRelativeZone({ x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.w), h: Math.round(rect.h) }, unionWA());
       if (validZone(rel)) {
         const next = [...store.get('noWalkZoneList'), rel].slice(-24);
         store.set('noWalkZoneList', next);
@@ -973,6 +1247,7 @@ app.whenReady().then(() => {
   createTray();
   startBackgroundJobs();
   applyFeatureFlags();
+  startHeartbeat();   // v3.12: renderer liveness watchdog
 
   // initial pushes once the cat renderer is alive
   setTimeout(() => {
@@ -1018,23 +1293,9 @@ function timeBiasNow() {
 }
 
 app.on('window-all-closed', () => {
+  // v3.12: the cat's window never truly "stays" closed — the closed handler
+  // resurrects it within 250ms. If this ever fires, it is diagnostics-worthy:
+  // when quitting, exit cleanly; otherwise log and keep living.
   if (quitting) app.quit();
-});
-
-app.on('before-quit', () => {
-  quitting = true;
-  enforcer?.stop();
-  scanner?.stop();
-  platTracker?.stop();   // v3.9: no orphan PowerShell
-  sysMon.stop();
-  musicWatcher.stop();
-  stopIdleTicker();
-  stopCursorWatch();
-  stopTypingHook();
-  applyHotkeys(false);
-  if (statusPoller) clearInterval(statusPoller);
-  fastWins.closeAll();
-  if (schedTimer) clearInterval(schedTimer);
-  if (coinTimer) clearInterval(coinTimer);
-  if (quitTimer) clearInterval(quitTimer);
+  else logCrash('window-all-closed', new Error('all windows closed with no user Quit action — cat keeps living'));
 });

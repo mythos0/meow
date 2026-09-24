@@ -50,6 +50,8 @@ const app = spawn(electronBin, [
   env: {
     ...process.env, DISPLAY: process.env.DISPLAY,
     MEOW_WARM_IDLE_MS: '3000',
+    MEOWCAT_TEST: '1',                       // v3.12: exposes dev:move-cursor
+    MEOWCAT_FAKE_CURSOR: '{"x":800,"y":500}', // v3.12: deterministic drag tests
     XDG_CONFIG_HOME: userData, XDG_CACHE_HOME: userData,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -176,16 +178,21 @@ try {
       return n;
     };
     const before = { x: p.x, y: p.y, moves: window.__regionMoves || 0, vis: readVisible() };
-    // grab the cat and haul it far up-right, outside the old box — sampling visibility
-    const samples = [];
+    // v3.12: MAIN drives the drag from the true global cursor — the test moves
+    // that cursor through the dev seam, exactly like a real hand would.
+    // Grab point = (p.x, p.y - 20) in screen coords (the synthetic mousedown).
+    const grab = { x: p.x, y: p.y - 20 };
+    await window.meow.devMoveCursor(grab);
     const fire = (type, cx, cy) => window.dispatchEvent(new MouseEvent(type, { clientX: cx, clientY: cy, button: 0, bubbles: true }));
     fire('mousedown', lx, ly - 20);
+    await new Promise(r => setTimeout(r, 60));   // let the poller adopt the grab
     window.__regionMoves = 0;
+    const samples = [];
     const steps = 40;
     for (let i = 1; i <= steps; i++) {
-      const cx = lx + (620 / steps) * i;             // +620px — far past the old 480px region
-      const cy = ly - 20 - (240 / steps) * i;        // up 240px
-      fire('mousemove', cx, cy);
+      const cx = grab.x + (620 / steps) * i;             // +620px — far past the old 480px region
+      const cy = grab.y - (240 / steps) * i;             // up 240px
+      await window.meow.devMoveCursor({ x: cx, y: cy });  // the "hand" moves
       if (i % 8 === 0) {
         await new Promise(r => requestAnimationFrame(r));
         const pose = window.__brain().pose;
@@ -197,6 +204,7 @@ try {
       await new Promise(r => setTimeout(r, 16));
     }
     fire('mouseup', lx + 620, ly - 260);
+    await new Promise(r => setTimeout(r, 80));
     const afterPose = window.__brain().pose;
     const afterVis = readVisible();
     const moves = window.__regionMoves || 0;
@@ -219,6 +227,8 @@ try {
     const b = window.__brain();
     const reg = window.__region();
     const lx = b.pose.x - reg.x, ly = b.pose.y - reg.y - 20;
+    // park the cursor where the grab happens so the main-driven drag holds still
+    await window.meow.devMoveCursor({ x: b.pose.x, y: b.pose.y - 20 });
     const fire = (type, cx, cy) => window.dispatchEvent(new MouseEvent(type, { clientX: cx, clientY: cy, button: 0, bubbles: true }));
     fire('mousedown', lx, ly); fire('mouseup', lx, ly);
     await new Promise(r => setTimeout(r, 120));
@@ -268,12 +278,16 @@ try {
         return c && c.union && c.union.width > 0;
       });
       ok('zone overlay received the display union', !!cfgOk);
-      await zone.evaluate(() => {
-        const fire = (type, x, y) => window.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }));
-        fire('mousedown', 400, 300);
-        fire('mousemove', 700, 460);
-        fire('mouseup', 700, 460);
-      });
+      // the mouseup triggers finishZone, which closes the overlay — the page
+      // can vanish while this evaluate is still resolving, so tolerate that
+      try {
+        await zone.evaluate(() => {
+          const fire = (type, x, y) => window.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }));
+          fire('mousedown', 400, 300);
+          fire('mousemove', 700, 460);
+          fire('mouseup', 700, 460);
+        });
+      } catch { /* overlay closed under us — the finish already happened */ }
       await new Promise(r => setTimeout(r, 600));
       const zones = await cat.evaluate(async () => (await window.meow.getSettings()).noWalkZoneList);
       ok('drawn rectangle landed in the zone list', Array.isArray(zones) && zones.length === 1, JSON.stringify(zones));

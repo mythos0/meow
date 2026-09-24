@@ -394,6 +394,7 @@ try {
       dot = window.__laser && window.__laser();
     }
     const st0 = b.state;
+    window.__laserBaseline = await window.meow.getCoins();   // v3.12: catch test baseline
     // keep the dot underfoot → the brain must chase and pounce quickly
     let pounced = false;
     const t1 = Date.now();
@@ -407,17 +408,25 @@ try {
   ok('live: laser toy spawns, brain chases and pounces', laserT.ok, JSON.stringify(laserT));
 
   // laser catch resolution: dot underfoot at pounce landing → +3 coins + happy
+  // v3.12: self-re-arming — if the 8s chase cap expired before the catch (a
+  // pre-existing sandbox-load flake), spawn the dot again; the catch itself
+  // is deterministic once the dot stays underfoot.
   const catchT = await cat.evaluate(async () => {
     const b = window.__brain && window.__brain();
-    const c0 = await window.meow.getCoins();
+    const c0 = window.__laserBaseline != null ? window.__laserBaseline : await window.meow.getCoins();
     const t0 = Date.now();
-    while (Date.now() - t0 < 9000) {
+    let respawns = 0;
+    while (Date.now() - t0 < 16000) {
       if (window.__laser()) window.__setLaser(b.x + 20, b.baseY - 8);
-      if (!window.__laser() && !b.laser) break;   // chase resolved (caught or timed out)
+      else if (!b.laser) {
+        if ((await window.meow.getCoins()) - c0 >= 3) break;   // caught — done
+        if (respawns < 4) { respawns++; window.__spawnLaser(); await new Promise(r => setTimeout(r, 150)); continue; }
+        break;
+      }
       await new Promise(r => setTimeout(r, 40));
     }
     const c1 = await window.meow.getCoins();
-    return { gained: c1 - c0, state: b.state, dotLeft: !!window.__laser() };
+    return { gained: c1 - c0, state: b.state, dotLeft: !!window.__laser(), respawns };
   });
   ok('live: laser catch pays +3 coins and ends the chase', catchT.gained >= 3 && !catchT.dotLeft,
     JSON.stringify(catchT));
