@@ -258,3 +258,26 @@ Work Log:
 
 Stage Summary:
 - v3.10.0 shipped: no call detection, no fullscreen auto-hide, no ducking, no process-list sampler; the cat can only be hidden by the user and only stopped by an explicit Quit — plus a real extra CPU win (one less recurring subprocess on Windows, zero on Linux).
+
+---
+Task ID: 18
+Agent: main (Super Z)
+Task: v3.13.0 — butterfly on every desktop + real hunts; companion cat visibility; auto-quit re-verification; full visibility-tested release
+
+Work Log:
+- Synced stale sandbox checkout to origin/main v3.12.0 (stash + ff-only), reinstalled node_modules + electron binary
+- Audited butterfly/companion/quit-gate code; ran a live dual-display probe which CONFIRMED the butterfly bug (spawn tied to primary work area → on display 2 it crossed the wrong screen, everInLane=0) and localized the companion failure mode
+- NEW src/butterfly.js: pure unit-tested butterfly state machine (cruise/hunted/flee, lane-relative spawn from the NEARER edge, dip into pounce reach, flutter-around-hunter, startle dart) replacing the primary-workArea spawner in cat.html
+- Real hunt loop in cat.html: notice (≤340px, idle-ish ground cats) → brain.startStalk(kind='butterfly') + stalkBoost 2.3 → auto-pounce → resolveButterflyPounce: catch = hearts + +2 coins + bumpStat('butterflies') + bubble + next visitor in 9-16s; miss = startle + flee, ≤3 attempts; cursor-idle/busy/typing handlers gated so they never steal a live hunt; loop's cursor-stalk feed gated likewise
+- Companion fixes: kitten receives the SAME platform list (setPlatforms wired in the platforms IPC + at spawn); chase camera frames the MAIN cat's feet, so a ground kitten under a platform cat was pushed below the canvas (the "companion not showing" root cause) — the kitten now _jumpTo's the big cat's platform (joinCd 2.5s) and wakes (sleep/curl/eat/groom…) when separated; beyond-run forcing no longer fires mid-jump
+- Brain hardening: startStalk(x,y,kind) + stalkBoost; _enter() now LANDS an interrupted jump at its arc destination (previously a pet/pounce/nuzzle mid-flight stranded a stale _jump that blocked the companion join guards forever and froze the feet mid-air); dropAt() mid-air releases FALL to the ground (≤60px above ground still snaps exactly where released, preserving the pinned no-snap-back e2e)
+- Laser dot spawn/drift clamps + typing-pounce keyboard target made lane-relative (same primary-workArea bug class)
+- settings-store: butterflies stat; settings.html stat line shows 🦋
+- Tests: +15 unit (tests/v313.test.mjs: spawn/cull/dip/flee/catch geometry, stalk kinds + boost, 3 drop-fall cases, interrupted-jump landing, stat); NEW scripts/e2e-v313.mjs (21 checks: butterfly paints pixels on display 1 AND 2 inside the lane, kitten joins a window top + paints pixels, hunt→catch→stat through the real store, miss→flee, laser lane-relative, quit-gate + SIGTERM re-pin) with real canvas pixel-visibility helpers
+- Suite hardening: __stopButterfly hook pins ambient spawns to manual (the 18-42s scheduler hijacked live checks' cat states); e2e-linux sets MEOWCAT_TEST=1 so the pet-hold can park the cursor ON the cat (Xvfb's resting pointer at screen center used to drag the cat away mid-hold); pet-hold got a clean-reset + retry loop; zone-draw overlay-close race tolerated; pet probe reproduced + fixed a Playwright closure-in-evaluate pitfall
+- Release: electron-builder portable → MeowCat-3.13.0-portable.exe; verify-artifact-identity 25/25 (Task Manager can only show MeowCat); 7z restored via node_modules/7zip-bin symlink; C#-era root remnants (src/tests/publish) removed from the worktree; committed + pushed main + tag v3.13.0; GitHub Release created with the exe; asset download-verified (octet-stream, SHA-256 a67d29e0… == uploaded digest)
+
+Stage Summary:
+- ALL GREEN: 321 unit + 89 visual + 193 e2e (44 e2e-linux + 29 e2e-dual + 21 e2e-v313 + 30 v311 + 11 v38 + 9 v37 + 43 v36 + 6 v39) = 603 checks
+- User questions answered with evidence: auto-quit STILL blocked (dev:force-quit reversed + journaled; SIGTERM ignored); butterfly now visible + huntable on every display; companion kitten visible everywhere and follows onto window tops
+- Release: https://github.com/mythos0/meow/releases/tag/v3.13.0 (MeowCat-3.13.0-portable.exe, 76,545,708 bytes, sha256 verified)
