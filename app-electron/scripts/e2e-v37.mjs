@@ -127,7 +127,10 @@ try {
   });
   ok('cat never drawn outside the visible region during slides',
     stroll.worst <= 0, JSON.stringify(stroll));
-  ok('region actually slides while strolling (feature intact)', stroll.slides >= 1, `slides=${stroll.slides}`);
+  // v3.11 LANE: ground strolling now happens INSIDE a stationary full-width
+  // window — the flicker root cause. A stroll must issue ZERO window moves.
+  ok('lane: strolling moves the window ZERO times (flicker structurally dead)',
+    stroll.slides === 0, `slides=${stroll.slides}`);
 
   // ---------------- 3. companion kitten leashed + visible ----------------
   await cat.evaluate(() => window.meow.setSettings({ companionCat: true }));
@@ -174,8 +177,8 @@ try {
     await new Promise(r2 => setTimeout(r2, 250));
     return { lastPlay: window.__lastPlayInfo ? window.__lastPlayInfo() : null, emote: window.__brain().emote?.kind || null };
   });
-  ok('quick tap plays a real meow + heart',
-    !!tap.lastPlay && /^meow_real/.test(tap.lastPlay.name) && tap.emote === 'heart', JSON.stringify(tap));
+  ok('quick tap plays the natural single meow + heart',
+    !!tap.lastPlay && tap.lastPlay.name === 'meow_single' && tap.emote === 'heart', JSON.stringify(tap));
 
   // ---------------- 5. v3.10: a call app changes NOTHING ----------------
   // the old pipeline (teams -> sysMonitor -> parseProcessList -> findCallApp

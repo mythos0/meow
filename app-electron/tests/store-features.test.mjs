@@ -28,8 +28,22 @@ describe('v3.6 feature toggles', () => {
   });
   test('legacy keys unchanged', () => {
     const s = mkStore();
-    assert.equal(s.get('breed'), 'grey_tabby');
+    // v3.11: the default cat IS the ginger kitten (was grey_tabby)
+    assert.equal(s.get('breed'), 'ginger_kitten');
+    assert.equal(s.get('breedExplicit'), false);
     assert.equal(s.get('unlimitedCoins'), true);
+  });
+  test('v3.11: grey_tabby carryover migrates to ginger_kitten until the user picks', () => {
+    // an upgraded user with a saved grey_tabby and no explicit choice
+    const a = mkStore({ breed: 'grey_tabby' });
+    assert.equal(a.get('breed'), 'ginger_kitten');
+    // the moment they pick a breed themselves, the marker latches
+    a.set('breedExplicit', true);
+    a.set('breed', 'grey_tabby');
+    assert.equal(a.get('breed'), 'grey_tabby');
+    // reload: the explicit choice survives (no re-migration)
+    const b = createSettings(a.export ? { read: () => a.export(), write: () => {} } : undefined);
+    assert.equal(b.get('breed'), 'grey_tabby');
   });
   test('set/get round-trip for new keys', () => {
     const s = mkStore();

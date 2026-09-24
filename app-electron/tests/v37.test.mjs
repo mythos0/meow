@@ -16,7 +16,10 @@ const WA = { x: 0, y: 0, width: 1600, height: 1000 };
 
 // ------------------------------------------------------------------ region
 describe('v3.7 region slide (hop-flap fix)', () => {
-  const r = computeRegionSize(1, WA);           // 480 x 384
+  // v3.11: the app now uses a full-width lane, but the slide math is
+  // size-agnostic — these regression pins use the classic 480-wide shape and
+  // stay exactly as v3.7 wrote them (plus the lane invariant in region.test.mjs).
+  const r = { w: 480, h: 384 };
   const o = { x: 560, y: 616 };                 // legal origin for feet 992
 
   test('a full in-place hop (70px) no longer slides the window', () => {
@@ -166,11 +169,15 @@ describe('v3.7 sys-monitor streaming sampler (win32)', () => {
     const mon = createSysMonitor({
       spawnFn: () => { spawnCount++; return fakeSpawn(); },
       platform: 'win32',
-      intervalMs: 300,   // watchdog = 300*2.5+1500 ≈ 2.25s
+      intervalMs: 250,   // watchdog = 250*2.5+1500 ≈ 2.1s
       onSample: () => {},
     });
     mon.start();
-    await new Promise(r => setTimeout(r, 4200));
+    // generous headroom for loaded CI sandboxes (timers lag under load; the
+    // mechanism is timer-driven, so the wall-clock budget must be too)
+    for (let i = 0; i < 40 && spawnCount < 2; i++) {
+      await new Promise(r => setTimeout(r, 250));
+    }
     assert.ok(spawnCount >= 2, `watchdog respawned the silent streamer (${spawnCount})`);
     mon.stop();
   });

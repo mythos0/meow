@@ -8,16 +8,17 @@ import { BREED_PRICES } from '../src/settings-store.js';
 const REQUIRED_KEYS = ['fur', 'dark', 'belly', 'nose', 'eye', 'pupil', 'earIn', 'tongue'];
 
 describe('breeds & bodies (v3.2)', () => {
-  test('20 breeds exist (6 original + 6 v3.1 + panda + 7 v3.2)', () => {
+  test('24 breeds exist (20 through v3.10 + 4 v3.11 kittens)', () => {
     const expected = [
       'grey_tabby', 'orange_tabby', 'siamese', 'calico', 'persian', 'tuxedo',
       'bombay', 'russian_blue', 'ginger_kitten', 'ragdoll', 'bengal',
       'maine_coon', 'panda',
       'mochi', 'scottish_fold', 'snow_angora', 'somali', 'british_plush',
       'choco_munchkin', 'sakura',
+      'cocoa_kitten', 'milky_kitten', 'smokey_kitten', 'midnight_kitten',
     ];
     for (const b of expected) assert.ok(PALETTES[b], `missing breed: ${b}`);
-    assert.equal(Object.keys(PALETTES).length, 20);
+    assert.equal(Object.keys(PALETTES).length, 24);
   });
 
   test('every palette is complete and references a valid body type', () => {
@@ -75,7 +76,7 @@ describe('breeds & bodies (v3.2)', () => {
 
   test('all palettes are visually distinct (JSON signatures unique)', () => {
     const sigs = new Set(Object.values(PALETTES).map(p => JSON.stringify(p)));
-    assert.equal(sigs.size, 20);
+    assert.equal(sigs.size, 24);
   });
 
   test('prices cover every breed', () => {

@@ -27,6 +27,9 @@ contextBridge.exposeInMainWorld('meow', {
   stopPomodoro: () => ipcRenderer.invoke('pomodoro:stop'),
   pomodoroState: () => ipcRenderer.invoke('pomodoro:state'),
   listZones: () => ipcRenderer.invoke('zones:list'),
+  selectZone: () => ipcRenderer.invoke('zones:select'),          // v3.11 screenshot-style picker
+  finishZone: rect => ipcRenderer.invoke('zone-select:finish', rect),
+  cancelZone: () => ipcRenderer.invoke('zone-select:cancel'),
   importSkin: jsonText => ipcRenderer.invoke('skins:import', jsonText),
   injectKeys: n => ipcRenderer.invoke('keys:inject', n),
   quickAction: act => ipcRenderer.invoke('quick-action', act),
@@ -41,6 +44,7 @@ contextBridge.exposeInMainWorld('meow', {
       'no-walk-zones', 'photo-mode', 'dance-party', 'time-bias', 'boot-greet',
       'cat-visible',   // v3.7: pause the render loop while the cat is hidden
       'platform-rect', // v3.9: live rect of the tracked platform window
+      'zone-config',   // v3.11: union bounds for the zone-selection overlay
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));

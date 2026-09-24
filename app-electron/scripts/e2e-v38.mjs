@@ -118,7 +118,7 @@ try {
     return { peak, still, samples, last: window.__lastPlayInfo() };
   });
   ok('rapid clicks never stack meows (exactly one voice)',
-    burst.peak <= 1 && burst.still <= 1 && /^meow_real/.test(burst.last?.name || ''),
+    burst.peak <= 1 && burst.still <= 1 && /^meow/.test(burst.last?.name || ''),
     JSON.stringify({ peak: burst.peak, still: burst.still, last: burst.last?.name }));
 
   // ---------------- 2. reminder shows its message ----------------

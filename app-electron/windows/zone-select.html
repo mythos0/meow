@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Select a no-walk zone</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; cursor: crosshair; }
+  #cv { position: fixed; inset: 0; cursor: crosshair; }
+  #tip {
+    position: fixed; top: 26px; left: 50%; transform: translateX(-50%);
+    background: rgba(22,24,30,0.92); color: #ffe9c8; border: 1px solid #3a3f4b;
+    border-radius: 14px; padding: 10px 18px; font: 14px/1.4 system-ui, sans-serif;
+    box-shadow: 0 6px 24px rgba(0,0,0,.4); pointer-events: none; z-index: 5;
+  }
+  #tip b { color: #ffd28a; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="tip">Drag to draw a <b>no-walk zone</b> — the cat will refuse to enter it · <b>Esc</b> to cancel</div>
+<script type="module">
+// zone-select.html — v3.11: Windows Snipping Tool-style area selection for
+// no-walk zones. A fullscreen dimmed transparent overlay with a crosshair;
+// press and drag to draw the rectangle (live outline + size label), release
+// to confirm, Esc or right-click cancels. Works across every display: the
+// window spans the bounding-box union of all work areas.
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d', { alpha: true });
+const tip = document.getElementById('tip');
+
+let cfg = { union: { x: 0, y: 0, width: 1600, height: 1000 }, primary: null };
+let anchor = null;         // {x, y} in window-local px
+let cur = null;            // current cursor px while dragging
+let dragging = false;
+let done = false;
+
+function resize() {
+  cv.width = window.innerWidth;
+  cv.height = window.innerHeight;
+  paint();
+}
+window.addEventListener('resize', resize);
+
+function toLocalScreen(e) {
+  // window-local px -> screen coords (the window may start off-origin on a
+  // multi-monitor union)
+  return { x: e.clientX + cfg.union.x, y: e.clientY + cfg.union.y };
+}
+
+window.meow.on('zone-config', c => {
+  cfg = { ...cfg, ...c };
+  resize();
+});
+
+function paint() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  // dim everything, Snipping-Tool style
+  ctx.fillStyle = 'rgba(12,14,20,0.34)';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  if (dragging && anchor && cur) {
+    const x = Math.min(anchor.x, cur.x), y = Math.min(anchor.y, cur.y);
+    const w = Math.abs(cur.x - anchor.x), h = Math.abs(cur.y - anchor.y);
+    // clear the selected area so it pops out of the dim
+    ctx.clearRect(x, y, w, h);
+    // marching-ants style border
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 5]);
+    ctx.lineDashOffset = -(performance.now() / 40) % 12;
+    ctx.strokeStyle = '#ffd28a';
+    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    ctx.restore();
+    // corner handles
+    ctx.fillStyle = '#ffd28a';
+    for (const [hx, hy] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
+      ctx.fillRect(hx - 3, hy - 3, 6, 6);
+    }
+    // size label
+    const label = `${Math.round(w)} × ${Math.round(h)}`;
+    ctx.font = '600 13px system-ui, sans-serif';
+    const tw = ctx.measureText(label).width + 14;
+    const ly = y > 30 ? y - 28 : y + h + 8;
+    ctx.fillStyle = 'rgba(22,24,30,0.92)';
+    ctx.fillRect(x, ly, tw, 22);
+    ctx.fillStyle = '#ffe9c8';
+    ctx.fillText(label, x + 7, ly + 15);
+  }
+}
+
+// repainted on a light rAF only while a selection is live (marching ants)
+function tick() {
+  if (done) return;
+  if (dragging) paint();
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+window.addEventListener('mousedown', e => {
+  if (e.button === 2) { e.preventDefault(); cancel(); return; }
+  if (e.button !== 0) return;
+  anchor = { x: e.clientX, y: e.clientY };
+  cur = { ...anchor };
+  dragging = true;
+  tip.style.display = 'none';
+});
+
+window.addEventListener('mousemove', e => {
+  if (dragging) cur = { x: e.clientX, y: e.clientY };
+});
+
+window.addEventListener('mouseup', e => {
+  if (e.button !== 0 || !dragging) return;
+  dragging = false;
+  const w = Math.abs(e.clientX - anchor.x), h = Math.abs(e.clientY - anchor.y);
+  if (w > 12 && h > 12) {
+    done = true;
+    const tl = toLocalScreen({ clientX: Math.min(anchor.x, e.clientX), clientY: Math.min(anchor.y, e.clientY) });
+    window.meow.finishZone({ x: tl.x, y: tl.y, w: Math.round(w), h: Math.round(h) });   // main closes the window
+  } else {
+    paint();   // a click, not a drag — keep waiting
+  }
+});
+
+window.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+});
+
+function cancel() {
+  done = true;
+  window.meow.cancelZone();   // main closes the window
+}
+
+// test hooks (harmless in production)
+window.__zoneDraw = (ax, ay, cx, cy) => { anchor = { x: ax, y: ay }; cur = { x: cx, y: cy }; dragging = true; paint(); dragging = false; };
+window.__zoneCfg = () => cfg;
+resize();
+</script>
+</body>
+</html>

@@ -25,10 +25,31 @@ export function belowFeet() {
   return 60;
 }
 
+// v3.11 THE LANE WINDOW — the walking-flicker root fix (4th user report).
+//
+// History: v3.7 killed the hop-flap, v3.8 synchronized the resize, v3.9 made
+// the slide a rate-capped chase (≤15px steps) — and users STILL saw flicker
+// while the cat walked. The residual artifact is structural: while the cat
+// walks, the comfort band empties every few seconds and the chase issues
+// SetWindowPos on a transparent window at up to 60Hz. On Windows, moving a
+// layered transparent window while its canvas repaints can expose a
+// one-vsync stale frame — an invisible shimmer that reads as flicker.
+//
+// The fix removes the cause instead of hiding it: the region window becomes a
+// full-width GROUND LANE. The cat's favorite gait — strolling along the
+// ground edge-to-edge — now happens INSIDE a stationary window. Zero
+// SetWindowPos while walking, zero flicker, by construction. The chase
+// camera remains only for the rare vertical cases (platform climbs, rides,
+// drags) where it was always brief.
+//
+// RAM note: the v3.3 region window was a memory diet (480x434 ≈ 0.21MP).
+// The lane is wa.width x ~400 (≤1920 wide, ≈0.77MP ≈ 3MB surface) — a
+// deliberate, bounded tradeback to buy the one thing users kept asking for:
+// a rock-steady walking cat.
 export function computeRegionSize(scale, workArea) {
   const wa = workArea || { x: 0, y: 0, width: 1600, height: 1000 };
   const s = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  const wantW = Math.ceil(180 * s + 300);   // cat width + side margins for hops
+  const wantW = Math.min(Number.isFinite(wa.width) ? wa.width : 1600, 1920);
   const wantH = aboveFeet(s) + belowFeet();
   const w = Math.max(320, Math.min(Math.round(wantW), wa.width));
   const h = Math.max(280, Math.min(Math.round(wantH), wa.height));
@@ -131,6 +152,8 @@ export function chaseStep(from, to, maxStep) {
 // to learn the clamped rect. This mirrors main.js's region:move clamp exactly
 // (same min sizes, same workArea clamping, same rounding). Unit tests pin the
 // two implementations together.
+// v3.11: `workArea` may be the UNION of all display work areas (multi-monitor
+// roaming) — the math is agnostic, it just needs a bounding rect.
 export function clampOrigin(rect, curRegion, workArea) {
   const wa = workArea || { x: 0, y: 0, width: 1600, height: 1000 };
   const num = (v, dflt) => (Number.isFinite(v) ? v : dflt);
@@ -142,11 +165,50 @@ export function clampOrigin(rect, curRegion, workArea) {
   return { x: Math.round(x), y: Math.round(y), w, h };
 }
 
+// v3.11 DRAG FOLLOW — the "cat goes invisible while dragging" fix.
+// During a drag the old code SKIPPED the chase entirely (`cand && !dragging`),
+// so the window stayed put while the sprite tracked the cursor: the moment
+// the cat left the region rect it was clipped to nothing ("hidden outside a
+// box area"), and on mouse-up the chase re-centered and the cat "showed
+// again". Now the chase keeps running during drags toward a target that
+// CENTERS the cat, at a higher cap (drags are human-speed; the window must
+// keep up) — the sprite always has canvas under it.
+export const DRAG_CHASE_V = 2400;   // px/s cap while the user drags the cat
+
+export function dragChaseTarget(origin, region, catX, feetY, workArea) {
+  const wa = workArea || { x: 0, y: 0, width: 1600, height: 1000 };
+  const r = region || { w: 480, h: 434 };
+  const o = origin || { x: wa.x, y: wa.y };
+  const nx = clampNum(catX - r.w / 2, wa.x, wa.x + wa.width - r.w);
+  const ny = clampNum(feetY + belowFeet() - r.h, wa.y, wa.y + wa.height - r.h);
+  if (nx === o.x && ny === o.y) return null;
+  return { x: Math.round(nx), y: Math.round(ny) };
+}
+
+// v3.11 MULTI-DISPLAY — the "cat can't be dragged to the 2nd monitor" fix.
+// Every clamp used screen.getPrimaryDisplay().workArea, so the cat's window
+// could never leave monitor 1. The cat now roams the bounding-box UNION of
+// all display work areas; windows may span displays on Windows. Pure helper.
+export function unionWorkAreas(list) {
+  const rects = (Array.isArray(list) ? list : [])
+    .filter(d => d && Number.isFinite(d.x) && Number.isFinite(d.y) &&
+                 Number.isFinite(d.width) && d.width > 0 && Number.isFinite(d.height) && d.height > 0);
+  if (!rects.length) return { x: 0, y: 0, width: 1600, height: 1000 };
+  const x1 = Math.min(...rects.map(r => r.x));
+  const y1 = Math.min(...rects.map(r => r.y));
+  const x2 = Math.max(...rects.map(r => r.x + r.width));
+  const y2 = Math.max(...rects.map(r => r.y + r.height));
+  return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+}
+
 // v3.7: the companion kitten must stay inside the region window that follows
 // the MAIN cat. The renderer leashes the kitten to within `companionLeash`
-// pixels of the main cat and slides using the pair's midpoint — with a leash
-// this size both cats always fit inside the region at any scale.
+// pixels of the main cat and slides using the pair's midpoint.
+// v3.11: the lane is full-width, so an uncapped w/2 leash (720px on 1600px)
+// let the kitten wander half a screen away — visually detached. The leash is
+// now CAPPED at a cozy 260px: the pair stays together, and both still fit
+// inside the lane with room to spare at every scale.
 export function companionLeash(regionW) {
   const w = Number.isFinite(regionW) && regionW > 0 ? regionW : 480;
-  return Math.max(110, Math.round(w / 2 - 80));
+  return Math.min(260, Math.max(110, Math.round(w / 2 - 80)));
 }

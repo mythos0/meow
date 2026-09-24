@@ -1,6 +1,6 @@
 // main.js — MeowCat Electron main process (ESM)
 'use strict';
-import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell, globalShortcut, powerMonitor, dialog } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell, globalShortcut, powerMonitor, dialog, utilityProcess } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -11,7 +11,7 @@ import { createTopmostEnforcer } from './src/topmost.js';
 import { createWindowScanner } from './src/window-scan.js';
 import { createFastWindows } from './src/fast-windows.js';
 import { createPlatformTracker } from './src/platform-tracker.js';
-import { computeRegionSize, initialOrigin } from './src/region.js';
+import { computeRegionSize, initialOrigin, unionWorkAreas } from './src/region.js';
 import { createSysMonitor } from './src/sys-monitor.js';
 import { createMusicWatcher } from './src/music-watcher.js';
 import {
@@ -22,6 +22,8 @@ import {
 import { createPomodoro, fmtRemaining } from './src/pomodoro.js';
 import { checkUnlocks, ACHIEVEMENTS, affectionProgress, unlockedPerks } from './src/achievements.js';
 import { seasonHat, validateSkinDef } from './src/cat-renderer.js';
+import { toRelativeZone, validZone } from './src/no-walk.js';
+import { createTypingHookManager } from './src/typing-hook.js';
 
 // ------------------------------------------------------------------ v3.2/v3.4 memory & process diet
 app.disableHardwareAcceleration();                         // no GPU process (API)
@@ -38,9 +40,34 @@ app.setAppUserModelId(MEOW_AUMID);
 // user explicitly quits it from the tray or the context menu.
 process.on('uncaughtException', err => {
   console.error('[meowcat] uncaughtException (cat keeps running):', err);
+  logCrash('uncaughtException', err);
 });
 process.on('unhandledRejection', err => {
   console.error('[meowcat] unhandledRejection (cat keeps running):', err);
+  logCrash('unhandledRejection', err);
+});
+
+// v3.11: persistent crash/diagnostic journal. Every self-healed incident is
+// appended to userData/meowcat-crash.log (capped) so "the cat disappeared"
+// reports come with forensics instead of guesses. The cat keeps running
+// through every line below — this is a black box, not an exit path.
+function logCrash(kind, err) {
+  try {
+    const line = `[${new Date().toISOString()}] ${kind}: ${err && (err.stack || err.message || String(err))}\n`;
+    const p = path.join(app.getPath('userData'), 'meowcat-crash.log');
+    try {
+      const st = fs.statSync(p);
+      if (st.size > 128 * 1024) {   // cap: keep the newest 64KB
+        const old = fs.readFileSync(p, 'utf8').slice(-64 * 1024);
+        fs.writeFileSync(p, old);
+      }
+    } catch { /* first write */ }
+    fs.appendFileSync(p, line);
+  } catch { /* never die logging */ }
+}
+app.on('child-process-gone', (_e, details) => {
+  console.error('[meowcat] child-process-gone:', details?.type, details?.reason);
+  logCrash('child-process-gone', new Error(`${details?.type} ${details?.reason}`));
 });
 
 // v3.3 region window: current size + origin (screen coords) of the overlay
@@ -130,12 +157,24 @@ if (!gotLock) {
   });
 }
 
+// ---------------------------------------------------------------- displays (v3.11 multi-monitor)
+// The cat roams the bounding-box UNION of every display's work area — that is
+// how it can finally be dragged onto the 2nd monitor. Single-display machines
+// get exactly the old behavior (the union IS the primary work area).
+function unionWA() {
+  try { return unionWorkAreas(screen.getAllDisplays().map(d => d.workArea)); }
+  catch { try { return screen.getPrimaryDisplay().workArea; } catch { return { x: 0, y: 0, width: 1600, height: 1000 }; } }
+}
+function primaryWA() {
+  try { return screen.getPrimaryDisplay().workArea; } catch { return { x: 0, y: 0, width: 1600, height: 1000 }; }
+}
+
 // ---------------------------------------------------------------- cat overlay window
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
 function createCatWindow() {
   try { enforcer?.stop(); } catch {}   // v3.6.1: never leak an interval at a destroyed window
-  const wa = screen.getPrimaryDisplay().workArea;
+  const wa = primaryWA();
   const scale = Number(store.get('size')) || 1.0;
   region = computeRegionSize(scale, wa);
   const spawnX = wa.x + wa.width / 2;
@@ -400,24 +439,28 @@ const musicWatcher = createMusicWatcher({
 });
 
 // ---------- typing meter (global keyboard hook on Windows) ----------
+// v3.11 THE AUTO-QUIT FIX. uiohook-napi is a NATIVE module: a hard crash
+// inside its keyboard thread (secure desktop / UAC prompt / RDP / driver
+// quirks) aborts the whole Electron process — uncaughtException can never
+// catch it. That was the last un-guarded path that could make the cat vanish
+// without the user asking ("major bug: cat auto quitting"). The hook now
+// runs in an Electron utilityProcess: a native crash kills only the child,
+// the manager respawns it with backoff, and the cat never notices.
 const typingMeter = createTypingMeter({});
-let typingHook = null;
-let typingHookFailed = false;
+const typingHook = createTypingHookManager({
+  spawnFn: () => utilityProcess.fork(path.join(__dirname, 'src', 'typing-hook-child.cjs'), [], {
+    serviceName: 'MeowCatTypingHook',
+  }),
+  onKey: () => typingMeter.key(),
+  onDown: () => logCrash('typing-hook-down', new Error('utility child exited — respawning')),
+});
 
-async function startTypingHook() {
-  if (typingHook || typingHookFailed || !store.get('reactTyping')) return;
-  try {
-    const mod = await import('uiohook-napi');
-    typingHook = mod.keyboard;
-    typingHook.addListener('keydown', () => typingMeter.key());
-    typingHook.start();
-  } catch {
-    typingHookFailed = true;   // no hook (e.g. dev Linux without X11 libs) — feature degrades
-    typingHook = null;
-  }
+function startTypingHook() {
+  if (!store.get('reactTyping')) return;
+  typingHook.start();
 }
 function stopTypingHook() {
-  if (typingHook) { try { typingHook.stop(); } catch {} typingHook = null; }
+  typingHook.stop();
 }
 
 // ---------- idle ticker: typing pounce/nap, cursor stalking, dance party ----------
@@ -653,6 +696,9 @@ function applyHotkeys(on) {
 ipcMain.handle('settings:get', () => ({
   ...store.all,
   workArea: screen.getPrimaryDisplay().workArea,
+  // v3.11: every display's work area — the renderer roams the union so the
+  // cat can walk and be dragged onto the 2nd monitor
+  workAreas: screen.getAllDisplays().map(d => d.workArea),
   season: seasonHat(new Date().getMonth()),
 }));
 ipcMain.handle('settings:set', (_e, kv) => {
@@ -660,6 +706,9 @@ ipcMain.handle('settings:set', (_e, kv) => {
   let flagsChanged = false;
   for (const [k, v] of Object.entries(kv || {})) {
     if (store.set(k, v)) applied[k] = v;
+    // v3.11: the first user-picked breed latches the marker — the
+    // grey_tabby→ginger_kitten default migration must never override it
+    if (k === 'breed') store.set('breedExplicit', true);
     if (k === 'autoStart') applyAutoStart(v);
     if (FLAG_KEYS.has(k)) flagsChanged = true;
   }
@@ -684,7 +733,9 @@ ipcMain.handle('reminders:remove', (_e, id) => { const ok = sched.remove(id); pe
 // v3.3: the cat window follows the cat
 ipcMain.handle('region:move', (_e, rect) => {
   if (!catWin || catWin.isDestroyed()) return null;
-  const wa = screen.getPrimaryDisplay().workArea;
+  // v3.11: clamp against the UNION of all displays — the cat may now roam
+  // onto the 2nd monitor, and its window follows across display boundaries.
+  const wa = unionWA();
   const num = (v, dflt) => (Number.isFinite(v) ? v : dflt);   // v3.6.1: NaN can never poison the region
   const w = Math.max(320, Math.min(num(rect?.w, region.w), wa.width));
   const h = Math.max(280, Math.min(num(rect?.h, region.h), wa.height));
@@ -807,6 +858,65 @@ ipcMain.handle('pomodoro:state', () => pomodoroEngine.snapshot());
 // no-walk zones: renderer gets the raw list and converts with its workArea
 ipcMain.handle('zones:list', () => store.get('noWalkZoneList'));
 
+// v3.11: no-walk zones are drawn like a Windows Snipping Tool selection — a
+// fullscreen dimmed overlay with a crosshair on EVERY display (one window
+// spanning the union bounds), drag a rectangle, Esc cancels. The old
+// type-four-numbers form is gone.
+let zoneWin = null;
+
+ipcMain.handle('zones:select', () => {
+  try {
+    if (zoneWin && !zoneWin.isDestroyed()) { zoneWin.focus(); return true; }
+    const u = unionWA();
+    zoneWin = new BrowserWindow({
+      x: u.x, y: u.y, width: u.width, height: u.height,
+      transparent: true, frame: false, hasShadow: false,
+      skipTaskbar: true, resizable: false, movable: false,
+      minimizable: false, maximizable: false, fullscreenable: false,
+      show: false, backgroundColor: '#00000000',
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.cjs'),
+        contextIsolation: true, nodeIntegration: false, spellcheck: false,
+      },
+    });
+    zoneWin.setMenuBarVisibility(false);
+    zoneWin.setAlwaysOnTop(true, 'screen-saver');
+    zoneWin.loadFile(path.join(__dirname, 'windows', 'zone-select.html'));
+    zoneWin.once('ready-to-show', () => {
+      try {
+        zoneWin.show();
+        zoneWin.focus();
+        zoneWin.webContents.send('zone-config', {
+          union: u,
+          primary: primaryWA(),
+        });
+      } catch { /* gone */ }
+    });
+    zoneWin.on('closed', () => { zoneWin = null; });
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle('zone-select:finish', (_e, rect) => {
+  try {
+    if (rect && Number.isFinite(rect.x) && Number.isFinite(rect.y) &&
+        Number.isFinite(rect.w) && Number.isFinite(rect.h) && rect.w > 12 && rect.h > 12) {
+      const rel = toRelativeZone({ x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.w), h: Math.round(rect.h) }, primaryWA());
+      if (validZone(rel)) {
+        const next = [...store.get('noWalkZoneList'), rel].slice(-24);
+        store.set('noWalkZoneList', next);
+        if (catWin && !catWin.isDestroyed()) catWin.webContents.send('settings-changed', { noWalkZoneList: next });
+      }
+    }
+  } catch { /* ignore bad rects */ }
+  try { zoneWin?.close(); } catch {}
+  return true;
+});
+ipcMain.handle('zone-select:cancel', () => {
+  try { zoneWin?.close(); } catch {}
+  return true;
+});
+
 // community skins: settings sends the JSON text; main validates + stores
 ipcMain.handle('skins:import', (_e, jsonText) => {
   try {
@@ -877,6 +987,27 @@ app.whenReady().then(() => {
 
   screen.on('display-metrics-changed', () => {
     if (catWin && !catWin.isDestroyed()) catWin.webContents.send('workarea-changed');
+  });
+  // v3.11: monitors plugged/unplugged — refresh the union bounds the cat
+  // roams, and keep the lane window inside a valid display.
+  screen.on('display-added', () => { try { catWin && !catWin.isDestroyed() && catWin.webContents.send('workarea-changed'); } catch {} });
+  screen.on('display-removed', () => {
+    try {
+      if (catWin && !catWin.isDestroyed()) catWin.webContents.send('workarea-changed');
+      const u = unionWA();
+      if (catWin && (catWin.getBounds().x > u.x + u.width || catWin.getBounds().y > u.y + u.height)) {
+        catWin.setPosition(u.x + u.width - region.w, u.y + u.height - region.h, false);
+      }
+    } catch { /* gone */ }
+  });
+  // v3.11: after system sleep/resume, transparent windows have historically
+  // died silently on some Windows driver stacks — revive the cat if needed.
+  powerMonitor.on('resume', () => {
+    try {
+      if (!catWin || catWin.isDestroyed()) { createCatWindow(); return; }
+      if (hiddenByUser) return;
+      if (!catWin.isVisible()) catWin.show();
+    } catch { /* never die on resume */ }
   });
   app.on('activate', () => { if (!catWin) createCatWindow(); });
 });

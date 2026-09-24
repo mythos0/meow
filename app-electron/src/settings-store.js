@@ -3,10 +3,14 @@
 'use strict';
 
 export const DEFAULTS = {
-  breed: 'grey_tabby',
+  breed: 'ginger_kitten',   // v3.11: the default cat IS the ginger kitten
+  breedExplicit: false,     // v3.11: set true the first time the USER picks a breed —
+                            // while false, the grey_tabby→ginger_kitten migration may run
   size: 1.0,            // 0.5 .. 2.0
   opacity: 1.0,         // 0.3 .. 1
   sounds: true,
+  randomMeows: true,    // v3.11: ambient meows — a natural single meow at random
+                        // times, occasionally a burst of several in a row
   autoStart: false,
   topmost: true,
   windowHopping: true,  // v3.4: scan open windows so the cat can hop on them
@@ -64,6 +68,8 @@ export const BREED_PRICES = {
   maine_coon: 650, panda: 1000,
   mochi: 350, scottish_fold: 400, snow_angora: 500, somali: 450,
   british_plush: 380, choco_munchkin: 420, sakura: 300,
+  // v3.11: the kitten litter — more cute cats in the ginger_kitten spirit
+  cocoa_kitten: 280, milky_kitten: 320, smokey_kitten: 360, midnight_kitten: 420,
 };
 
 export function createSettings(backend) {
@@ -75,8 +81,21 @@ export function createSettings(backend) {
       const raw = b.read();
       if (!raw) return sanitize({});
       const parsed = JSON.parse(raw);
-      return sanitize(parsed);
+      return migrate(sanitize(parsed), parsed);
     } catch { return sanitize({}); }
+  }
+
+  // v3.11: the default cat is the ginger kitten. Users who upgraded from older
+  // releases carry breed:'grey_tabby' in their saved file — never having had a
+  // chance to see the kitten. While the user has never explicitly picked a
+  // breed (breedExplicit), migrate the old default to ginger_kitten; the
+  // moment they pick ANY breed themselves the marker latches and their choice
+  // is final forever.
+  function migrate(d, rawParsed) {
+    if (!d.breedExplicit && rawParsed && rawParsed.breed === 'grey_tabby') {
+      d.breed = 'ginger_kitten';
+    }
+    return d;
   }
 
   function sanitize(p) {

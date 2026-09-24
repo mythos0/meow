@@ -1,4 +1,4 @@
-# MeowCat v3.9 — Feature Reference
+# MeowCat v3.11 — Feature Reference
 
 A procedural desktop pet for Windows 11. Everything about the cat is drawn by code
 (see [RENDERING.md](RENDERING.md)); this page lists the product-level features.
@@ -253,3 +253,42 @@ lands on), plus the existing reminders, auto-start, topmost enforcement and warm
 * **More optimization.** Sleep/curl states animate at ~7.5fps (a sleeping cat only breathes);
   idle CPU unchanged (13 % of a core on the 2-core CI sandbox), sleep −25 % (5.7 %), RAM down
   to ~165 MB PSS; all 60 render states pixel-identical to v3.8.
+
+## 14. v3.11 — the ginger kitten release (lane, drag-follow, multi-monitor, never-quit)
+
+* **The default cat IS the ginger kitten.** Fresh installs boot as the Ginger Kitten; users
+  upgrading from older releases are migrated to it too (unless they already picked a breed —
+  the `breedExplicit` marker latches the first user choice and the migration never overrides
+  it). Four new kittens joined the store: **Cocoa, Milky, Smokey and Midnight Kitten** —
+  baby-proportion bodies, big eyes, blush, socks and pink beans. 24 breeds total.
+* **The walking flicker is dead at the architectural root (4th report).** The overlay window is
+  now a full-width **ground lane** (≤1920px wide): ordinary strolling happens inside a window
+  that never moves, so there is no `SetWindowPos` to flicker while walking — by construction,
+  not by timing. The chase camera still handles the rare vertical cases (platform climbs,
+  border rides) at the v3.9-capped ≤15px/frame. E2E proves it live: 90 captured walk frames,
+  the cat visible in every one, motion continuous (max bbox jump 7.1px), **zero** window moves.
+* **Drag is finally drag.** The chase camera follows the cursor while the cat is dragged (at
+  2400px/s cap), so the sprite always has canvas under it — the old "cat goes invisible outside
+  the box area and reappears on drop" is fixed by construction. The drop lands exactly where
+  released.
+* **The 2nd monitor is reachable.** All clamps use the bounding-box **union of every display's
+  work area** instead of the primary display only: the cat can be dragged to monitor 2, walks
+  there on its own, and the overlay crosses display boundaries. Monitor hotplug and
+  sleep/resume refresh the union and revive the window if a driver stack ate it.
+* **Sounds, as ordered.** Quick tap = one **natural single meow** (a dedicated real recording,
+  `meow_single.wav`, normalized to 16-bit 44.1kHz mono); double-click keeps the classic
+  v3.8 meow voice; at random times (22–55s) the cat meows on its own — usually a single natural
+  meow, sometimes a continuous burst of 2–4. Settings → Sounds has an **All sounds (master)**
+  switch and a **Random meows** toggle.
+* **No-walk zones are selected like a screenshot.** A fullscreen crosshair overlay spans every
+  display; drag a rectangle (live outline + marching ants + size label), release to confirm,
+  Esc cancels. Zones are stored workArea-relative as before.
+* **The auto-quit is fixed at its last unguarded path.** The global keyboard hook
+  (`uiohook-napi`, native) now runs in an Electron `utilityProcess`: a native hard crash kills
+  only the disposable child and the manager respawns it with backoff — `uncaughtException`
+  could never catch that crash class. Crash forensics land in `userData/meowcat-crash.log`,
+  and `powerMonitor` resume + display changes revive the cat if a window died while away.
+* **Repo diet.** All C#-era remains (art_raw, artifacts, installer, publish, src/MeowCat,
+  installer scripts) were removed from the repository; the README screenshots are regenerated
+  from the real running app.
+

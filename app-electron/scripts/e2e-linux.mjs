@@ -312,25 +312,35 @@ try {
   // cleanup: remove platforms so later checks run on the ground
   await cat.evaluate(() => window.__setPlatforms([]));
 
-  // ------------------------------------------------ 9b. region window follows the cat (v3.3)
+  // ------------------------------------------------ 9b. the LANE never moves while walking (v3.11)
+  // v3.3 originally slid a 480px region to follow the cat; v3.11 replaces it
+  // with a full-width ground lane — the window must stay PUT while the cat
+  // strolls, and the cat must stay inside the canvas the whole time.
   const slide = await cat.evaluate(async () => {
     const b = window.__brain && window.__brain();
     if (!b) return { ok: false, why: 'no brain' };
     const r0 = window.__region();
     if (b.state === 'sleep') b._enter('idle', 0.5);
     b._jump = null; b.onPlatform = null; b.baseY = b.groundY;
-    b.x = r0.x + 150;                    // near the left comfort-band edge
+    b._enter('idle', 1.5);
+    await new Promise(r => setTimeout(r, 1800));   // let any prior chase settle (the cat may arrive from a platform)
+    const r0b = window.__region();
+    b.x = r0b.x + 150;
     b._platformCd = 999;                 // no hopping during this test
     b._enter('walk', 4); b.dir = -1;
+    let moved = 0, worst = 0;
     const t0 = Date.now();
     while (Date.now() - t0 < 5000) {
       const r1 = window.__region();
-      if (r1.x < r0.x - 40) return { ok: true, from: r0.x, to: r1.x };
+      if (r1.x !== r0b.x || r1.y !== r0b.y) moved++;
+      const loc = window.__catLocal();
+      const out = Math.max(0, -loc.x, loc.x - r1.w) + Math.max(0, -loc.y, loc.y - r1.h);
+      worst = Math.max(worst, out);
       await new Promise(r => setTimeout(r, 60));
     }
-    return { ok: false, r0, end: window.__region(), x: Math.round(b.x) };
+    return { ok: moved === 0 && worst <= 0, moved, worst: Math.round(worst) };
   });
-  ok('live: region window slides to follow the walking cat', slide.ok, JSON.stringify(slide));
+  ok('live: the lane window NEVER moves while the cat walks (flicker dead)', slide.ok, JSON.stringify(slide));
 
   // ------------------------------------------------ 9c. tap the cat -> real meow + heart (v3.7); HOLD = pet (v3.2 fix)
   await cat.waitForTimeout(600);
@@ -348,8 +358,8 @@ try {
       lastPlay: window.__lastPlayInfo ? window.__lastPlayInfo() : null,
     };
   });
-  ok('v3.7: a quick tap on the cat plays a real meow + heart emote',
-    !!tapState.lastPlay && /^meow_real/.test(tapState.lastPlay.name) && tapState.kind === 'heart',
+  ok('v3.7/v3.11: a quick tap on the cat plays the natural single meow + heart emote',
+    !!tapState.lastPlay && tapState.lastPlay.name === 'meow_single' && tapState.kind === 'heart',
     JSON.stringify(tapState));
   await cat.waitForTimeout(500);
   await cat.mouse.move(emote.x, emote.y - 40);

@@ -144,17 +144,15 @@
       <div class="fl-card">
         <div class="fl-row">
           <div class="txt"><div class="l1">No-walk zones</div>
-            <div class="l2">Screen rectangles (work-area px) the cat refuses to enter — and window tops it won't land on.</div></div>
+            <div class="l2">Areas the cat refuses to enter — and window tops it won't land on. Select them straight off the screen, like a Windows screenshot.</div></div>
           <label class="sw"><input type="checkbox" id="noWalkZones"><span class="tr"><span class="kn"></span></span></label>
         </div>
-        <div id="zoneList" style="margin-top:6px;"></div>
-        <div class="zone-row">
-          <input type="number" id="zx" placeholder="x" value="0">
-          <input type="number" id="zy" placeholder="y" value="0">
-          <input type="number" id="zw" placeholder="w" value="300">
-          <input type="number" id="zh" placeholder="h" value="120">
-          <button id="zoneAdd" class="ghost small">＋ Add zone</button>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Select an area</div>
+            <div class="l2">A fullscreen crosshair overlay opens — drag a rectangle, Esc cancels. Works across all monitors.</div></div>
+          <button id="zoneSelect">🖼 Select area on screen</button>
         </div>
+        <div id="zoneList" style="margin-top:6px;"></div>
       </div>
     </section>
 
@@ -206,13 +204,18 @@
 
       <div class="fl-card">
         <div class="fl-row">
-          <div class="txt"><div class="l1">Sound effects</div><div class="l2">Meows, purrs, paws and gags.</div></div>
+          <div class="txt"><div class="l1">All sounds (master)</div><div class="l2">One switch for everything: meows, purrs, paws, gags, chimes. Off = a completely silent cat.</div></div>
           <label class="sw"><input type="checkbox" id="sounds"><span class="tr"><span class="kn"></span></span></label>
         </div>
         <div class="fl-row">
-          <div class="txt"><div class="l1">Contextual sounds</div><div class="l2">Glass paw-taps on window edges, toy squeaks on jumps.</div></div>
+          <div class="txt"><div class="l1">Contextual sounds</div><div class="l2">Glass paw-taps on window edges, toy squeaks on jumps. (Needs All sounds on.)</div></div>
           <label class="sw"><input type="checkbox" id="contextualSounds"><span class="tr"><span class="kn"></span></span></label>
         </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Random meows</div><div class="l2">At random times the cat meows on its own — usually one natural meow, sometimes a burst of several. (Needs All sounds on.)</div></div>
+          <label class="sw"><input type="checkbox" id="randomMeows"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="hint">Quick tap = one natural single meow · double-click = the classic meow · pet (hold) = purring.</div>
       </div>
     </section>
 
@@ -329,7 +332,7 @@
           <button class="chip" id="lnkIssues">🐛 Report an issue</button>
         </div>
         <div class="hint" style="margin-top:8px;">
-          Runtime: Electron <span id="verElectron"></span> · Canvas 2D renderer · 20+ breeds · 31 actions · 16 emotes<br>
+          Runtime: Electron <span id="verElectron"></span> · Canvas 2D renderer · 24 breeds · 31 actions · 16 emotes<br>
           Sounds recorded from real cats. MIT License © 2026 mythos0.
         </div>
       </div>
@@ -352,7 +355,10 @@ import { ACHIEVEMENTS, affectionProgress } from '../src/achievements.js';
 const $ = id => document.getElementById(id);
 let S = null;
 
-const NEW_BREEDS = new Set(['bombay', 'russian_blue', 'ginger_kitten', 'ragdoll', 'bengal', 'maine_coon', 'panda']);
+const NEW_BREEDS = new Set([
+  'bombay', 'russian_blue', 'ginger_kitten', 'ragdoll', 'bengal', 'maine_coon', 'panda',
+  'cocoa_kitten', 'milky_kitten', 'smokey_kitten', 'midnight_kitten',
+]);
 
 function toast(msg, ok = true) {
   const t = $('toast');
@@ -505,6 +511,10 @@ function renderZones() {
   const list = S.noWalkZoneList || [];
   const box = $('zoneList');
   box.innerHTML = '';
+  if (!list.length) {
+    box.innerHTML = '<div class="hint">No zones yet — hit “Select area on screen” and draw one.</div>';
+    return;
+  }
   list.forEach((z, i) => {
     const row = document.createElement('div');
     row.className = 'zone-row';
@@ -521,13 +531,13 @@ function renderZones() {
     box.appendChild(row);
   });
 }
-$('zoneAdd').onclick = async () => {
-  const z = { x: +$('zx').value || 0, y: +$('zy').value || 0, w: +$('zw').value || 100, h: +$('zh').value || 100 };
-  const next = [...(S.noWalkZoneList || []), z].slice(0, 24);
-  S.noWalkZoneList = next;
-  await save({ noWalkZoneList: next });
-  renderZones();
-  toast('Zone added — the cat shall respect it');
+// v3.11: screenshot-style selection — opens the fullscreen crosshair overlay
+$('zoneSelect').onclick = async () => {
+  try {
+    await window.meow.selectZone();
+    window.meow.closeWindow('settings');   // get the settings window out of the way
+    toast('Drag a rectangle on the screen — Esc cancels');
+  } catch { toast('Could not open the zone selector', false); }
 };
 
 // ---------------- pomodoro ----------------
@@ -577,6 +587,7 @@ bindSwitch('reactTyping', 'reactTyping');
 bindSwitch('stalkCursor', 'stalkCursor');
 bindSwitch('reactMusic', 'reactMusic');
 bindSwitch('contextualSounds', 'contextualSounds');
+bindSwitch('randomMeows', 'randomMeows');
 bindSwitch('pomodoro', 'pomodoro');
 bindSwitch('reactBuildStatus', 'reactBuildStatus');
 bindSwitch('globalHotkeys', 'globalHotkeys');
@@ -596,6 +607,7 @@ function syncControls() {
     ['reactNewWindows', 'reactNewWindows'], ['reactApps', 'reactApps'],
     ['reactTyping', 'reactTyping'], ['stalkCursor', 'stalkCursor'],
     ['reactMusic', 'reactMusic'], ['contextualSounds', 'contextualSounds'],
+    ['randomMeows', 'randomMeows'],
     ['pomodoro', 'pomodoro'], ['reactBuildStatus', 'reactBuildStatus'],
     ['globalHotkeys', 'globalHotkeys'], ['photoMode', 'photoMode'], ['achievements', 'achievements'],
   ]) $(id).checked = S[key] !== undefined ? !!S[key] : false;

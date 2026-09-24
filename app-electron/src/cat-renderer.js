@@ -151,6 +151,35 @@ export const PALETTES = {
     earIn: '#f4b8b0', nose: '#eb9a96', eye: '#7fb0d8', pupil: '#22303e',
     tongue: '#e89a9a',
   },
+  // ---------------- v3.11: the kitten litter (ginger_kitten's friends) ----------------
+  cocoa_kitten: {
+    name: "Cocoa Kitten",    // chocolate-brown baby with cream socks & blush
+    body: 'kitten', bigEye: true, blush: true, socks: true, beans: true,
+    fur: '#8a5f42', dark: '#5f3f2b', belly: '#e9d3ba', stripe: '#4a3020',
+    earIn: '#d9a294', nose: '#5f4030', eye: '#d9a53a', pupil: '#1c1208',
+    tongue: '#d98a94',
+  },
+  milky_kitten: {
+    name: "Milky Kitten",    // cream-white fluffy baby, blue eyes, pink beans
+    body: 'kitten', fluffy: true, bigEye: true, blush: true, beans: true,
+    fur: '#f6efe2', dark: '#d8c9ae', belly: '#fffbf2', stripe: '#e2d2b4',
+    earIn: '#f2c1ba', nose: '#eba8a0', eye: '#6fa8dc', pupil: '#1c2733',
+    tongue: '#e89a9a',
+  },
+  smokey_kitten: {
+    name: "Smokey Kitten",   // blue-grey plush baby with white socks
+    body: 'kitten', bigEye: true, socks: true,
+    fur: '#9fb0bd', dark: '#6e8090', belly: '#e5ecf1', stripe: '#5a6c7c',
+    earIn: '#d3a3ab', nose: '#7d8894', eye: '#8fce6e', pupil: '#131c22',
+    tongue: '#d98a94',
+  },
+  midnight_kitten: {
+    name: "Midnight Kitten", // tiny black kitten, huge amber eyes, white whisker dots
+    body: 'kitten', bigEye: true, sheen: true,
+    fur: '#33333c', dark: '#1c1c24', belly: '#4a4a56', stripe: null,
+    earIn: '#8a5a62', nose: '#2a2a34', eye: '#f0b03a', pupil: '#0a0a0e',
+    tongue: '#d98a94',
+  },
 };
 
 // ---------------- body types (v3.1) ----------------
