@@ -98,6 +98,9 @@ const cat = await findPage('cat.html');
 ok('cat renderer booted on the simulated dual display', !!cat);
 if (!cat) { app.kill('SIGKILL'); xvfb?.kill(); process.exit(1); }
 await cat.waitForFunction(() => window.__catBooted && window.__brain(), null, { timeout: 15000 }).catch(() => {});
+// v3.13: pin butterfly spawns to manual — ambient hunts must not steal the
+// cat's state from the live drag/walk checks below
+await cat.evaluate(() => { window.__stopButterfly && window.__stopButterfly(); return true; }).catch(() => {});
 
 // ------------------------------------------------ 1. dual-display geometry
 const geo = await cat.evaluate(async () => {
@@ -291,7 +294,12 @@ ok('the lane window is display-1 sized (≤1600 wide)',
         fire('mouseup', 2050, 470);
       });
       drawn = true;
-    } catch { /* overlay died mid-draw */ }
+    } catch {
+      // the overlay closes itself on mouseup (zone-select:finish) — the
+      // evaluate can die after the events were already dispatched. The
+      // stored-zone assertion below is the ground truth either way.
+      drawn = true;
+    }
     await new Promise(r => setTimeout(r, 600));
     const zones = await cat.evaluate(async () => (await window.meow.getSettings()).noWalkZoneList);
     ok('zone drawn on display 2 is stored UNION-relative (x=1800)',

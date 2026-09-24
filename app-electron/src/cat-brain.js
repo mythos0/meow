@@ -131,7 +131,8 @@ export class CatBrain {
     this.timeBiasMode = 'day';    // 'day' | 'night'
     this.stressUntil = 0;         // timestamp while a CPU/RAM scare lasts
     this.musicOn = false;         // music playing -> bop
-    this.stalk = null;            // { x, y } cursor being stalked
+    this.stalk = null;            // { x, y, kind } cursor/butterfly being stalked
+    this.stalkBoost = 1;          // v3.13: creep-speed multiplier for butterfly hunts
     this._inv = null;             // { x } new-window investigation target
     this._batteryLow = false;     // low battery -> curl up to save energy
     this._zones = [];             // no-walk zones (screen coords)
@@ -161,12 +162,16 @@ export class CatBrain {
       this.onEvent('battery:restored');
     }
   }
-  startStalk(x, y) {
+  // v3.13: kind tags the prey — 'cursor' (default) or 'butterfly'. cat.html
+  // gates the cursor-idle/busy handlers on the tag so a butterfly hunt cannot
+  // be stolen mid-stalk by a stale cursor event.
+  startStalk(x, y, kind = 'cursor') {
     // v3.6.1: stalking from a window top would walk off the edge and float —
     // ground-level behaviour only.
     if (this.onPlatform) return false;
-    this.stalk = { x, y };
+    this.stalk = { x, y, kind: kind === 'butterfly' ? 'butterfly' : 'cursor' };
     this._stalkWig = 0;
+    this.stalkBoost = 1;
     this._enter('stalk', 7);      // hard cap like the laser chase
     this.onEvent('stalk:start');
     return true;
@@ -255,6 +260,23 @@ export class CatBrain {
   }
 
   _enter(state, dur) {
+    // v3.13: an interrupted flight must never strand the cat mid-air. A jump
+    // cancelled by an interaction (pet, dance, nuzzle, play-fight…) used to
+    // freeze the feet at a suspended baseY — the cat then walked on invisible
+    // air — and left a STALE _jump arc behind, which blocked the companion's
+    // join/run guards forever ("the companion cat is not showing"). Internal
+    // jump callers (_jumpTo, _borderHop, falls) always assign _jump BEFORE
+    // _enter('jump'), so this landing snap is safe for every call site.
+    if (state !== 'jump' && (this._jump || this.jumpY || this.jumpP)) {
+      if (this._jump) {
+        this.baseY = this._jump.y1;              // land at the arc's destination
+        this.onPlatform = this._jump.pl || null;
+        if (this.onPlatform) this.platformT = 0;
+        this._jump = null;
+      }
+      this.jumpY = 0;
+      this.jumpP = 0;
+    }
     this.state = state;
     this.stateT = 0;
     this.stateDur = dur;
@@ -594,6 +616,16 @@ export class CatBrain {
     for (const pl of this.platforms) {
       if (Math.abs(pl.y - y) < 28 && x > pl.x - 12 && x < pl.x + pl.w + 12) { best = pl; break; }
     }
+    // v3.13: released in mid-air with no window top under the cat — a real
+    // cat FALLS. The old code froze the cat at the release height forever
+    // (walking on invisible air until the next platform jump). Releases
+    // within 60px of the ground still snap exactly where the user let go.
+    if (!best && y < this.groundY - 60) {
+      this.onPlatform = null;
+      this._jump = { x0: x, x1: x + this.dir * 30, y0: y, y1: this.groundY, pl: null };
+      this._enter('jump', 0.5);
+      return;
+    }
     this.onPlatform = best;
     this.baseY = best ? best.y : y;
   }
@@ -692,7 +724,9 @@ export class CatBrain {
           // butt-wiggle aim phase (renderer shows the crouch)
           this.jumpY = 0;
         } else if (Math.abs(dxs) > 55) {
-          this._moveX(Math.sign(dxs) * Math.min(Math.abs(dxs), this.speed * 0.55 * sf * dt));
+          // v3.13: stalkBoost lets a butterfly hunt creep faster than the
+          // sleepy cursor-stalk (a butterfly will not wait all day)
+          this._moveX(Math.sign(dxs) * Math.min(Math.abs(dxs), this.speed * 0.55 * (this.stalkBoost || 1) * sf * dt));
           this.jumpY = -Math.abs(Math.sin(this.t * 8)) * 1.5;   // slinky low bob
         } else {
           this._enter('pounce', 1.9);   // cat.html resolves the "catch"

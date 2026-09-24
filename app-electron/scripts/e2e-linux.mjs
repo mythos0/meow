@@ -28,7 +28,8 @@ if (!process.env.DISPLAY) {
 const electronBin = path.join(ROOT, 'node_modules', '.bin', 'electron');
 const app = spawn(electronBin, ['.', '--remote-debugging-port=9222', '--no-sandbox', '--disable-gpu'], {
   cwd: ROOT,
-  env: { ...process.env, DISPLAY: process.env.DISPLAY, MEOW_WARM_IDLE_MS: '3000' },
+  env: { ...process.env, DISPLAY: process.env.DISPLAY, MEOW_WARM_IDLE_MS: '3000',
+         MEOWCAT_TEST: '1' },   // v3.13: enable the dev:move-cursor seam so the pet-hold check can park the cursor ON the cat (otherwise the main-driven drag pulls the cat to Xvfb's pointer resting spot)
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let appLog = '';
@@ -72,6 +73,9 @@ try {
   if (!cat) throw new Error('no cat window');
 
   await cat.waitForFunction('window.__catBooted === true', null, { timeout: 15000 }).catch(() => {});
+  // v3.13: pin butterfly spawns to manual — the 18-42s ambient scheduler used
+  // to fire mid-suite and its hunts stole the cat's state from the live checks
+  await cat.evaluate(() => { window.__stopButterfly && window.__stopButterfly(); return true; }).catch(() => {});
   const hasCanvas = await cat.evaluate(() => {
     const cv = document.getElementById('cv');
     if (!cv) return false;
@@ -361,24 +365,53 @@ try {
   ok('v3.7/v3.11: a quick tap on the cat plays the natural single meow + heart emote',
     !!tapState.lastPlay && tapState.lastPlay.name === 'meow_single' && tapState.kind === 'heart',
     JSON.stringify(tapState));
-  await cat.waitForTimeout(500);
-  await cat.mouse.move(emote.x, emote.y - 40);
+  await cat.waitForTimeout(700);   // let the tap's drag stream + drop settle
   // hold > 280ms = the pet. The pet contract: happy state + pets stat +1
   // (the emote itself is love OR heart — petAffection has a random 25% heart)
-  const pets0 = await cat.evaluate(async () => (await window.meow.getSettings()).stats.pets || 0);
-  await cat.mouse.down();
-  await cat.waitForTimeout(450);                   // pendingPet delay 280ms
-  await cat.mouse.up();
-  const emoteState = await cat.evaluate(async () => {
-    const b = window.__brain && window.__brain();
-    const s = await window.meow.getSettings();
-    return { state: b?.state, kind: b?.emote?.kind || null, pets: s.stats.pets || 0 };
-  });
+  // v3.13: retried up to 3 times with a fresh position + cursor-on-cat each
+  // attempt — the long suite leaves the cat in varied spots/states, and a
+  // hold at a stale point would simply miss the cat (no pet timer at all).
+  let emoteState = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await cat.evaluate(() => {
+      const b = window.__brain();
+      b.dropAt(b.x, b.groundY);   // v3.13: clean ground reset (clears arcs/platforms)
+      b.stopStalk && b.stopStalk();
+      b.stopLaser && b.stopLaser();
+      b._enter('idle', 30);
+      return true;
+    });
+    await cat.waitForTimeout(350);
+    const e2 = await cat.evaluate(() => window.__catLocal());
+    await cat.mouse.move(e2.x, e2.y - 40);
+    await cat.evaluate(async () => {
+      const p = window.__brain().pose;
+      await window.meow.devMoveCursor({ x: p.x, y: p.y - 20 });
+      return true;
+    });
+    await cat.waitForTimeout(120);
+    const pets0 = await cat.evaluate(async () => (await window.meow.getSettings()).stats.pets || 0);
+    await cat.mouse.down();
+    await cat.waitForTimeout(450);                 // pendingPet delay 280ms
+    await cat.mouse.up();
+    await cat.waitForTimeout(120);
+    emoteState = await cat.evaluate(async () => {
+      const b = window.__brain && window.__brain();
+      const s = await window.meow.getSettings();
+      return {
+        state: b?.state, kind: b?.emote?.kind || null, pets: s.stats.pets || 0,
+        drag: window.__dragState ? window.__dragState() : null,
+      };
+    });
+    emoteState.pets0 = pets0;   // node-side attach (page evaluates can't see Node closures)
+    if (emoteState.state === 'happy' && emoteState.pets === emoteState.pets0 + 1 &&
+        ['love', 'heart', 'rainbow'].includes(emoteState.kind)) break;
+  }
   // v3.8: 'rainbow' is also a valid pet emote — the rainbowPet perk (unlocked
   // once affection achievements land) recolors 30% of pets
   ok('live: holding the cat pets it (happy + pets stat +1)',
-    emoteState.state === 'happy' && emoteState.pets === pets0 + 1 &&
-      ['love', 'heart', 'rainbow'].includes(emoteState.kind), JSON.stringify({ pets0, ...emoteState }));
+    emoteState.state === 'happy' && emoteState.pets === emoteState.pets0 + 1 &&
+      ['love', 'heart', 'rainbow'].includes(emoteState.kind), JSON.stringify(emoteState));
   await cat.screenshot({ path: path.join(OUT, 'cat_live_emote.png') });
 
   // ------------------------------------------------ 9d. v3.5 funny pack: laser pointer toy (live)

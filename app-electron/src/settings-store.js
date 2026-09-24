@@ -56,7 +56,7 @@ export const DEFAULTS = {
   noWalkZones: true,         // respect the no-walk zone list below
   noWalkZoneList: [],        // [{x,y,w,h}] workArea-relative rects the cat avoids
   // progression data (not toggles)
-  stats: { pets: 0, jumps: 0, fish: 0, lasers: 0, nuzzles: 0, reminders: 0, pomodoroLate: 0 },
+  stats: { pets: 0, jumps: 0, fish: 0, lasers: 0, nuzzles: 0, reminders: 0, pomodoroLate: 0, butterflies: 0 },
   affection: 0,              // lifetime pet count -> affection meter
   unlocked: [],              // achievement ids
   customSkins: [],           // [{id, name, def}] imported community skins

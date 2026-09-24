@@ -31,6 +31,7 @@ import { computeRegionSize, initialOrigin, slideIfNeeded, companionLeash, chaseS
 import { batteryCrisis } from '../src/system-reactions.js';
 import { unlockedPerks } from '../src/achievements.js';
 import { zonesToScreen } from '../src/no-walk.js';
+import { spawnButterfly as bflySpawn, tickButterfly as bflyTick, butterflyCatchable, startleButterfly, HUNT_RADIUS as BFLY_HUNT_RADIUS } from '../src/butterfly.js';
 
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d', { alpha: true });
@@ -47,10 +48,15 @@ let bubbleTimer = null;
 let frozen = false;           // v3.6: photo mode
 let flashUntil = 0;           // v3.6: photo flash
 let currentHat = null;        // v3.6: seasonal / skin hat
-// v3.5 toys
+// v3.5 toys — v3.13: the butterfly is a pure state machine (src/butterfly.js)
+// that always spawns relative to the CURRENT lane, so it shows on EVERY
+// display, and the cat hunts it like a real cat (stalk → pounce → catch).
 let laser = null;
 let butterfly = null;
 let butterflyTimer = null;
+let bflyAttempts = 0;         // pounces the current butterfly has endured
+let bflyHuntCd = 0;           // seconds until a new hunt may start
+let bflyCaughtPending = false;// a caught butterfly awaiting the pounce-landing reward
 let prevState = null;
 // v3.6 companion + party
 let companion = null;         // { brain, breed }
@@ -248,8 +254,19 @@ async function init() {
   window.meow.on('settings-changed', applySettings);
   window.meow.on('do-action', doAction);
   window.meow.on('reminder-fired', showReminder);
-  window.meow.on('laser-start', spawnLaser);
-  window.meow.on('platforms', list => { if (brain) brain.setPlatforms(list); });
+  window.meow.on('laser-start', () => {
+    // a user-fired laser overrides any butterfly hunt in progress
+    if (butterfly && butterfly.state === 'hunted') butterfly.state = 'cruise';
+    spawnLaser();
+  });
+  // v3.13: the companion kitten gets the SAME window-top list as the main
+  // cat — without it the kitten could never follow the big cat up, and the
+  // chase camera (which frames the MAIN cat's feet) pushed the ground-level
+  // kitten below the canvas: "the companion cat is not showing".
+  window.meow.on('platforms', list => {
+    if (brain) brain.setPlatforms(list);
+    if (companion) companion.brain.setPlatforms(list);
+  });
   // v3.9: live platform tracking — main polls the tracked window's rect at
   // ~3Hz (one persistent PowerShell, P/Invoke GetWindowRect) so the cat RIDES
   // a dragged/resized window in real time instead of floating for up to a
@@ -413,10 +430,11 @@ function onMusic(m) {
 function onTyping(t) {
   if (!brain) return;
   if (t.action === 'pounce') {
-    // pounce toward the "keyboard" — bottom center of the screen
-    const wa = S.workArea || brain.bounds;
-    const kx = wa.x + wa.width / 2 + (Math.random() - 0.5) * 200;
-    const ky = wa.y + wa.height - 30;
+    if (brain.stalk && brain.stalk.kind === 'butterfly') return;   // v3.13: mid butterfly-hunt
+    // pounce toward the "keyboard" — the middle of the CURRENT lane (v3.13:
+    // used to be the primary's center, half a screen away on monitor 2)
+    const kx = O.x + REGION.w / 2 + (Math.random() - 0.5) * 200;
+    const ky = brain.groundY - 30;
     if (['idle', 'sit', 'loaf', 'groom', 'walk'].includes(brain.state)) {
       if (brain.startStalk(kx, ky)) stalkWasCursor = true;   // v3.6.1: only when the stalk actually started
     }
@@ -428,6 +446,7 @@ function onTyping(t) {
 function onCursorIdle(p) {
   lastCursor = p;
   if (!brain || !S.stalkCursor) return;
+  if (brain.stalk && brain.stalk.kind === 'butterfly') return;   // v3.13: never steal a butterfly hunt
   const d = Math.hypot(p.x - brain.x, p.y - brain.baseY);
   if (d < 340 && ['idle', 'sit', 'loaf', 'groom', 'walk'].includes(brain.state)) {
     if (brain.startStalk(p.x, p.y)) stalkWasCursor = true;   // v3.6.1: platform cats decline
@@ -435,7 +454,7 @@ function onCursorIdle(p) {
 }
 function onCursorBusy(p) {
   lastCursor = p;
-  if (brain && brain.state === 'stalk') brain.stopStalk();   // "it moved!"
+  if (brain && brain.state === 'stalk' && brain.stalk && brain.stalk.kind !== 'butterfly') brain.stopStalk();   // "it moved!"
 }
 
 function onNewWindow(w) {
@@ -527,6 +546,7 @@ function applyCompanion(on) {
     });
     b.x = Math.max(brain.bounds.x + 80, Math.min(brain.bounds.x + brain.bounds.w - 80, brain.x - 150));
     b.setScale(S.size * 0.62);
+    b.setPlatforms(brain.platforms);   // v3.13: the kitten may follow onto window tops
     companion = { brain: b, breed: 'ginger_kitten', hat: currentHat };
   } else if (!on) companion = null;
 }
@@ -545,7 +565,9 @@ function companionBreedTick(dt) {
   // kitten back smoothly instead of snapping it.
   const dx = brain.x - c.x;
   const beyond = Math.abs(dx) > companionLeashPx;
-  if (beyond && ['walk', 'idle', 'run', 'sit', 'loaf', 'groom'].includes(c.state)) {
+  // v3.13: never force the chase run mid-jump — _enter('run') would cancel
+  // the join-jump lerp and strand the kitten below the platform it leaped for
+  if (beyond && !c._jump && ['walk', 'idle', 'run', 'sit', 'loaf', 'groom'].includes(c.state)) {
     c._enter('run', 1.0);
   }
   if (beyond) {
@@ -553,6 +575,24 @@ function companionBreedTick(dt) {
     c.runSpeed = Math.min(340, 170 + (Math.abs(dx) - companionLeashPx) * 1.6);   // catch up faster when far
   } else {
     c.runSpeed = 150;                                          // back to the default sprint
+  }
+  // v3.13 COMPANION FOLLOW — the "companion cat is not showing" fix. The
+  // chase camera frames the MAIN cat's feet: when the big cat sits on a
+  // window top, the lane slides up and the ground-level kitten was pushed
+  // BELOW the canvas (invisible) with no way up. Now the kitten leaps up to
+  // join the big cat on its window top like a real kitten would, and a
+  // kitten dozing far away wakes up when the pair separates.
+  // (screen y grows downward: vGap > 0 means the big cat is ABOVE the kitten)
+  c._joinCd = Math.max(0, (c._joinCd || 0) - dt);
+  const vGap = c.baseY - brain.baseY;          // >0: the big cat is ABOVE the kitten
+  const separated = beyond || vGap > 110;
+  if (separated && !c._jump && ['sleep', 'curl', 'eat', 'groom', 'stretch', 'dance', 'knead', 'yawn', 'mope', 'sniff', 'nuzzle', 'roll', 'bamboo'].includes(c.state)) {
+    c._enter('idle', 0.8);                     // wake — the friend left without me
+  }
+  if (brain.onPlatform && !c.onPlatform && !c._jump && vGap > 110 && c._joinCd <= 0 &&
+      !['pounce', 'stalk', 'laser'].includes(c.state)) {
+    c._jumpTo(brain.onPlatform, 0.6 + Math.min(0.85, vGap / 460));   // leap up to the big cat
+    c._joinCd = 2.5;
   }
   // v3.9: the kitten may NEVER leave the visible region canvas. During a
   // violent reel the camera chases the pair's midpoint and used to lag the
@@ -671,13 +711,16 @@ function doAction(act) {
 }
 
 // ---------------------------------------------------- v3.5 laser toy
+// v3.13: lane-relative — the dot used to clamp into the PRIMARY work area,
+// so firing the laser while the cat was on the 2nd monitor spawned the dot
+// on a screen the cat was not on (same bug class as the butterfly).
 function spawnLaser() {
   if (!brain) return;
-  const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
+  const lo = O.x + 40, hi = O.x + REGION.w - 40;
   const ang = Math.random() * Math.PI * 2;
   const dist = 220 + Math.random() * 160;
-  const x = Math.max(wa.x + 40, Math.min(wa.x + wa.width - 40, brain.x + Math.cos(ang) * dist));
-  const groundY = brain.bounds.y + brain.bounds.h - 8;
+  const x = Math.max(lo, Math.min(hi, brain.x + Math.cos(ang) * dist));
+  const groundY = brain.groundY;
   const y = groundY - 20 - Math.random() * 90;
   laser = { x, y, vx: 0, vy: 0, born: performance.now() / 1000 };
   brain.startLaser(x, y);
@@ -706,9 +749,8 @@ function tickLaser(dt) {
   if (spd > MAX) { laser.vx *= MAX / spd; laser.vy *= MAX / spd; }
   laser.x += laser.vx * dt;
   laser.y += laser.vy * dt;
-  const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
-  const groundY = brain.bounds.y + brain.bounds.h - 8;
-  laser.x = Math.max(wa.x + 30, Math.min(wa.x + wa.width - 30, laser.x));
+  const groundY = brain.groundY;
+  laser.x = Math.max(O.x + 30, Math.min(O.x + REGION.w - 30, laser.x));
   laser.y = Math.max(groundY - 170, Math.min(groundY - 12, laser.y));
   if (Math.abs(laser.x - catX) > 340) laser.vx = (catX > laser.x ? 1 : -1) * Math.abs(laser.vx || 60);
   brain.moveLaser(laser.x, laser.y);
@@ -734,42 +776,81 @@ function gagSounds() {
 // "Contextual sounds" toggle; meows and purrs have their own toggles.
 function sfx(name, vol) { if (!S.contextualSounds) return; play(name, vol); }
 
-// ---------------------------------------------------- v3.5 butterfly
-function scheduleButterfly() {
+// ------------------------------------------------ v3.13 butterfly
+// The butterfly lives in src/butterfly.js (pure, unit-tested). cat.html owns
+// the scheduling, the brain feeding and the catch rewards.
+function scheduleButterfly(delaySec) {
   clearTimeout(butterflyTimer);
+  const wait = (delaySec != null ? delaySec : (18 + Math.random() * 24)) * 1000;
   butterflyTimer = setTimeout(() => {
     spawnButterfly();
     scheduleButterfly();
-  }, (18 + Math.random() * 24) * 1000);
+  }, wait);
 }
 
 function spawnButterfly() {
-  if (!brain || butterfly) return;
-  const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
-  const dir = Math.random() < 0.5 ? 1 : -1;
-  const groundY = brain.bounds.y + brain.bounds.h - 8;
-  const hues = [28, 96, 200, 320, 48];
-  butterfly = {
-    x: dir > 0 ? wa.x - 30 : wa.x + wa.width + 30,
-    y: groundY - 90 - Math.random() * 120,
-    vx: dir * (42 + Math.random() * 26),
-    hue: hues[Math.floor(Math.random() * hues.length)],
-    born: performance.now() / 1000,
-  };
+  if (!brain || butterfly || frozen) return;
+  // v3.13: spawn relative to the CURRENT lane — the old code used the
+  // primary work area, so on the 2nd monitor the butterfly crossed a screen
+  // the cat was not on and was NEVER seen. It now always flies across the
+  // cat's visible canvas, on every display, entering from the nearer edge.
+  butterfly = bflySpawn({
+    lane: { x: O.x, w: REGION.w },
+    catX: brain.x,
+    groundY: brain.groundY,
+    now: performance.now() / 1000,
+  });
 }
 
 function tickButterfly(dt, now) {
   if (!butterfly || !brain) return;
-  butterfly.x += butterfly.vx * dt;
-  butterfly.y += Math.sin(now - butterfly.born) * 14 * dt;
-  if (Math.hypot(butterfly.x - brain.x, butterfly.y - (brain.baseY - 40)) < 150) {
-    if (brain.noticeButterfly(butterfly.x, butterfly.y)) {
-      butterfly.vx = (butterfly.vx >= 0 ? 1 : -1) * (150 + Math.random() * 60);
-      sfx('chirp', 0.4);
-    }
+  const culled = bflyTick(butterfly, {
+    dt, now,
+    lane: { x: O.x, w: REGION.w },
+    groundY: brain.groundY,
+    catX: brain.x,
+  });
+  if (culled) { butterfly = null; bflyAttempts = 0; return; }
+  // the hunt died without a pounce (timeout, laser, drag) — calm down again
+  if (butterfly.state === 'hunted' && !(brain.stalk && brain.stalk.kind === 'butterfly')) {
+    butterfly.state = 'cruise';
+    brain.stalkBoost = 1;
   }
-  const wa = S.workArea || { x: 0, y: 0, width: screen.width, height: screen.height };
-  if (butterfly.x < wa.x - 60 || butterfly.x > wa.x + wa.width + 60) butterfly = null;
+  // feed the hunter with the butterfly's live position
+  if (brain.stalk && brain.stalk.kind === 'butterfly') {
+    brain.moveStalk(butterfly.x, butterfly.y);
+    return;
+  }
+  // start a new hunt: an idle-ish ground cat notices a nearby butterfly
+  bflyHuntCd = Math.max(0, bflyHuntCd - dt);
+  if (bflyHuntCd <= 0 && !dragging && !brain.laser && !brain.stalk && !brain.onPlatform &&
+      butterfly.state === 'cruise' &&
+      Math.abs(butterfly.x - brain.x) < BFLY_HUNT_RADIUS &&
+      ['idle', 'sit', 'loaf', 'groom', 'walk'].includes(brain.state) &&
+      brain.startStalk(butterfly.x, butterfly.y, 'butterfly')) {
+    butterfly.state = 'hunted';
+    brain.stalkBoost = 2.3;          // a butterfly will not wait all day
+    sfx('chirp', 0.4);               // the excited "I see it!" chirp
+  }
+}
+
+// the stalk pounce just launched — resolve catch / miss at the moment of
+// truth (the transition INTO 'pounce' while hunting)
+function resolveButterflyPounce() {
+  brain.stalkBoost = 1;
+  if (butterfly && butterflyCatchable(butterfly, { x: brain.x, baseY: brain.baseY })) {
+    // CAUGHT — caught mid-pounce, reward lands when the pounce lands
+    butterfly = null;
+    bflyAttempts = 0;
+    bflyCaughtPending = true;
+    brain.emote = { kind: 'heart', t0: brain.t };
+    sfx('chirp', 0.6);
+  } else {
+    // missed — the butterfly darts away; the cat may try again (up to 3)
+    bflyAttempts++;
+    bflyHuntCd = 1.8;
+    if (butterfly) startleButterfly(butterfly, brain.x, performance.now() / 1000);
+  }
 }
 
 // ---------------------------------------------------------- bubbles
@@ -1017,7 +1098,8 @@ function loop(ts) {
     if (!frozen) {
       brain.speed = S.speed;
       // v3.6: feed the live cursor position into an active stalk
-      if (brain.state === 'stalk' && brain.stalk && lastCursor) brain.moveStalk(lastCursor.x, lastCursor.y);
+      // (v3.13: never into a butterfly hunt — the butterfly feeds that one)
+      if (brain.state === 'stalk' && brain.stalk && brain.stalk.kind !== 'butterfly' && lastCursor) brain.moveStalk(lastCursor.x, lastCursor.y);
       const before = brain.state;
       brain.tick(dt);
       // ------- state-transition bookkeeping (stats + contextual sfx) -------
@@ -1028,6 +1110,12 @@ function loop(ts) {
           if (perks.sparkleLand) sfx('land', 0.5); else sfx('land', 0.35);
         }
         if (before === 'eat') window.meow.bumpStat('fish', 1);
+        // v3.13: the butterfly hunt's moment of truth — the stalk pounce
+        // launching at the butterfly resolves catch vs miss right here
+        if (before === 'stalk' && brain.state === 'pounce' &&
+            brain.stalk && brain.stalk.kind === 'butterfly') {
+          resolveButterflyPounce();
+        }
         if (before === 'pounce' && stalkWasCursor) {
           // the cursor-stalk pounce landed: happy cat, tiny affection boost
           stalkWasCursor = false;
@@ -1035,6 +1123,15 @@ function loop(ts) {
           brain.pet();
           play('purr_real', 0.5);
           window.meow.petAffection();
+        }
+        // v3.13: the pounce LANDED — deliver the caught-butterfly reward
+        if (before === 'pounce' && brain.state !== 'pounce' && bflyCaughtPending) {
+          bflyCaughtPending = false;
+          brain.pet();
+          window.meow.addCoins(2);
+          window.meow.bumpStat('butterflies', 1);
+          showBubble('🦋 got it! the cat is very proud', 3200);
+          scheduleButterfly(9 + Math.random() * 7);   // the next visitor soon
         }
       }
       stepSounds();
@@ -1238,6 +1335,12 @@ window.__laser = () => laser && { x: laser.x, y: laser.y };
 window.__setLaser = (x, y) => { if (laser) { laser.x = x; laser.y = y; if (brain) brain.moveLaser(x, y); } };
 window.__spawnButterfly = () => spawnButterfly();
 window.__butterfly = () => butterfly && { x: butterfly.x, y: butterfly.y, hue: butterfly.hue };
+// v3.13 e2e hooks: full butterfly state + deterministic placement
+window.__bfly = () => butterfly && { x: butterfly.x, y: butterfly.y, state: butterfly.state, vx: butterfly.vx };
+window.__setButterfly = (x, y) => { if (butterfly) { butterfly.x = x; butterfly.y = y; } return butterfly ? { x: butterfly.x, y: butterfly.y, state: butterfly.state } : null; };
+window.__bflyHuntState = () => ({ hunting: !!(brain && brain.stalk && brain.stalk.kind === 'butterfly'), attempts: bflyAttempts, caughtPending: bflyCaughtPending });
+window.__dragState = () => ({ dragging, mainDragActive, downOnCat, dragMoved, hasPendingPet: !!pendingPet, overCat });
+window.__stopButterfly = () => { clearTimeout(butterflyTimer); butterflyTimer = null; return true; };   // e2e: pin spawns to manual (deterministic suites)
 // ---------------- v3.6 test hooks ----------------
 window.__setBattery = (level, charging) => { battery = { level, charging, source: 'test' }; };
 window.__battery = () => battery;

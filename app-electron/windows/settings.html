@@ -640,7 +640,7 @@ function syncControls() {
     ? `${pr.pct}% to Lv.${pr.next.level} (${pr.next.at - (S.affection || 0)} pets to go)`
     : 'Max level — the cat would die for you. Legally.';
   const st = S.stats || {};
-  $('statLine').textContent = `🐾 ${st.pets || 0} pets · 🪟 ${st.jumps || 0} jumps · 🐟 ${st.fish || 0} fish · 🔴 ${st.lasers || 0} lasers · 🧘 ${st.nuzzles || 0} nuzzles`;
+  $('statLine').textContent = `🐾 ${st.pets || 0} pets · 🪟 ${st.jumps || 0} jumps · 🐟 ${st.fish || 0} fish · 🔴 ${st.lasers || 0} lasers · 🧘 ${st.nuzzles || 0} nuzzles · 🦋 ${st.butterflies || 0} butterflies`;
   const nCustom = (S.customSkins || []).length;
   $('customHint').style.display = nCustom ? 'none' : 'block';
   if (S.season) $('seasonHint').textContent = `Active this month: the ${S.season} hat.`;
