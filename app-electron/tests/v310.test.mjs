@@ -37,9 +37,9 @@ describe('v3.10 contract: no auto-hide settings exist', () => {
   });
 
   test('settings persisted by an older version are sanitized clean on load', () => {
-    const legacy = { breed: 'calico', hideDuringCalls: true, duckDuringCalls: true, hideInFullscreen: true, coins: 42 };
+    const legacy = { breed: 'smokey_kitten', hideDuringCalls: true, duckDuringCalls: true, hideInFullscreen: true, coins: 42 };
     const s = mkStore(legacy);
-    assert.equal(s.get('breed'), 'calico');          // real data survives the upgrade
+    assert.equal(s.get('breed'), 'smokey_kitten');  // real data survives the upgrade
     assert.equal(s.get('coins'), 42);
     for (const k of REMOVED_SETTINGS) {
       assert.ok(!(k in s.all), `legacy ${k} must not resurface via all()`);

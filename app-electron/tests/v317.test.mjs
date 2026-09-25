@@ -23,87 +23,40 @@ import { fileURLToPath } from 'url';
 
 import { poseForState, BODIES } from '../src/cat-renderer.js';
 import { CatBrain, mulberry32 } from '../src/cat-brain.js';
-import { createVoiceListener, parseVoiceLine } from '../src/voice-listener.js';
-import { acceptEnginePhrase } from '../src/voice.js';
 import { createSettings } from '../src/settings-store.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// ------------------------------------------------------------ 1. voice
-describe('v3.17 voice: the missing spawnFn can never silently kill the engine again', () => {
-  test('no spawnFn -> named no-spawn-fn condition, no throw, no respawn storm', () => {
-    const errors = [];
-    const l = createVoiceListener({
-      platform: 'win32',
-      onPhrase: () => { throw new Error('must never hear a phrase'); },
-      onError: e => errors.push(e),
-    });
-    l.start();                       // must not throw
-    assert.equal(l.lastError, 'no-spawn-fn');
-    assert.equal(l.running, false);  // nothing pretending to run
-    l.stop();
+// ------------------------------------------------------------ 1. voice — GONE
+describe('v3.18 voice: the whole feature set is REMOVED (user directive)', () => {
+  test('the engine files no longer exist', () => {
+    for (const f of ['src/voice.js', 'src/voice-listener.js', 'src/music-launcher.js', 'windows/voice.html']) {
+      assert.ok(!fs.existsSync(path.join(ROOT, f)), `${f} must be deleted`);
+    }
   });
 
-  test('a provided spawnFn actually spawns PowerShell (the v3.16 production break)', () => {
-    const spawned = [];
-    const l = createVoiceListener({
-      platform: 'win32',
-      spawnFn: (cmd, args) => {
-        spawned.push({ cmd, args });
-        return { stdout: { on() {} }, stderr: { on() {} }, on() {}, kill() {} };
-      },
-    });
-    l.start();
-    assert.equal(spawned.length, 1, 'the offline engine spawns IMMEDIATELY (parallel, not fallback-gated)');
-    assert.equal(spawned[0].cmd, 'powershell.exe');
-    l.stop();
-  });
-
-  test('engine errors surface through onError (exec-log diagnostics)', () => {
-    const errors = [];
-    const lines = [
-      JSON.stringify({ status: 'listening', recognizer: 'MS-1033', culture: 'en-US' }),
-      JSON.stringify({ error: 'grammar-failed' }),
-    ];
-    let buf = '';
-    const child = {
-      stdout: { on(_e, fn) { buf = fn; } },
-      stderr: { on() {} },
-      on() {}, kill() {},
-    };
-    const l = createVoiceListener({
-      platform: 'win32',
-      spawnFn: () => child,
-      onError: e => errors.push(e),
-    });
-    l.start();
-    for (const line of lines) buf(line + '\n');
-    assert.deepEqual(errors, ['grammar-failed']);
-    assert.equal(l.lastError, 'grammar-failed');
-    l.stop();
-  });
-
-  test('SAPI phrases are gated while the web engine is healthy', () => {
-    assert.equal(acceptEnginePhrase('sapi', true), false, 'web is live → ignore offline duplicates');
-    assert.equal(acceptEnginePhrase('sapi', false), true, 'web dead → the offline engine speaks');
-    assert.equal(acceptEnginePhrase('web', true), true);
-    assert.equal(acceptEnginePhrase('web', false), true);
-  });
-
-  test('main.js passes a REAL spawnFn (regression: the v3.16 refactor dropped it)', async () => {
+  test('main.js carries no voice machinery', async () => {
     const src = fs.readFileSync(path.join(ROOT, 'main.js'), 'utf8');
-    const anchor = src.indexOf('const voiceListener = createVoiceListener({');
-    const call = src.slice(anchor, anchor + 900);
-    assert.ok(/spawnFn:\s*\(cmd,\s*args,\s*opts2?\)\s*=>\s*spawn\(cmd,\s*args/.test(call),
-      'main.js must hand the listener a working spawn function');
+    for (const sym of ['createVoiceListener', 'parseVoiceCommand', 'createMusicLauncher', 'startWebVoice',
+                       'applyVoiceFlag', 'voiceStatus', 'sendMediaKey', 'handleVoicePhrase', 'voice:get', 'voice:set']) {
+      assert.ok(!src.includes(sym), `main.js must not reference ${sym}`);
+    }
   });
 
-  test('main.js arms BOTH engines in parallel when voice is enabled', async () => {
-    const src = fs.readFileSync(path.join(ROOT, 'main.js'), 'utf8');
-    const fn = src.slice(src.indexOf('function applyVoiceFlag()'), src.indexOf('function applyVoiceFlag()') + 600);
-    assert.ok(fn.includes('startWebVoice()'), 'web engine arms');
-    assert.ok(/process\.platform === 'win32'\)\s*\{\s*voiceListener\.start\(\)/.test(fn),
-      'offline engine arms IN PARALLEL — never waits for a failure report');
+  test('the preload bridge exposes no voice channels', async () => {
+    const src = fs.readFileSync(path.join(ROOT, 'preload.cjs'), 'utf8');
+    for (const sym of ['voiceGet', 'voiceSet', 'voiceInject', 'voiceState', 'voiceEngineEvent',
+                       "'voice-bubble'", "'voice-salute'", "'voice-state'"]) {
+      assert.ok(!src.includes(sym), `preload must not reference ${sym}`);
+    }
+    assert.ok(src.includes('voice:test-music'), 'the music-state test seam stays (meow gate)');
+  });
+
+  test('settings.html has no Voice card', async () => {
+    const src = fs.readFileSync(path.join(ROOT, 'windows', 'settings.html'), 'utf8');
+    assert.ok(!src.includes('voiceCommands'), 'the voice toggle is gone from the UI');
+    assert.ok(!src.includes('renderVoiceStatus'), 'the status renderer is gone');
+    assert.ok(!src.includes('hey cat'), 'the cheat-sheet is gone');
   });
 });
 
@@ -148,10 +101,23 @@ describe('v3.17 dance: stubby legs, real side steps, zero boundary snaps', () =>
       const a = pose(b - 0.016), c = pose(b + 0.016);
       assert.ok(Math.abs(a.bodyRot - c.bodyRot) < 0.03, `bodyRot continuous at ${b} (Δ${Math.abs(a.bodyRot - c.bodyRot).toFixed(4)})`);
       for (let i = 0; i < 4; i++) {
+        if (!a.legs[i] || !c.legs[i]) continue;  // lifted paws hand off via overlayPaw
         assert.ok(Math.abs(a.legs[i].fy - c.legs[i].fy) < 1.5, `leg ${i} fy continuous at ${b} (Δ${Math.abs(a.legs[i].fy - c.legs[i].fy).toFixed(2)})`);
       }
       assert.ok(Math.abs(a.bodyX - c.bodyX) < 0.5, `bodyX continuous at ${b}`);
     }
+  });
+
+  test('raised paws HAND OFF continuously between regular legs and overlay (no 6-leg ghost)', () => {
+    const a = pose(3.4 - 0.016), c = pose(3.4 + 0.016);   // step left → hands up
+    assert.ok(Math.abs(c.overlayPaw[0].fy - a.legs[0].fy) < 1.5,
+      `near paw lifts from the exact chest pose at 3.4 (Δ${Math.abs(c.overlayPaw[0].fy - a.legs[0].fy).toFixed(2)})`);
+    assert.ok(Math.abs(c.overlayPaw[0].fx - a.legs[0].fx) < 1.5, 'near paw x hands off cleanly');
+    assert.ok(Math.abs(c.overlayPaw[1].fy - a.legs[1].fy) < 1.5, 'far paw y hands off cleanly');
+    const b = pose(5.6 - 0.016), d = pose(5.6 + 0.016);   // hands up → spin
+    assert.ok(Math.abs(b.overlayPaw[0].fy - d.legs[0].fy) < 1.5, 'paws lower back to the hand-off at 5.6');
+    const e = pose(9.4 - 0.016), f = pose(9.4 + 0.016);   // whip → finish
+    assert.ok(Math.abs(f.overlayPaw.fy - e.legs[0].fy) < 1.5, 'cheek paw hands off at 9.4');
   });
 
   test('hands-up paws sit just OVER the ears (compact — not sky-high stilts)', () => {
@@ -177,34 +143,64 @@ function mkBrain(seed = 7, over = {}) {
   });
 }
 
-describe('v3.17 flicker: a cat trapped inside a no-walk zone escapes, it never vibrates', () => {
-  test('walking inside a covering zone flips direction at most a few times and escapes', () => {
+describe('v3.18 flicker: a blocked cat STOPS, sniffs, and turns ONCE — never vibrates', () => {
+  test('a wall ahead flips the facing at most twice over 10 seconds', () => {
+    const b = mkBrain(7, { speed: 120 });
+    b._enter('walk', 60);
+    b.setNoWalkZones([{ x: 320, y: 0, w: 1500, h: 1080 }]);   // wall ahead
+    b.x = 220; b.dir = 1; b.baseY = b.groundY;
+    let flips = 0, lastDir = b.dir;
+    for (let i = 0; i < 60 * 10; i++) {
+      b.tick(1 / 60);
+      if (b.dir !== lastDir) { flips++; lastDir = b.dir; }
+    }
+    assert.ok(flips <= 2, `one deliberate turn max in 10s against a wall (got ${flips})`);
+  });
+
+  test('turns are held apart by the 2.5s cooldown (no both-side oscillation)', () => {
+    const b = mkBrain(3, { speed: 150 });
+    b._enter('walk', 90);
+    b.setNoWalkZones([{ x: 420, y: 0, w: 120, h: 1080 }, { x: -400, y: 0, w: 120, h: 1080 }]);
+    b.x = 300; b.dir = 1; b.baseY = b.groundY;
+    const turnsAt = [];
+    let lastDir = b.dir;
+    for (let i = 0; i < 60 * 24; i++) {
+      b.tick(1 / 60);
+      if (b.dir !== lastDir) { turnsAt.push(i / 60); lastDir = b.dir; }
+    }
+    assert.ok(turnsAt.length >= 1, 'the cat does turn around eventually');
+    for (let i = 1; i < turnsAt.length; i++) {
+      assert.ok(turnsAt[i] - turnsAt[i - 1] >= 2.4,
+        `consecutive turns are >= 2.4s apart (gap ${ (turnsAt[i] - turnsAt[i - 1]).toFixed(2) }s)`);
+    }
+  });
+
+  test('trapped INSIDE a zone still escapes (the v3.17 behavior is kept)', () => {
     const b = mkBrain(7, { speed: 220 });
     b._enter('walk', 60);
     b.setNoWalkZones([{ x: 600, y: 0, w: 900, h: 1080 }]);   // zone ON the cat
     b.x = 900; b.baseY = b.groundY;
-    let flips = 0, lastDir = b.dir;
-    for (let i = 0; i < 60 * 6 && b.x > 480 && b.x < 1620; i++) {   // ≤6s
+    for (let i = 0; i < 60 * 10 && b.x > 480 && b.x < 1620; i++) {   // ≤10s
       b.tick(1 / 60);
-      if (b.dir !== lastDir) { flips++; lastDir = b.dir; }
     }
-    assert.ok(flips <= 4, `direction flips stayed bounded (${flips}, was ~240/tick-storm)`);
     assert.ok(b.x < 480 || b.x > 1620, `escaped the zone (x=${b.x.toFixed(0)})`);
   });
 
-  test('ordinary blocked steps turn around — with a 0.45s flip cooldown', () => {
-    const b = mkBrain();
-    b.setNoWalkZones([{ x: 700, y: 0, w: 60, h: 1080 }]);   // wall ahead
+  test('a free cat with no zones walks calmly (travel without flip storms)', () => {
+    const b = mkBrain(11, { speed: 120 });
+    b._enter('walk', 120);
     b.baseY = b.groundY;
-    b.x = 640; b.dir = 1; b.t = 0;
-    assert.equal(b._moveX(6), true, 'blocked at the zone edge');
-    assert.equal(b.dir, -1, 'first block flips');
-    b.x = 640; b.dir = 1; b.t += 0.1;
-    assert.equal(b._moveX(6), true, 'blocked again');
-    assert.equal(b.dir, 1, 'a flip within 0.45s is SUPPRESSED (dir unchanged — anti-flicker)');
-    b.x = 640; b.dir = 1; b.t += 0.5;
-    b._moveX(6);
-    assert.equal(b.dir, -1, 'after the cooldown the turn happens again');
+    const xs = new Set();
+    let flips = 0, lastDir = b.dir;
+    for (let i = 0; i < 60 * 30; i++) {
+      b.tick(1 / 60);
+      xs.add(Math.round(b.x));
+      if (b.dir !== lastDir) { flips++; lastDir = b.dir; }
+    }
+    // 30s of calm walking: a couple of deliberate bound-turns at most, and
+    // the cat genuinely travels instead of vibrating in place
+    assert.ok(flips <= 3, `direction changes stay deliberate (${flips} in 30s)`);
+    assert.ok(xs.size > 200, `the cat actually travels (${xs.size} distinct x positions)`);
   });
 });
 
@@ -214,9 +210,9 @@ describe('v3.17 reactions: the whole feature set is gone end-to-end', () => {
     'reactMusic', 'reactApps', 'reactTyping', 'stalkCursor', 'reactBuildStatus', 'statusFile'];
 
   test('no reaction key survives a legacy settings load', () => {
-    const s = createSettings({ read: () => JSON.stringify({ breed: 'ginger_kitten', reactTyping: true, stalkCursor: true, reactMusic: true }), write: () => {} });
+    const s = createSettings({ read: () => JSON.stringify({ breed: 'orange_tabby', reactTyping: true, stalkCursor: true, reactMusic: true }), write: () => {} });
     for (const k of REACTION_KEYS) assert.ok(!(k in s.all), `${k} must be dropped by sanitize`);
-    assert.equal(s.get('breed'), 'ginger_kitten', 'real data survives');
+    assert.equal(s.get('breed'), 'orange_tabby', 'real data survives');
   });
 
   test('settings page has no Reactions nav/section and no Focus page', async () => {

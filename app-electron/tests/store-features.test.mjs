@@ -15,41 +15,41 @@ describe('v3.6 feature toggles', () => {
   test('all feature toggles exist in DEFAULTS', () => {
     const toggles = [
       // v3.17: all reaction toggles were removed with the Reactions page
+      // v3.18: voiceCommands removed with the whole voice feature
       'affectionSystem', 'companionCat',
       'photoMode', 'contextualSounds', 'pomodoro', 'dancePartyIdle',
       'seasonalSkins', 'achievements', 'communitySkins',
-      'globalHotkeys', 'noWalkZones', 'voiceCommands',
+      'globalHotkeys', 'noWalkZones',
     ];
     for (const t of toggles) {
       assert.ok(t in DEFAULTS, `missing toggle ${t}`);
       assert.equal(typeof DEFAULTS[t], 'boolean', `${t} should default to boolean`);
     }
+    assert.ok(!('voiceCommands' in DEFAULTS), 'the voice toggle must be gone');
   });
   test('legacy keys unchanged', () => {
     const s = mkStore();
-    // v3.11: the default cat IS the ginger kitten (was grey_tabby)
-    assert.equal(s.get('breed'), 'ginger_kitten');
-    assert.equal(s.get('breedExplicit'), false);
+    // v3.18: the default cat IS the grey tabby again
+    assert.equal(s.get('breed'), 'grey_tabby');
     assert.equal(s.get('unlimitedCoins'), true);
   });
-  test('v3.11: grey_tabby carryover migrates to ginger_kitten until the user picks', () => {
-    // an upgraded user with a saved grey_tabby and no explicit choice
-    const a = mkStore({ breed: 'grey_tabby' });
-    assert.equal(a.get('breed'), 'ginger_kitten');
-    // the moment they pick a breed themselves, the marker latches
-    a.set('breedExplicit', true);
-    a.set('breed', 'grey_tabby');
-    assert.equal(a.get('breed'), 'grey_tabby');
-    // reload: the explicit choice survives (no re-migration)
-    const b = createSettings(a.export ? { read: () => a.export(), write: () => {} } : undefined);
+  test('v3.18: removed breeds/hats/dresses reset to the catalog defaults', () => {
+    // a save file full of removed cats walks back onto the three-cat catalog
+    const a = mkStore({ breed: 'panda', hat: 'santa', dress: 'red' });
+    assert.equal(a.get('breed'), 'grey_tabby', 'removed breed resets');
+    assert.equal(a.get('hat'), 'santa', 'a real hat survives');
+    assert.equal(a.get('dress'), 'red', 'a real dress survives');
+    const b = mkStore({ breed: 'siamese', hat: 'wizard', dress: 'gold' });
     assert.equal(b.get('breed'), 'grey_tabby');
+    assert.equal(b.get('hat'), null, 'unknown hat resets');
+    assert.equal(b.get('dress'), null, 'unknown dress resets');
   });
   test('v3.17: removed reaction keys are dropped from legacy saves', () => {
-    const s = mkStore({ reactTyping: true, stalkCursor: true, statusFile: 'x', reactMusic: true });
+    const s = mkStore({ reactTyping: true, stalkCursor: true, statusFile: 'x', reactMusic: true, voiceCommands: true });
     for (const k of ['reactTyping', 'stalkCursor', 'statusFile', 'reactMusic', 'reactApps',
                      'reactNewWindows', 'reactLowBattery', 'reactSystemSpikes', 'timeOfDayMood',
-                     'reactBuildStatus']) {
-      assert.ok(!(k in s.all), `${k} must not survive a v3.17 load`);
+                     'reactBuildStatus', 'voiceCommands']) {
+      assert.ok(!(k in s.all), `${k} must not survive a v3.18 load`);
     }
   });
 });
@@ -100,7 +100,7 @@ describe('stats / affection / unlocks', () => {
 describe('custom skins', () => {
   test('add + owned grant', () => {
     const s = mkStore();
-    assert.equal(s.addCustomSkin({ id: 'nightsky_x1', name: 'Nightsky', def: { name: 'Nightsky', base: 'bombay' } }), true);
+    assert.equal(s.addCustomSkin({ id: 'nightsky_x1', name: 'Nightsky', def: { name: 'Nightsky', base: 'grey_tabby' } }), true);
     assert.ok(s.get('owned').includes('custom:nightsky_x1'));
     assert.equal(s.get('customSkins').length, 1);
   });

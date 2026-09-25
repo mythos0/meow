@@ -19,10 +19,12 @@ import { createPomodoro, fmtRemaining } from './src/pomodoro.js';
 import { checkUnlocks, ACHIEVEMENTS, affectionProgress, unlockedPerks } from './src/achievements.js';
 import { seasonHat, validateSkinDef } from './src/cat-renderer.js';
 import { createExecLog } from './src/exec-log.js';
-// v3.15 voice commands + the music launcher
-import { parseVoiceCommand, acceptEnginePhrase } from './src/voice.js';
-import { createMusicLauncher } from './src/music-launcher.js';
-import { createVoiceListener } from './src/voice-listener.js';
+// v3.18: the whole voice feature set (Web Speech engine window, the SAPI
+// PowerShell listener, the YouTube music launcher, media keys, the salute
+// trigger) was REMOVED at the user's request — "remove all voice features
+// totally". It cost a hidden renderer + a persistent PowerShell process,
+// and the engines never worked reliably on real machines (Electron's web
+// speech always dies with 'network'; SAPI hears nothing on many setups).
 
 // ------------------------------------------------------------------ v3.2/v3.4 memory & process diet
 app.disableHardwareAcceleration();                         // no GPU process (API)
@@ -172,8 +174,7 @@ function onExplicitShutdown() {
   try { scanner?.stop(); } catch {}
   try { platTracker?.stop(); } catch {}   // v3.9: no orphan PowerShell
   try { musicWatcher.stop(); } catch {}   // v3.17: still runs (meow gate) until the very end
-  stopWebVoice();                          // v3.16: no orphan Web Speech engine window
-  try { voiceListener.stop(); } catch {}   // v3.15: no orphan SAPI listener
+  // v3.18: the voice engines are gone — nothing to orphan here anymore.
   stopIdleTicker();
   applyHotkeys(false);
   try { fastWins.closeAll(); } catch {}
@@ -571,284 +572,10 @@ const musicWatcher = createMusicWatcher({
   },
 });
 
-// ---------- v3.15 voice commands: "hey cat, play music …" ----------
-// The cat listens for spoken commands. Music titles are searched on YouTube
-// and the FIRST result opens in Brave (preferred; falls back to the default
-// browser) as a new window — watch pages autoplay, so the song really starts.
-// Transport (pause/next/volume…) rides the OS media keys, which Brave/YouTube
-// already honors through the Windows media session.
+// ---------- test seam ----------
 const MEOW_TEST = !!process.env.MEOWCAT_TEST;
-const __voiceTest = { launches: [], mediaKeys: [], phrases: [] };
-
-const MEDIA_KEY_VK = { play_pause: 179, next: 176, prev: 177, stop: 178, mute: 173, volup: 175, voldown: 174 };
-function sendMediaKey(kind) {
-  const vk = MEDIA_KEY_VK[kind];
-  if (!vk) return false;
-  __voiceTest.mediaKeys.push(kind);
-  xlog('main', 'voice', `media key: ${kind}`);
-  if (MEOW_TEST) return true;   // the sandbox has no media shell — record and move on
-  try {
-    const taps = (kind === 'volup' || kind === 'voldown') ? 6 : 1;
-    const script = `$w = New-Object -ComObject WScript.Shell; ` +
-      Array.from({ length: taps }, () => `$w.SendKeys([char]${vk}); `).join('');
-    const p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
-      { windowsHide: true, stdio: 'ignore', detached: true });
-    if (typeof p.unref === 'function') p.unref();
-  } catch { /* cosmetic */ }
-  return true;
-}
-
-const musicLauncher = createMusicLauncher({
-  platform: (MEOW_TEST && process.env.MEOWCAT_FAKE_PLATFORM) || process.platform,
-  // deterministic browser resolution in the test sandbox; real fs in production
-  existsFn: (MEOW_TEST && process.env.MEOWCAT_FAKE_BRAVE)
-    ? () => true
-    : (p => { try { return fs.existsSync(p); } catch { return false; } }),
-  // the fake-win32 sandbox has no REAL %LOCALAPPDATA% — hand the resolver a
-  // representative Windows env so the true Brave path logic runs
-  env: (MEOW_TEST && process.env.MEOWCAT_FAKE_PLATFORM === 'win32')
-    ? { LOCALAPPDATA: 'C:/Users/me/AppData/Local', ProgramFiles: 'C:/Program Files', 'ProgramFiles(x86)': 'C:/Program Files (x86)' }
-    : process.env,
-  // deterministic search in the test sandbox; real fetch in production
-  fetchFn: (MEOW_TEST && process.env.MEOWCAT_FAKE_YT_HTML)
-    ? async () => ({ ok: true, text: async () => fs.readFileSync(process.env.MEOWCAT_FAKE_YT_HTML, 'utf8') })
-    : (u, o) => net.fetch(u, o),
-  spawnFn: MEOW_TEST
-    ? (cmd, args) => { __voiceTest.launches.push({ cmd, args }); }
-    : (cmd, args, opts) => {
-        try {
-          const p = spawn(cmd, args, { detached: true, windowsHide: true, ...opts });
-          if (typeof p.unref === 'function') p.unref();
-        } catch { /* cosmetic */ }
-      },
-});
-
-async function handleVoicePhrase(text, confidence, engine = 'web') {
-  // v3.17 ENGINE PRIORITY: both engines run in parallel, but while the web
-  // engine is verifiably listening its phrases WIN — the offline SAPI
-  // recognizer is coarser and would only add mangled duplicates ("hey kat"
-  // vs "a cat"). SAPI phrases count only when the web engine is NOT healthy
-  // (which is always, in stock Electron — see the chain comment below).
-  if (engine === 'sapi' && !acceptEnginePhrase(engine, webHealthy())) {
-    xlog('cat', 'voice', `offline engine heard "${String(text).slice(0, 60)}" — web engine is live, ignored`);
-    return;
-  }
-  const parsed = parseVoiceCommand(text);
-  __voiceTest.phrases.push({ text, confidence, cmd: parsed && parsed.cmd });
-  if (__voiceTest.phrases.length > 40) __voiceTest.phrases.shift();
-  if (!parsed) { xlog('cat', 'voice', `ignored "${String(text).slice(0, 60)}" (no command)`, { confidence }); return; }
-  xlog('cat', 'voice', `heard "${String(text).slice(0, 80)}" → ${parsed.cmd}${parsed.query ? ' : ' + parsed.query : ''}`, { confidence });
-  // v3.15: the acknowledgment — the cat snaps to the salute while the
-  // command executes, and the bubble echoes EXACTLY what was received
-  sendToCat('voice-salute', {});
-  sendToCat('voice-bubble', { text: '▶ ' + describeVoiceCommand(parsed) });
-  switch (parsed.cmd) {
-    case 'play_music': {
-      sendToCat('voice-bubble', { text: '♪ searching: ' + parsed.query });
-      const r = await musicLauncher.play(parsed.query);
-      if (r && r.ok) {
-        sendToCat('voice-bubble', { text: (r.videoId ? '♪ now playing: ' : '♪ youtube: ') + parsed.query });
-        xlog('main', 'voice', `music via ${r.browser}${r.videoId ? ' · first result ' + r.videoId : ' · results page'} — "${parsed.query}"`, { url: r.url });
-      } else {
-        sendToCat('voice-bubble', { text: 'meow… the music would not open' });
-        xlog('main', 'voice', `music launch failed: ${r && r.reason}`);
-      }
-      break;
-    }
-    case 'pause': case 'resume': case 'stop_music': sendMediaKey('play_pause'); break;
-    case 'next': sendMediaKey('next'); break;
-    case 'previous': sendMediaKey('prev'); break;
-    case 'volume_up': sendMediaKey('volup'); break;
-    case 'volume_down': sendMediaKey('voldown'); break;
-    case 'mute': case 'unmute': sendMediaKey('mute'); break;
-    case 'stop_listening':
-      store.set('voiceCommands', false);
-      voiceListener.stop();
-      sendToCat('voice-bubble', { text: 'voice off. meow.' });
-      applyVoiceFlag();
-      break;
-    default: break;   // the ▶ echo bubble already answered wake_only/unknown
-  }
-}
-
-// v3.15: a short human-readable echo of the received command for the bubble
-function describeVoiceCommand(p) {
-  switch (p.cmd) {
-    case 'play_music': return `play music: ${p.query}`;
-    case 'pause': return 'pause';
-    case 'resume': return 'resume';
-    case 'stop_music': return 'stop the music';
-    case 'next': return 'next song';
-    case 'previous': return 'previous song';
-    case 'volume_up': return 'volume up';
-    case 'volume_down': return 'volume down';
-    case 'mute': return 'mute';
-    case 'unmute': return 'unmute';
-    case 'stop_listening': return 'stop listening';
-    case 'wake_only': return 'meow? (say: play music <name>)';
-    default: return 'unknown command';
-  }
-}
-
-// v3.16 VOICE ENGINE CHAIN — why "voice cmd not works" happened and how it
-// is REALLY fixed in v3.17. Two hard facts surfaced on the user's machine
-// (their exec log showed: `web speech error: network`):
-//   1. Chromium's Web Speech API ALWAYS fails with 'network' inside Electron
-//      — Electron ships no valid Google speech API key. It can never be the
-//      primary engine in a packaged build.
-//   2. The v3.16 fallback never ran: createVoiceListener was called WITHOUT
-//      a spawnFn, so the SAPI listener crashed into 'spawn-failed' forever.
-//      Dead engine + dead fallback = "voice cmd not works at all".
-// The v3.17 chain:
-//   · BOTH engines arm in PARALLEL the moment voice commands are enabled.
-//     The offline Windows SAPI listener (hardened in v3.16: enumerated
-//     recognizers, explicit culture, UTF-8 stdout, reported failures) is
-//     the WORKHORSE — it needs no network and no API keys.
-//   · The web window still starts: on builds where Chromium speech works
-//     (or a future Electron with a key) its phrases take priority via the
-//     webHealth gate in handleVoicePhrase; its 'network' errors are logged,
-//     not fatal.
-//   · A 5s heartbeat from the engine window keeps webHealth honest; without
-//     it a hung web engine would silently block SAPI phrases.
-let voiceEngine = null;            // 'web' | 'sapi' | 'web+sapi' | null
-let voiceWindow = null;            // the hidden Web Speech engine window
-let voiceWebError = '';            // last web-engine error (for Settings)
-let webLastListening = 0;         // v3.17: last time the web engine said it is listening
-const webHealthy = () => Date.now() - webLastListening < 15000;
-
-function startWebVoice() {
-  if (voiceWindow && !voiceWindow.isDestroyed()) {
-    try { voiceWindow.webContents.executeJavaScript('window.__voiceStart && window.__voiceStart()', true); } catch { }
-    return;
-  }
-  try {
-    voiceWindow = new BrowserWindow({
-      show: false, skipTaskbar: true, focusable: false,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs'),
-        contextIsolation: true, nodeIntegration: false,
-        backgroundThrottling: false,   // hidden windows must keep recognizing
-      },
-    });
-    voiceWindow.loadFile(path.join(__dirname, 'windows', 'voice.html'));
-    voiceWindow.webContents.on('did-finish-load', () => {
-      try { voiceWindow?.webContents.executeJavaScript('window.__voiceStart && window.__voiceStart()', true); } catch { }
-    });
-    voiceWindow.on('closed', () => { voiceWindow = null; });
-    xlog('main', 'voice', 'web speech engine window starting');
-  } catch (e) {
-    xlog('main', 'voice', `web engine window failed: ${e && e.message} — the offline engine carries the voice`);
-  }
-}
-
-function stopWebVoice() {
-  if (!voiceWindow) return;
-  const w = voiceWindow;
-  voiceWindow = null;
-  try { w.webContents.executeJavaScript('window.__voiceStop && window.__voiceStop()', true).catch(() => { }); } catch { }
-  try { w.destroy(); } catch { }
-}
-
-// v3.16: Chromium asks for mic permission on behalf of the Web Speech API.
-// Without an explicit handler Electron's default behavior varies; we grant
-// 'media' while voice commands are on (and keep every other permission
-// granted exactly as before — no behavior change for the rest of the app).
-try {
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
-    if (permission === 'media') { cb(!!store.get('voiceCommands')); return; }
-    cb(true);
-  });
-} catch { /* older Electron — ignore */ }
-// v3.17: engageSapiFallback is gone — the offline engine now starts IN
-// PARALLEL with the web engine (applyVoiceFlag), it never waits for a
-// failure report that sometimes never came.
-
-function onVoiceEngineEvent(ev = {}) {
-  switch (ev.type) {
-    case 'phrase':
-      handleVoicePhrase(String(ev.text || ''), Number(ev.confidence) || 0.8, 'web');
-      break;
-    case 'listening':
-      webLastListening = Date.now();          // v3.17: EVERY onstart refreshes health
-      if (voiceEngine !== 'sapi') voiceEngine = 'web';
-      voiceWebError = '';
-      xlog('main', 'voice', 'web speech engine is listening');
-      broadcastVoiceState();
-      break;
-    case 'hb':                                 // v3.17: 5s engine heartbeat
-      if (ev.listening) { webLastListening = Date.now(); if (voiceEngine !== 'sapi') voiceEngine = 'web'; }
-      break;
-    case 'net-retry':
-      voiceWebError = 'network';
-      broadcastVoiceState();
-      break;
-    case 'error':
-      voiceWebError = String(ev.error || 'unknown');
-      xlog('main', 'voice', `web speech error: ${voiceWebError}`);
-      // 'network' is EXPECTED in Electron (no Google API key) — the offline
-      // engine is already running in parallel, so this is just bookkeeping.
-      // Mic-blocked errors surface in Settings either way.
-      broadcastVoiceState();
-      break;
-    case 'unavailable':
-      voiceWebError = String(ev.reason || 'unavailable');
-      xlog('main', 'voice', `web speech unavailable: ${voiceWebError} — offline engine carries the voice`);
-      broadcastVoiceState();
-      break;
-    default:
-      break;   // starting / stopped / booted — cosmetic
-  }
-}
-
-const voiceListener = createVoiceListener({
-  platform: process.platform,
-  // v3.17 CRITICAL FIX — THE root cause of "voice cmd not works at all":
-  // this options object NEVER passed a spawn function, so the moment the
-  // fallback engaged, createVoiceListener called null(...), caught its own
-  // TypeError and respawned into the same wall forever ('spawn-failed').
-  // The offline engine literally never spawned a single PowerShell process
-  // in production. v3.15 shipped a working call; the v3.16 refactor dropped it.
-  spawnFn: (cmd, args, opts2) => spawn(cmd, args, opts2),
-  onPhrase: (text, conf) => { handleVoicePhrase(text, conf, 'sapi'); },
-  onDown: err => xlog('sys', 'voice-down', `SAPI listener exited (${err || 'unknown'}) — respawning`),
-  onStatus: st => { xlog('main', 'voice', `SAPI engine: ${st.engine || ''} ${st.culture || ''}`.trim()); broadcastVoiceState(); },
-  onError: err => xlog('main', 'voice', `offline engine reports: ${err}`),
-});
-
-function voiceStatus() {
-  const webUp = !!(voiceWindow && !voiceWindow.isDestroyed());
-  const sapiUp = voiceListener.running;
-  return {
-    enabled: !!store.get('voiceCommands'),
-    running: sapiUp || (webUp && webHealthy()),
-    engine: webUp && sapiUp ? 'web+sapi' : sapiUp ? 'sapi' : webUp ? 'web' : null,
-    error: voiceWebError || (sapiUp ? '' : voiceListener.lastError),
-    sapiInfo: voiceListener.engineInfo,        // recognizer id + culture
-    available: true,                           // the offline engine needs no network
-  };
-}
-function broadcastVoiceState() {
-  try {
-    for (const w of BrowserWindow.getAllWindows()) {
-      try { if (!w.isDestroyed()) w.webContents.send('voice-state', voiceStatus()); } catch { /* gone */ }
-    }
-  } catch { /* cosmetic */ }
-}
-function applyVoiceFlag() {
-  if (store.get('voiceCommands')) {
-    startWebVoice();        // the web engine arms (its phrases win IF it ever listens)…
-    // v3.17: …and the offline SAPI engine starts IN PARALLEL, immediately —
-    // it is the workhorse, not a fallback that waits for a failure report
-    if (process.platform === 'win32') { voiceListener.start(); voiceEngine = 'web+sapi'; }
-  } else {
-    stopWebVoice();
-    voiceListener.stop();
-    voiceEngine = null;
-    voiceWebError = '';
-    webLastListening = 0;
-  }
-  broadcastVoiceState();
-}
+// v3.18: the voice command block that lived here (media keys, the YouTube
+// music launcher, both speech engines, the mic permission handler) is gone.
 
 // v3.17: the typing meter + global keyboard hook (typing-hook.js) were
 // REMOVED with the Reactions features — one less native hook and one less
@@ -957,7 +684,7 @@ function checkAndSendUnlocks() {
 // v3.17: reaction flags removed — the set is what remains of the old
 // feature-flag orchestration
 const FLAG_KEYS = new Set([
-  'dancePartyIdle', 'globalHotkeys', 'windowHopping', 'voiceCommands',
+  'dancePartyIdle', 'globalHotkeys', 'windowHopping',
 ]);
 
 function applyFeatureFlags() {
@@ -968,7 +695,7 @@ function applyFeatureFlags() {
   applyHotkeys(store.get('globalHotkeys'));
   if (store.get('windowHopping') && process.platform === 'win32') ensureScanner();
   else scanner?.stop();
-  applyVoiceFlag();   // v3.15: voice commands on/off
+  // v3.18: the voice flag application is gone with the voice feature.
 }
 
 // ---------- global hotkeys ----------
@@ -998,9 +725,6 @@ ipcMain.handle('settings:set', (_e, kv) => {
   let flagsChanged = false;
   for (const [k, v] of Object.entries(kv || {})) {
     if (store.set(k, v)) applied[k] = v;
-    // v3.11: the first user-picked breed latches the marker — the
-    // grey_tabby→ginger_kitten default migration must never override it
-    if (k === 'breed') store.set('breedExplicit', true);
     if (k === 'autoStart') applyAutoStart(v);
     if (FLAG_KEYS.has(k)) flagsChanged = true;
   }
@@ -1015,24 +739,10 @@ ipcMain.handle('settings:set', (_e, kv) => {
 ipcMain.handle('coins:add', (_e, n) => store.addCoins(n));
 ipcMain.handle('coins:get', () => store.get('coins'));
 
-// ---------------- v3.15/v3.16 voice commands IPC ----------------
-ipcMain.handle('voice:get', () => voiceStatus());
-// v3.16: the hidden Web Speech engine window reports here (phrases, errors,
-// listening status) — the bridge between windows/voice.html and the chain
-ipcMain.on('voice:engine-event', (_e, ev) => { try { onVoiceEngineEvent(ev); } catch { /* never breaks us */ } });
-ipcMain.handle('voice:set', (_e, on) => {
-  const v = !!on;
-  if (store.get('voiceCommands') !== v) {
-    store.set('voiceCommands', v);
-    xlog('main', 'voice', `voice commands ${v ? 'ON — the cat is listening' : 'OFF'}`);
-    applyVoiceFlag();
-  }
-  return voiceStatus();
-});
+// ---------------- v3.18: the voice command IPC channels are gone with the
+// feature (only the music-state test seam below survives).
 if (MEOW_TEST) {
-  // test-only seams: inject a recognized phrase / read what the seams recorded
-  ipcMain.handle('voice:inject', (_e, text) => { handleVoicePhrase(String(text || ''), 0.92); return true; });
-  ipcMain.handle('voice:state', () => JSON.parse(JSON.stringify(__voiceTest)));
+  // test-only seam: force the system-wide music state for the meow-gate checks
   ipcMain.handle('voice:test-music', (_e, on) => { musicPlayingNow = !!on; pushMusicState(); return musicPlayingNow; });
 }
 ipcMain.handle('store:buy', (_e, breed) => {
@@ -1239,7 +949,11 @@ ipcMain.handle('open-window', (_e, name) => {
 });
 
 ipcMain.handle('close-window', (_e, name) => {
-  try { fastWins.hide('settings'); } catch { /* ignore */ }
+  // v3.18 process diet: closing Settings DESTROYS the window instead of
+  // keeping a hidden renderer warm — one less process the moment the user
+  // closes it (reopening costs ~150ms, the pool recreates on demand).
+  console.log('[meowcat] close-window IPC', name, new Error().stack.split('\n')[2]);
+  try { fastWins.closeAll(); } catch { /* ignore */ }
 });
 
 ipcMain.handle('app-info', () => ({

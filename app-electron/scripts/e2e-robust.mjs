@@ -214,7 +214,7 @@ try {
 
   // ============ 6b. community skin import dedupes ============
   const dedup = await cat.evaluate(async () => {
-    const skin = JSON.stringify({ name: 'DedupCat', base: 'bombay', colors: { fur: '#223355', eye: '#ffcc00' } });
+    const skin = JSON.stringify({ name: 'DedupCat', base: 'grey_tabby', colors: { fur: '#223355', eye: '#ffcc00' } });   // v3.18: three-cat catalog
     const r1 = await window.meow.importSkin(skin);
     const n1 = (await window.meow.getSettings()).customSkins.length;
     const r2 = await window.meow.importSkin(skin);          // same file again

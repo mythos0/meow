@@ -203,7 +203,12 @@
           <div class="coins-pill" id="coins2">🪙 0</div>
         </div>
         <div class="store-hint hint" id="shopHint" style="margin-bottom:10px;"></div>
+        <div class="hint" style="margin:2px 0 6px;font-weight:600">Cats</div>
         <div class="breeds" id="breeds"></div>
+        <div class="hint" style="margin:14px 0 6px;font-weight:600">Hats</div>
+        <div class="breeds" id="hats"></div>
+        <div class="hint" style="margin:14px 0 6px;font-weight:600">Dresses</div>
+        <div class="breeds" id="dresses"></div>
       </div>
 
       <div class="fl-card">
@@ -213,7 +218,7 @@
           <button id="importSkin">📂 Import…</button>
           <input type="file" id="skinFile" accept=".json,application/json" style="display:none">
         </div>
-        <div class="hint" id="customHint" style="margin-top:4px;">No custom skins yet. Make one: <code>{ "name":"Nightsky", "base":"bombay", "body":"chubby", "colors":{ "fur":"#4a4a7a", "eye":"#ffd94d" }, "pattern":"spots" }</code></div>
+        <div class="hint" id="customHint" style="margin-top:4px;">No custom skins yet. Make one: <code>{ "name":"Nightsky", "base":"grey_tabby", "body":"chubby", "colors":{ "fur":"#4a4a7a", "eye":"#ffd94d" }, "pattern":"spots" }</code></div>
       </div>
     </section>
 
@@ -328,19 +333,7 @@
           <div class="txt"><div class="l1">Photo mode</div><div class="l2">Freezes the cat mid-pose and saves a transparent PNG to your Pictures folder.</div></div>
           <label class="sw"><input type="checkbox" id="photoMode"><span class="tr"><span class="kn"></span></span></label>
         </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Voice commands</div>
-            <div class="l2">Say <b>“hey cat”</b> and the cat listens. Speech runs through Chromium's recognizer (accent-friendly) with the Windows offline engine as automatic fallback — no audio is ever stored by the cat.
-              <span id="voiceStatus" style="display:block;margin-top:4px;font-weight:600"></span>
-              <span id="voiceMicHint" style="display:none;margin-top:4px;color:#b3261e;font-weight:600">If nothing happens: Windows Settings → Privacy &amp; security → Microphone → allow desktop apps to access your microphone.</span></div>
-            <div class="l2" style="margin-top:8px;font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.7;color:var(--txt2,#555)">
-              hey cat play music &lt;name&gt; → Brave → YouTube → plays the first result<br>
-              hey cat pause · resume · stop the music · next song · previous song<br>
-              hey cat volume up / volume down · mute · unmute · stop listening
-            </div>
-          </div>
-          <label class="sw"><input type="checkbox" id="voiceCommands"><span class="tr"><span class="kn"></span></span></label>
-        </div>
+        <!-- v3.18: the Voice commands card is gone — the whole voice feature was removed. -->
       </div>
     </section>
 
@@ -397,7 +390,7 @@
           <button class="chip" id="lnkIssues">🐛 Report an issue</button>
         </div>
         <div class="hint" style="margin-top:8px;">
-          Runtime: Electron <span id="verElectron"></span> · Canvas 2D renderer · 24 breeds · 31 actions · 16 emotes<br>
+          Runtime: Electron <span id="verElectron"></span> · Canvas 2D renderer · 3 cats · hats & dresses · 30+ actions · 16 emotes<br>
           Sounds recorded from real cats. MIT License © 2026 mythos0.
         </div>
       </div>
@@ -426,16 +419,13 @@
 
 <script type="module">
 import { drawCat, PALETTES, BODIES, registerSkin } from '../src/cat-renderer.js';
-import { BREED_PRICES as prices } from '../src/settings-store.js';
+import { BREED_PRICES as prices, HAT_ITEMS, DRESS_ITEMS } from '../src/settings-store.js';
 import { ACHIEVEMENTS, affectionProgress } from '../src/achievements.js';
 
 const $ = id => document.getElementById(id);
 let S = null;
 
-const NEW_BREEDS = new Set([
-  'bombay', 'russian_blue', 'ginger_kitten', 'ragdoll', 'bengal', 'maine_coon', 'panda',
-  'cocoa_kitten', 'milky_kitten', 'smokey_kitten', 'midnight_kitten',
-]);
+// v3.18: the store carries exactly three cats + hats + dresses — NEW_BREEDS tags gone.
 
 function toast(msg, ok = true) {
   const t = $('toast');
@@ -460,7 +450,7 @@ document.querySelectorAll('#nav .item').forEach(el => {
 });
 
 // ---------------- previews ----------------
-function drawPreview(canvas, breed) {
+function drawPreview(canvas, breed, extra = {}) {
   const dpr = 2;
   canvas.width = 150 * dpr; canvas.height = 96 * dpr;
   const g = canvas.getContext('2d');
@@ -470,7 +460,7 @@ function drawPreview(canvas, breed) {
   g.save();
   g.translate(canvas.width / 2, canvas.height - 10 * dpr);
   g.scale(dpr, dpr);
-  drawCat(g, { t: 0.15, state: 'sit', breed, dir: 1, scale: k });
+  drawCat(g, { t: 0.15, state: 'sit', breed, dir: 1, scale: k, ...extra });
   g.restore();
 }
 
@@ -496,59 +486,120 @@ function currentHat() {
 }
 requestAnimationFrame(homeLoop);
 
-// ---------------- store ----------------
-function renderBreeds() {
+// ---------------- store (v3.18: cats + hats + dresses) ----------------
+function itemCard({ id, name, ownedNow, selected, price, preview, onPick }) {
+  const d = document.createElement('div');
+  d.className = 'breed' + (selected ? ' sel' : '') + (!ownedNow ? ' locked' : '');
+  const cv = document.createElement('canvas');
+  d.appendChild(cv);
+  const nm = document.createElement('div');
+  nm.className = 'nm'; nm.textContent = name;
+  d.appendChild(nm);
+  if (!ownedNow) {
+    const pr = document.createElement('div');
+    pr.className = 'pr'; pr.textContent = '\u{1F512} ' + price + ' \u{1FA99}';
+    d.appendChild(pr);
+  } else if (selected) {
+    const own = document.createElement('div');
+    own.className = 'own'; own.textContent = '\u2713';
+    d.appendChild(own);
+  }
+  preview(cv);
+  d.onclick = onPick;
+  return d;
+}
+
+async function buyAndOwn(id, price) {
+  if (!S.owned.includes(id) && !S.unlimitedCoins) {
+    const r = await window.meow.buyBreed(id);          // buys ANY catalog item
+    if (r.ok) { toast('Unlocked!'); S = await refresh(); }
+    else { toast('Need ' + r.needed + ' more \u{1FA99}', false); return false; }
+  }
+  return true;
+}
+
+function renderStore() {
   const owned = S.owned || [];
   const unlimited = !!S.unlimitedCoins;
+
+  // --- cats ---
   const grid = $('breeds');
   grid.innerHTML = '';
-  for (const [breed, pal] of Object.entries(PALETTES)) {
-    const d = document.createElement('div');
-    d.className = 'breed' + (S.breed === breed ? ' sel' : '') + (!owned.includes(breed) && !unlimited ? ' locked' : '');
-    d.dataset.breed = breed;
-    const cv = document.createElement('canvas');
-    d.appendChild(cv);
-    const nm = document.createElement('div');
-    nm.className = 'nm'; nm.textContent = pal.name || breed;
-    d.appendChild(nm);
-    if (!owned.includes(breed) && !unlimited) {
-      const pr = document.createElement('div');
-      pr.className = 'pr'; pr.textContent = '🔒 ' + (prices[breed] ?? '?') + ' 🪙';
-      d.appendChild(pr);
-    } else if (S.breed === breed) {
-      const own = document.createElement('div');
-      own.className = 'own'; own.textContent = '✓';
-      d.appendChild(own);
-    }
-    if (NEW_BREEDS.has(breed)) {
-      const tag = document.createElement('div');
-      tag.className = 'tagnew';
-      tag.textContent = breed === 'panda' ? '🐼 new' : 'new';
-      d.appendChild(tag);
-    }
-    if (breed.startsWith('custom:')) {
-      const tag = document.createElement('div');
-      tag.className = 'tagnew'; tag.style.background = 'rgba(95,159,216,0.2)';
-      tag.textContent = 'community';
-      d.appendChild(tag);
-    }
-    drawPreview(cv, breed);
-    d.onclick = async () => {
-      if (!owned.includes(breed) && !unlimited) {
-        const r = await window.meow.buyBreed(breed);
-        if (r.ok) { toast('Unlocked ' + breed + '!'); S = await refresh(); }
-        else toast('Need ' + r.needed + ' more 🪙', false);
-        return;
-      }
-      if (!owned.includes(breed)) {
-        const r = await window.meow.buyBreed(breed);
-        if (r.ok) { S = await refresh(); }
-      }
-      S.breed = breed;
-      await save({ breed });
-      S = await refresh();
-    };
-    grid.appendChild(d);
+  const cats = Object.keys(PALETTES).filter(b => !b.startsWith('custom:'));
+  for (const breed of cats) {
+    const pal = PALETTES[breed];
+    grid.appendChild(itemCard({
+      id: breed, name: pal.name || breed,
+      ownedNow: owned.includes(breed) || unlimited,
+      selected: S.breed === breed,
+      price: prices[breed] ?? 0,
+      preview: cv => drawPreview(cv, breed),
+      onPick: async () => {
+        if (!(await buyAndOwn(breed))) return;
+        S.breed = breed;
+        await save({ breed });
+        S = await refresh();
+        toast(pal.name + ' adopted!');
+      },
+    }));
+  }
+  // imported community skins ride along under the cats
+  for (const sk of S.customSkins || []) {
+    const pid = 'custom:' + sk.id;
+    grid.appendChild(itemCard({
+      id: pid, name: sk.name || sk.id,
+      ownedNow: true, selected: S.breed === pid, price: 0,
+      preview: cv => drawPreview(cv, pid),
+      onPick: async () => { S.breed = pid; await save({ breed }); S = await refresh(); },
+    }));
+  }
+
+  // --- hats ---
+  const hatGrid = $('hats');
+  hatGrid.innerHTML = '';
+  hatGrid.appendChild(itemCard({
+    id: '_none', name: 'No hat',
+    ownedNow: true, selected: !S.hat, price: 0,
+    preview: cv => drawPreview(cv, S.breed || 'grey_tabby'),
+    onPick: async () => { await save({ hat: null }); S = await refresh(); },
+  }));
+  for (const h of HAT_ITEMS) {
+    const on = S.hat === h.id;
+    hatGrid.appendChild(itemCard({
+      id: h.id, name: h.id,
+      ownedNow: owned.includes(h.id) || unlimited,
+      selected: on, price: h.price,
+      preview: cv => drawPreview(cv, S.breed || 'grey_tabby', { hat: h.id }),
+      onPick: async () => {
+        if (!(await buyAndOwn(h.id, h.price))) return;
+        await save({ hat: on ? null : h.id });
+        S = await refresh();
+      },
+    }));
+  }
+
+  // --- dresses ---
+  const dressGrid = $('dresses');
+  dressGrid.innerHTML = '';
+  dressGrid.appendChild(itemCard({
+    id: '_none', name: 'No dress',
+    ownedNow: true, selected: !S.dress, price: 0,
+    preview: cv => drawPreview(cv, S.breed || 'grey_tabby'),
+    onPick: async () => { await save({ dress: null }); S = await refresh(); },
+  }));
+  for (const dr of DRESS_ITEMS) {
+    const on = S.dress === dr.id;
+    dressGrid.appendChild(itemCard({
+      id: dr.id, name: dr.id + ' dress',
+      ownedNow: owned.includes(dr.id) || unlimited,
+      selected: on, price: dr.price,
+      preview: cv => drawPreview(cv, S.breed || 'grey_tabby', { dress: dr.id }),
+      onPick: async () => {
+        if (!(await buyAndOwn(dr.id, dr.price))) return;
+        await save({ dress: on ? null : dr.id });
+        S = await refresh();
+      },
+    }));
   }
 }
 
@@ -656,31 +707,8 @@ bindSwitch('pomodoro', 'pomodoro');
 bindSwitch('globalHotkeys', 'globalHotkeys');
 bindSwitch('photoMode', 'photoMode');
 bindSwitch('achievements', 'achievements');
-bindSwitch('voiceCommands', 'voiceCommands');
 
-// v3.15: live voice-listener status under the Voice commands toggle
-function renderVoiceStatus(st) {
-  const el = $('voiceStatus');
-  const hint = $('voiceMicHint');
-  if (!el) return;
-  const micBlocked = st && ['audio-capture', 'not-allowed', 'no-mic'].includes(String(st.error || ''));
-  if (hint) hint.style.display = (micBlocked && st.enabled) ? 'block' : 'none';
-  if (!st || st.available === false) { el.textContent = '● unavailable'; el.style.color = '#b3591f'; return; }
-  if (!st.enabled) { el.textContent = '● off'; el.style.color = '#8a8a8a'; return; }
-  // v3.17: BOTH engines arm in parallel. In the desktop app Chromium's
-  // speech engine has no Google API key (its log shows 'network'), so the
-  // offline Windows recognizer is the workhorse — the status says which
-  // recognizer is actually listening.
-  const eng = (st.engine === 'web+sapi' || st.engine === 'sapi')
-    ? (st.sapiInfo ? `offline · ${st.sapiInfo}` : 'offline Windows engine')
-    : 'Chromium speech';
-  if (st.running) { el.textContent = `● listening — ${eng} — say “hey cat …”`; el.style.color = '#1a7f37'; }
-  else if (micBlocked) { el.textContent = '● microphone blocked (' + st.error + ') — allow desktop apps in Windows mic privacy settings'; el.style.color = '#b3261e'; }
-  else if (st.error === 'grammar-failed' || st.error === 'no-recognizer' || st.error === 'no-sapi') { el.textContent = '● offline engine unavailable (' + st.error + ')'; el.style.color = '#b3261e'; }
-  else { el.textContent = '● starting…'; el.style.color = '#8a6d1a'; }
-}
-window.meow.voiceGet?.().then?.(renderVoiceStatus);
-window.meow.on('voice-state', renderVoiceStatus);
+// v3.18: the voice status renderer is gone with the voice feature.
 
 function syncControls() {
   $('size').value = S.size; $('sizeV').textContent = Math.round(S.size * 100) + '%';
@@ -695,7 +723,6 @@ function syncControls() {
     ['soundDblClickMeow', 'soundDblClickMeow'], ['soundReminders', 'soundReminders'],
     ['pomodoro', 'pomodoro'],
     ['globalHotkeys', 'globalHotkeys'], ['photoMode', 'photoMode'], ['achievements', 'achievements'],
-    ['voiceCommands', 'voiceCommands'],
   ]) $(id).checked = S[key] !== undefined ? !!S[key] : false;
   $('coins').textContent = '🪙 ' + (S.coins ?? 0);
   $('coins2').textContent = '🪙 ' + (S.coins ?? 0);
@@ -719,7 +746,7 @@ async function refresh() {
   S = await window.meow.getSettings();
   registerCustomSkins();
   syncControls();
-  renderBreeds();
+  renderStore();
   renderZones();
   renderAchievements();
   return S;

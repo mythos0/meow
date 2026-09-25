@@ -34,7 +34,7 @@ export const ACTIONS = [
   'rear',
   // v3.15 voice-command acknowledgment: the proud one-paw salute
   // (never randomly selected — fired when a spoken command is heard)
-  'salute',
+  // v3.18: REMOVED with the voice feature — nothing fires it anymore.
 ];
 
 // v3.8: is platform `b` (from the newest scan) the same physical window as
@@ -65,7 +65,7 @@ export const EMOTE_ON = {
   zoomies: 'exclaim', hairball: 'sweat', loaf: 'bread',
   // v3.6
   bop: 'note', investigate: 'question', sniff: 'question', nuzzle: 'heart',
-  curl: 'zzz', mope: 'sad', stalk: null, rear: null, salute: null,
+  curl: 'zzz', mope: 'sad', stalk: null, rear: null,
 };
 
 const CAT_WEIGHTS = {
@@ -145,7 +145,15 @@ export class CatBrain {
     this._zones = [];             // no-walk zones (screen coords)
     this._scale = 1;
     this._escaping = false;       // v3.17: trapped-in-zone escape in progress
-    this._lastFlip = null;        // v3.17: blocked-turn cooldown (anti-flicker)
+    // v3.18 STOP-AND-TURN: the real flicker killer. A blocked cat used to
+    // flip direction on every blocked step (a 0.45s cooldown still read as
+    // "facing both sides continuously, stuck in the same place"). Now a
+    // wall means: STOP, sniff a beat, turn ONCE toward the open side, and
+    // keep that direction for at least _TURN_CD seconds.
+    this._pauseT = 0;             // standing-at-the-wall sniff timer
+    this._turnDir = 1;            // direction the pause will end with
+    this._turnCd = 0;             // minimum seconds between direction flips
+    this._stuckT = 0;             // consecutive low-progress seconds
   }
 
   // ---------- v3.6 tuning API (called by cat.html via IPC events) ----------
@@ -273,6 +281,11 @@ export class CatBrain {
   }
 
   _enter(state, dur) {
+    // v3.18: each walk excursion starts with a fresh pacing budget — two
+    // blocked turns inside ONE excursion and the cat gives up and sits
+    if (state === 'walk' || state === 'run' || state === 'waddle' || state === 'zoomies') {
+      this._wallTurns = 0;
+    }
     // v3.13: an interrupted flight must never strand the cat mid-air. A jump
     // cancelled by an interaction (pet, dance, nuzzle, play-fight…) used to
     // freeze the feet at a suspended baseY — the cat then walked on invisible
@@ -381,14 +394,8 @@ export class CatBrain {
   poke() { this._enter('startle', 0.7); this.onEvent('poke'); }
   feed() { this._enter(this.breed === 'panda' ? 'bamboo' : 'eat', this.breed === 'panda' ? 5.5 : 4.9); this.onEvent('feed'); }
   dance() { this._enter('dance', 11.4); this.onEvent('dance'); }   // v3.16: full six-step routine (step right/left, hands up, turn around, shake tail, finish)
-  // v3.15: a spoken command was heard — snap to the salute (unless the cat
-  // is mid-hunt/mid-air; then the bubbles alone carry the acknowledgment)
-  saluteNow() {
-    if (['rear', 'stalk', 'laser', 'pounce', 'jump', 'startle'].includes(this.state)) return false;
-    this._enter('salute', 1.7);
-    this.onEvent('salute');
-    return true;
-  }
+  // v3.18: saluteNow is gone with the voice feature — nothing snaps the cat
+  // to a salute anymore.
   sleepNow() { this._enter('sleep', 10); }
 
   // v3.5: laser-pointer toy. cat.html owns the red dot (spawns it, drifts it,
@@ -661,23 +668,23 @@ export class CatBrain {
     if (outward || this.platformT > 7 + this.rand() * 7) this._leavePlatform(outward);
   }
 
-  // zone-aware horizontal move: returns true when the move was blocked and
-  // the cat turned around (used by ground strolls)
-  // v3.17 FLICKER FIX — "the cat is moving both sides, stuck at same place,
-  // flickering so much": when the cat stands INSIDE a no-walk zone (a zone
-  // drawn over it, or zones pinching both sides), resolveMove refuses EVERY
-  // direction and this used to flip dir on every single tick — a 60Hz
-  // left/right flicker pinned to one spot. Now:
-  //   · trapped inside a zone -> ESCAPE: walk (zones ignored) toward the
-  //     nearest outside point, keeping the direction stable
-  //   · ordinary blocked steps -> turn with a 0.45s cooldown, never per-tick
+  // zone-aware horizontal move: returns TRUE when the step was blocked by a
+  // wall (zone edge or bound) so the caller can stop-and-turn.
+  // v3.18 FLICKER FIX, round two — "I can still see the both-side facing
+  // flicker when walking, sometimes stuck same place but facing both sides
+  // continuously". The v3.17 repair still flipped dir on EVERY blocked step
+  // (with a 0.45s cooldown) and _clampAndTurn re-aimed the cat at the bounds
+  // every tick — on a short stretch (zones pinching the ground, a narrow
+  // lane) that is a direction flip every half second, forever. Now _moveX
+  // NEVER flips: it clamps, reports the wall, and the unified mover
+  // (_groundStep) does one pause + one deliberate turn.
   _moveX(dx) {
     // escaping: zones are ignored until the cat rect is clear of them
     if (this._escaping && this._zones.length) {
       if (!blockedAt(this._zones, this.x, this.baseY, this._scale)) {
         this._escaping = false;
       } else {
-        this.x = this.x + this.dir * Math.abs(dx);   // v3.17: step TOWARD the escape target
+        this.x = this.x + this.dir * Math.abs(dx);   // step TOWARD the escape target
         return false;
       }
     }
@@ -687,23 +694,19 @@ export class CatBrain {
       fx = resolveMove(this._zones, this.x, nx, this.baseY, this._scale);
     }
     if (fx != null) {
-      if (fx === this.x) {
-        // fully trapped — resolveMove refuses every direction
-        const esc = this._nearestEscapeX();
-        if (esc != null && esc !== this.x) {
-          this.dir = esc > this.x ? 1 : -1;
-          this._escaping = true;
-          this.x = this.x + this.dir * Math.abs(dx);   // first escape step
-          return false;
-        }
-      }
-      this.x = Math.max(this.minX + 20, Math.min(this.maxX - 20, fx));
-      const now = this.t;
-      if (this._lastFlip == null || now - this._lastFlip >= 0.45) {
-        this.dir *= -1;
-        this._lastFlip = now;
-      }
-      return true;
+      const clamped = Math.max(this.minX + 20, Math.min(this.maxX - 20, fx));
+      // v3.18: the clamp target must never sit BEHIND the cat — resolveMove's
+      // buffer is a few px wider than the block test, so right at the wall
+      // the "corrected" x can fall short of the current x. Stepping backward
+      // there read as a micro-stutter; a cat pressed against the wall is
+      // simply BLOCKED.
+      if ((dx > 0 && clamped <= this.x) || (dx < 0 && clamped >= this.x)) return true;
+      const gained = Math.abs(clamped - this.x);
+      this.x = clamped;
+      // less than half the intended step got through => that is a WALL.
+      // A partial slide (most of the step allowed) is normal movement —
+      // the cat keeps its direction and keeps strolling along the edge.
+      return gained < Math.abs(dx) * 0.5;
     }
     this.x = nx;
     return false;
@@ -739,8 +742,7 @@ export class CatBrain {
           this._tickPlatformWalk(dt);
           break;
         }
-        this._moveX(this.dir * this.speed * sf * dt); // v3.6: zone-aware stroll
-        this._clampAndTurn();
+        this._groundStep(this.speed * sf, dt);        // v3.18: zone-aware stroll, stop-and-turn
         this._platformCd -= dt;
         if (this._platformCd <= 0) {
           const pl = this._findPlatformAhead();
@@ -759,8 +761,7 @@ export class CatBrain {
           this._tickPlatformWalk(dt);
           break;
         }
-        this._moveX(this.dir * this.runSpeed * sf * dt);
-        this._clampAndTurn(true);
+        this._groundStep(this.runSpeed * sf, dt);
         break;
       }
       case 'roll': {
@@ -772,9 +773,8 @@ export class CatBrain {
       }
       case 'zoomies': {
         // v3.5 funny pack: the mad after-meal sprint — gallop bounce + dust
-        this._moveX(this.dir * this.runSpeed * 1.7 * sf * dt);
+        this._groundStep(this.runSpeed * 1.7 * sf, dt);
         this.jumpY = -Math.abs(Math.sin(this.t * 14)) * 9;
-        this._clampAndTurn();
         break;
       }
       // ---------------- v3.6 living-on-your-machine states ----------------
@@ -940,10 +940,66 @@ export class CatBrain {
     return true;
   }
 
-  _clampAndTurn(forceTurn = false) {
+  _clampAndTurn() {
+    // v3.18: CLAMPS + reports a bound wall; direction changes belong to the
+    // pause+turn flow in _groundStep, never to a per-tick re-aim (the old
+    // `this.dir = 1` at minX / `this.dir = -1` at maxX thrashed the facing
+    // every tick on a short stretch — "stuck at same place, facing both
+    // sides"). Returns true when the cat is pressed against a bound.
     const pad = 60;
-    if (this.x <= this.minX + pad) { this.x = this.minX + pad; this.dir = 1; if (forceTurn) this._enter('walk', 2 + this.rand() * 3); }
-    else if (this.x >= this.maxX - pad) { this.x = this.maxX - pad; this.dir = -1; if (forceTurn) this._enter('walk', 2 + this.rand() * 3); }
+    if (this.x <= this.minX + pad) { this.x = this.minX + pad; return this.dir < 0; }
+    if (this.x >= this.maxX - pad) { this.x = this.maxX - pad; return this.dir > 0; }
+    return false;
+  }
+
+  // v3.18: the ONE way a ground mover (walk / waddle / run / zoomies) may
+  // travel. Blocked -> stop and sniff (0.7–1.6s), then turn ONCE toward the
+  // open side (zone escape point when boxed in, else the wider half of the
+  // lane) and hold that direction for _TURN_CD seconds. Real cats pause at
+  // walls; they do not vibrate against them.
+  _groundStep(speed, dt) {
+    if (this._pauseT > 0) {
+      // standing at the wall, sniffing — no movement, facing stays
+      this._pauseT -= dt;
+      if (this._pauseT <= 0) {
+        this._wallTurns = (this._wallTurns || 0) + 1;
+        if (this._wallTurns >= 2) {
+          // boxed in twice in a row: a real cat gives up pacing and just
+          // sits down — it never ping-pongs between two walls
+          this._wallTurns = 0;
+          this._turnCd = 2.5;
+          this._enter(this.rand() < 0.5 ? 'sit' : 'idle', 3 + this.rand() * 4);
+          return;
+        }
+        this.dir = this._turnDir;
+        this._turnCd = 2.5;
+      }
+      return;
+    }
+    this._turnCd = Math.max(0, this._turnCd - dt);
+    const before = this.x;
+    const blocked = this._moveX(this.dir * speed * dt) || this._clampAndTurn();
+    const gained = Math.abs(this.x - before);
+    if (blocked || gained < speed * dt * 0.35) {
+      this._stuckT += dt;
+      if (this._stuckT >= 0.3 && this._turnCd <= 0) {
+        const esc = this._zones.length ? this._nearestEscapeX() : null;
+        this._turnDir = esc != null && esc !== this.x ? (esc > this.x ? 1 : -1)
+          : (this.x > (this.minX + this.maxX) / 2 ? -1 : 1);
+        this._pauseT = 0.7 + this.rand() * 0.9;
+        this._stuckT = 0;
+        // v3.17 behavior kept: standing INSIDE a zone is an escape — after
+        // the sniff, zones are ignored until the body clears them
+        if (this._zones.length && blockedAt(this._zones, this.x, this.baseY, this._scale)) {
+          this._escaping = true;
+        }
+      }
+    } else {
+      this._stuckT = 0;
+      // v3.18: the pacing budget is per-excursion (reset in _enter) — a cat
+      // that has bounced off two dead-ends in one walk sits down instead of
+      // pacing between them forever
+    }
   }
 
   get y() { return this.baseY; }

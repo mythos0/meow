@@ -45,12 +45,8 @@ contextBridge.exposeInMainWorld('meow', {
   submitFeedback: payload => ipcRenderer.invoke('feedback:submit', payload),
   execLogGet: () => ipcRenderer.invoke('exec-log:get'),
   execLogPush: entry => ipcRenderer.send('exec-log:push', entry),
-  // v3.15 voice commands
-  voiceGet: () => ipcRenderer.invoke('voice:get'),
-  voiceSet: on => ipcRenderer.invoke('voice:set', on),
-  voiceInject: text => ipcRenderer.invoke('voice:inject', text),   // MEOWCAT_TEST only
-  voiceState: () => ipcRenderer.invoke('voice:state'),             // MEOWCAT_TEST only
-  voiceEngineEvent: ev => ipcRenderer.send('voice:engine-event', ev),  // v3.16: voice.html engine → main
+  // v3.18: the voice bridge API is gone with the voice feature. The
+  // music-state test seam stays for the meow-gate e2e checks.
   voiceTestMusic: on => ipcRenderer.invoke('voice:test-music', on),    // MEOWCAT_TEST only: force the music-playing state
   on: (channel, fn) => {
     const allowed = [
@@ -68,9 +64,7 @@ contextBridge.exposeInMainWorld('meow', {
       'drag-pos',      // v3.12: main-driven drag cursor stream
       'heartbeat',     // v3.12: liveness ping from main
       'exec-log:entry',// v3.14: real-time execution-log stream
-      'voice-bubble',  // v3.15: spoken-command feedback on the cat
-      'voice-salute',  // v3.15: the salute pose when a command is heard
-      'voice-state',   // v3.15: voice listener status for the settings page
+      // v3.18: the spoken-command feedback channels are gone with voice
       'music-state',   // v3.16: system-wide "music is playing" flag (meow gate)
     ];
     if (!allowed.includes(channel)) return;

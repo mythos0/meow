@@ -18,18 +18,18 @@ describe('settings-store', () => {
     const st = createSettings(memBackend());
     assert.equal(st.get('breed'), DEFAULTS.breed);
     assert.equal(st.get('coins'), DEFAULTS.coins);
-    // v3.1: unlimited-coins promo grants every breed up-front
-    assert.deepEqual(st.get('owned'), Object.keys(BREED_PRICES));
+    // v3.1: unlimited-coins promo grants every item up-front (cats+hats+dresses)
+    assert.deepEqual([...st.get('owned')].sort(), [...Object.keys(BREED_PRICES), 'bow', 'crown', 'pumpkin', 'santa', 'flower', 'shades', 'tophat', 'blue', 'midnight', 'pink', 'red'].sort());
     assert.equal(st.get('unlimitedCoins'), true);
   });
 
   test('set() persists and reloads', () => {
     const be = memBackend();
     const st = createSettings(be);
-    st.set('breed', 'calico');
+    st.set('breed', 'smokey_kitten');
     st.set('size', 1.4);
     const st2 = createSettings(be); // re-read same backend
-    assert.equal(st2.get('breed'), 'calico');
+    assert.equal(st2.get('breed'), 'smokey_kitten');
     assert.equal(st2.get('size'), 1.4);
   });
 
@@ -67,10 +67,11 @@ describe('settings-store', () => {
     // v3.6.1: set() routes through the same sanitization as load() — so a
     // mid-session shrink of `owned` can never dodge the promo auto-grant.
     st.set('owned', ['grey_tabby']);
-    assert.ok(st.get('owned').includes('panda'), 'promo re-grants all breeds');
+    assert.ok(st.get('owned').includes('smokey_kitten'), 'promo re-grants all cats');
+    assert.ok(st.get('owned').includes('crown'), 'promo re-grants hats too');
     assert.ok(st.get('owned').length >= Object.keys(BREED_PRICES).length);
     const before = st.get('coins');
-    const r = st.buyBreed('panda');
+    const r = st.buyBreed('smokey_kitten');
     assert.equal(r.ok, true);
     assert.equal(r.alreadyOwned, true, 'already granted by the promo invariant');
     assert.equal(st.get('coins'), before, 'nothing deducted during promo');
@@ -80,10 +81,10 @@ describe('settings-store', () => {
     const be = memBackend();
     be.write(JSON.stringify({ unlimitedCoins: false, coins: 350, owned: ['grey_tabby'] }));
     const st = createSettings(be);
-    const r = st.buyBreed('siamese'); // 200
+    const r = st.buyBreed('smokey_kitten'); // 120
     assert.equal(r.ok, true);
-    assert.equal(st.get('coins'), 350 - 200);
-    assert.ok(st.get('owned').includes('siamese'));
+    assert.equal(st.get('coins'), 350 - 120);
+    assert.ok(st.get('owned').includes('smokey_kitten'));
     assert.equal(st.get('owned').length, 2, 'no auto-grant when promo off');
   });
 
@@ -91,10 +92,10 @@ describe('settings-store', () => {
     const be = memBackend();
     be.write(JSON.stringify({ unlimitedCoins: false, coins: 50, owned: ['grey_tabby'] }));
     const st = createSettings(be);
-    const r = st.buyBreed('tuxedo'); // 500 > 50
+    const r = st.buyBreed('crown'); // 120 > 50
     assert.equal(r.ok, false);
     assert.equal(r.reason, 'insufficient');
-    assert.equal(r.needed, 500 - 50);
+    assert.equal(r.needed, 120 - 50);
     assert.equal(st.get('coins'), 50);
   });
 

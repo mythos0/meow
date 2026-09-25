@@ -1,8 +1,8 @@
 {
   "name": "meowcat",
   "productName": "MeowCat",
-  "version": "3.17.0",
-  "description": "MeowCat — a smooth procedural desktop cat for Windows 11: real-time 2D canvas animation, no sprite frames, multi-monitor roaming, butterfly hunts",
+  "version": "3.18.0",
+  "description": "MeowCat \u2014 a smooth procedural desktop cat for Windows 11: real-time 2D canvas animation, no sprite frames, multi-monitor roaming, butterfly hunts",
   "main": "main.js",
   "type": "module",
   "author": "mythos0",

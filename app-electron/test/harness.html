@@ -112,15 +112,19 @@ if (q.get('sheet')) {
   const scale = parseFloat(q.get('scale') || '1');
   const jumpP = parseFloat(q.get('jumpP') || '0.5');
   const emote = q.get('emote');
+  const hat = q.get('hat');        // v3.18: store hats render in the harness
+  const dress = q.get('dress');    // v3.18: store dresses render in the harness
   const stateT = parseFloat(q.get('st' ) || q.get('stT') || q.get('stateT') || String(t));   // v3.16: pose-internal state time (the dance phases)
   const W = cv.width, H = cv.height;
-  ctx.fillStyle = '#eceff4'; ctx.fillRect(0,0,W,H);
-  for (let y = 0; y < H; y += 16)
-    for (let x = 0; x < W; x += 16)
-      if ((x/16 + y/16) % 2 === 0) { ctx.fillStyle = '#e0e4ec'; ctx.fillRect(x, y, 16, 16); }
+  if (q.get('bg') !== 'alpha') {           // v3.18: transparent mode for bbox tests
+    ctx.fillStyle = '#eceff4'; ctx.fillRect(0,0,W,H);
+    for (let y = 0; y < H; y += 16)
+      for (let x = 0; x < W; x += 16)
+        if ((x/16 + y/16) % 2 === 0) { ctx.fillStyle = '#e0e4ec'; ctx.fillRect(x, y, 16, 16); }
+  }
   ctx.save();
   ctx.translate(W/2, H - 40);
-  const opts = { t, state, breed, dir, scale, jumpP, stateT };
+  const opts = { t, state, breed, dir, scale, jumpP, stateT, hat, dress };
   drawCat(ctx, opts);
   drawParticles(ctx, opts);
   if (emote) {

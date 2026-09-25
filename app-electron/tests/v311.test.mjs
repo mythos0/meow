@@ -19,33 +19,21 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WA = { x: 0, y: 0, width: 1600, height: 1000 };
 
 // ---------------------------------------------------------------- defaults
-describe('v3.11 the default cat is the ginger kitten', () => {
-  test('DEFAULTS.breed is ginger_kitten', () => {
-    assert.equal(DEFAULTS.breed, 'ginger_kitten');
-    assert.equal(DEFAULTS.breedExplicit, false);
+describe('v3.11 lane/zone/drag contract (the kitten-era defaults were superseded in v3.18)', () => {
+  test('DEFAULTS.breed is grey_tabby (v3.18 store reset)', () => {
+    assert.equal(DEFAULTS.breed, 'grey_tabby');
   });
-  test('a fresh install boots as the ginger kitten', () => {
+  test('a fresh install boots as the grey tabby', () => {
     const s = createSettings({ read: () => null, write: () => {} });
-    assert.equal(s.get('breed'), 'ginger_kitten');
-  });
-  test('v3.10-era saved files migrate to the kitten (until the user picks)', () => {
-    // exactly what an upgraded user's settings file looks like
-    const raw = JSON.stringify({ version: 1, breed: 'grey_tabby', coins: 123 });
-    const s = createSettings({ read: () => raw, write: () => {} });
-    assert.equal(s.get('breed'), 'ginger_kitten');
-    assert.equal(s.get('coins'), 123);
-  });
-  test('an explicit grey_tabby choice is never overridden', () => {
-    const raw = JSON.stringify({ version: 1, breed: 'grey_tabby', breedExplicit: true });
-    const s = createSettings({ read: () => raw, write: () => {} });
     assert.equal(s.get('breed'), 'grey_tabby');
   });
-  test('the kitten litter exists with prices and palettes', () => {
-    for (const b of ['cocoa_kitten', 'milky_kitten', 'smokey_kitten', 'midnight_kitten']) {
-      assert.ok(PALETTES[b], `${b} palette missing`);
-      assert.ok(Number.isFinite(BREED_PRICES[b]), `${b} price missing`);
-      assert.equal(PALETTES[b].body, 'kitten', `${b} is a kitten (baby proportions)`);
+  test('the v3.11 kitten litter is gone except smokey_kitten', () => {
+    for (const b of ['cocoa_kitten', 'milky_kitten', 'midnight_kitten']) {
+      assert.ok(!PALETTES[b], `${b} must stay removed`);
     }
+    assert.ok(PALETTES.smokey_kitten, 'smokey_kitten survives');
+    assert.ok(Number.isFinite(BREED_PRICES.smokey_kitten), 'smokey price present');
+    assert.equal(PALETTES.smokey_kitten.body, 'kitten', 'smokey is a kitten (baby proportions)');
   });
 });
 

@@ -1,4 +1,5 @@
-// v316.test.mjs — the "voice finally works + the six-step dance" release.
+// v316.test.mjs — the six-step dance + hunt geometry (v3.18: the voice
+// suites were removed WITH the voice feature at the user's request).
 //   1. FUZZY WAKE: real speech engines mangle "hey cat" into "hey kat" /
 //      "hay cat" / "a cat" — the mangled wake + a real command must fire,
 //      the mangled wake + chatter must stay inert.
@@ -10,95 +11,11 @@
 //      (noFace), the whip tail, the happy finale.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseVoiceCommand, normalizePhrase, WAKE_WORDS } from '../src/voice.js';
-import { VOICE_SCRIPT, parseVoiceLine, createVoiceListener } from '../src/voice-listener.js';
 import { poseForState, BODIES } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
 
 // ------------------------------------------------------------ fuzzy wake
-test('voice: mangled wake + music title still plays (the accent path)', () => {
-  assert.equal(parseVoiceCommand('hey kat play music ghum kariya nilo sokhi').cmd, 'play_music');
-  assert.equal(parseVoiceCommand('hey kat play music ghum kariya nilo sokhi').query, 'ghum kariya nilo sokhi');
-  assert.equal(parseVoiceCommand('hay cat play music beliver').query, 'beliver');
-  assert.equal(parseVoiceCommand('a cat play music shape of you').cmd, 'play_music');
-  assert.equal(parseVoiceCommand('eh cat put on despacito').cmd, 'play_music');
-});
-
-test('voice: mangled wake + transport controls fire', () => {
-  assert.equal(parseVoiceCommand('hey kat pause').cmd, 'pause');
-  assert.equal(parseVoiceCommand('hay cat volume up').cmd, 'volume_up');
-  assert.equal(parseVoiceCommand('a cat stop the music').cmd, 'stop_music');
-  assert.equal(parseVoiceCommand('hey kitt next song').cmd, 'next');
-});
-
-test('voice: mangled wake + chatter stays NULL — inertness lives in the remainder', () => {
-  assert.equal(parseVoiceCommand('the cat sat on the mat'), null);
-  assert.equal(parseVoiceCommand('hey kat meow loudly'), null);
-  assert.equal(parseVoiceCommand('my cat is sleeping'), null);
-  assert.equal(parseVoiceCommand('hey kat what a lovely day'), null);
-});
-
-test('voice: exact wake keeps the old behavior (wake_only / unknown)', () => {
-  assert.equal(parseVoiceCommand('hey cat').cmd, 'wake_only');
-  assert.equal(parseVoiceCommand('hey cat meow loudly').cmd, 'unknown');
-  assert.equal(parseVoiceCommand('hey cat stop listening').cmd, 'stop_listening');
-  assert.equal(parseVoiceCommand(''), null);
-  assert.equal(parseVoiceCommand(null), null);
-});
-
 // ------------------------------------------------------------ SAPI script
-test('voice: the hardened SAPI script enumerates recognizers explicitly', () => {
-  assert.match(VOICE_SCRIPT, /InstalledRecognizers\(\)/, 'recognizers are ENUMERATED');
-  assert.match(VOICE_SCRIPT, /_\.Culture\.Name -eq 'en-US'/, 'en-US is preferred explicitly');
-  assert.match(VOICE_SCRIPT, /SpeechRecognitionEngine\(\$pick\.Id\)/, 'the picked recognizer is BOUND (not the locale default)');
-  assert.match(VOICE_SCRIPT, /gb\.Culture = \$pick\.Culture/, 'grammar culture = picked culture (no silent mismatch)');
-  assert.match(VOICE_SCRIPT, /grammar-failed/, 'a failed grammar load is REPORTED, not swallowed');
-  assert.match(VOICE_SCRIPT, /OutputEncoding = \[System\.Text\.Encoding\]::UTF8/, 'UTF-8 stdout (no OEM mojibake)');
-  assert.match(VOICE_SCRIPT, /\{"ready":true\}/, 'compat ready line still emitted');
-  assert.doesNotMatch(VOICE_SCRIPT, /SilentlyContinue/, 'the v3.15 error-swallowing is GONE');
-});
-
-test('voice: parseVoiceLine understands the new status line', () => {
-  assert.deepEqual(parseVoiceLine('{"ready":true}'), { ready: true });
-  const st = parseVoiceLine('{"status":"listening","recognizer":"MS-1033-10-0","culture":"en-US"}');
-  assert.equal(st.status, true);
-  assert.equal(st.engine, 'MS-1033-10-0');
-  assert.equal(st.culture, 'en-US');
-  assert.equal(parseVoiceLine('{"error":"grammar-failed"}').error, 'grammar-failed');
-  assert.equal(parseVoiceLine('{"text":"hey cat play music x","confidence":0.9}').text, 'hey cat play music x');
-  assert.equal(parseVoiceLine('garbage {"error":"no-mic"} tail').error, 'no-mic');
-  assert.equal(parseVoiceLine(''), null);
-});
-
-test('voice: the listener manager surfaces status + engineInfo', async () => {
-  const { createFake } = await import('./fixtures/fake-spawn.mjs').catch(() => ({ createFake: null }));
-  // inline fake child: a JSON-line emitter
-  const listeners = [];
-  const child = {
-    stdout: { on: (ev, fn) => { if (ev === 'data') listeners.push(fn); } },
-    stderr: { on: () => {} },
-    on: () => {},
-    kill: () => {},
-  };
-  const seen = { status: null, phrases: [] };
-  const L = createVoiceListener({
-    platform: 'win32',
-    spawnFn: () => child,
-    onPhrase: t => seen.phrases.push(t),
-    onStatus: s => { seen.status = s; },
-  });
-  L.start();
-  const push = listeners[0];
-  push(Buffer.from('{"status":"listening","recognizer":"MS-1033","culture":"en-US"}\n', 'utf8'));
-  push(Buffer.from('{"ready":true}\n', 'utf8'));
-  push(Buffer.from('{"text":"hey cat pause","confidence":0.71}\n', 'utf8'));
-  push(Buffer.from('{"text":"chatter only","confidence":0.2}\n', 'utf8'));   // below the floor
-  assert.equal(seen.status.engine, 'MS-1033');
-  assert.deepEqual(seen.phrases, ['hey cat pause']);
-  assert.equal(L.engineInfo, 'MS-1033 (en-US)');
-  L.stop();
-});
-
 // ------------------------------------------------------------ dance phases
 const B = BODIES.normal;
 const pal = { body: 'normal', fur: '#c8b48c', dark: '#8a7350', belly: '#e8dcc4', earIn: '#e89aa2' };
@@ -133,9 +50,23 @@ test('dance: phase 3 HANDS UP — both paws raised high OVER the head (overlay)'
   assert.ok(Array.isArray(up.overlayPaw) && up.overlayPaw.length === 2, 'both paws ride OVER the head');
   assert.ok(up.overlayPaw[0].fy < -104, `near paw just above the ear (fy ${up.overlayPaw[0].fy})`);
   assert.ok(up.overlayPaw[1].fy < -98, `far paw just above the ear (fy ${up.overlayPaw[1].fy})`);
-  assert.ok(up.legs[0].fy < -30 && up.legs[0].fy > -45, `chest paws pump under the raised arms (fy ${up.legs[0].fy})`);
+  // v3.18: the raised paws ARE the front legs — no chest-height copies below
+  assert.equal(up.legs[0], null, 'near front leg is LIFTED (no chest copy — four limbs)');
+  assert.equal(up.legs[1], null, 'far front leg is LIFTED (no chest copy — four limbs)');
   assert.ok(up.bodyRot < -0.45, 'still standing on the hind legs');
   assert.ok(step.overlayPaw === null || step.overlayPaw === undefined, 'no overlay during the steps');
+});
+
+test('dance: exactly FOUR limbs in every phase (the 6-leg bug stays dead)', () => {
+  for (let i = 0; i < 80; i++) {
+    const tt = i * 0.145;
+    const p = pose(tt);
+    const grounded = p.legs.filter(Boolean).length;
+    const raised = Array.isArray(p.overlayPaw) ? p.overlayPaw.length : (p.overlayPaw ? 1 : 0);
+    assert.ok(grounded + raised <= 4,
+      `four limbs max at t=${tt.toFixed(2)} (${grounded} grounded + ${raised} raised)`);
+    assert.ok(p.legs[2] && p.legs[3], `hind legs always planted at t=${tt.toFixed(2)}`);
+  }
 });
 
 test('dance: phase 4 TURN AROUND — a spin, then the back is held (noFace)', () => {
@@ -172,7 +103,12 @@ test('dance: every sampled frame stays sane (no NaN geometry)', () => {
   for (let i = 0; i < 60; i++) {
     const p = pose(i * 0.19);
     for (const leg of p.legs) {
+      if (!leg) continue;                    // lifted paws ride overlayPaw
       assert.ok(Number.isFinite(leg.fx) && Number.isFinite(leg.fy), `leg finite at t=${i * 0.19}`);
+    }
+    const ov = Array.isArray(p.overlayPaw) ? p.overlayPaw : (p.overlayPaw ? [p.overlayPaw] : []);
+    for (const paw of ov) {
+      assert.ok(Number.isFinite(paw.fx) && Number.isFinite(paw.fy), `overlay finite at t=${i * 0.19}`);
     }
     assert.ok(Number.isFinite(p.bodyRot) && Number.isFinite(p.wholeRot));
   }

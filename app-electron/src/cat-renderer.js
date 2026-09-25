@@ -13,158 +13,10 @@ export const PALETTES = {
     tongue: '#d98a94',
   },
   orange_tabby: {
-    name: "Orange Tabby",
+    name: "Ginger Cat",
     fur: '#eaa75f', dark: '#c47f3c', belly: '#f8e3c4', stripe: '#a85a24',
     earIn: '#e0a89e', nose: '#d07f6e', eye: '#93bb4e', pupil: '#241a10',
     tongue: '#d98a94',
-  },
-  siamese: {
-    name: "Siamese",
-    fur: '#ece0cb', dark: '#6e5138', belly: '#f4ecdd', stripe: '#6e5138',
-    earIn: '#caa79b', nose: '#8a6055', eye: '#5f9fd8', pupil: '#1a2230',
-    points: true, tongue: '#d98a94',
-  },
-  calico: {
-    name: "Calico",
-    fur: '#f3e9d7', dark: '#c9b69a', belly: '#faf3e6', stripe: '#b39b78',
-    earIn: '#dba8a0', nose: '#cf8076', eye: '#c28a2e', pupil: '#241a10',
-    patches: [
-      { c: '#e08a3c', dk: '#b56a24' },
-      { c: '#453c38', dk: '#2c2622' },
-    ],
-    tongue: '#d98a94',
-  },
-  persian: {
-    name: "Persian",
-    fur: '#f1e4cf', dark: '#d3bda0', belly: '#fbf4e8', stripe: '#dcc7a8',
-    earIn: '#e0b0aa', nose: '#d4858d', eye: '#5f9fd8', pupil: '#1c2733',
-    fluffy: true, tongue: '#d98a94',
-  },
-  tuxedo: {
-    name: "Tuxedo",
-    fur: '#43434c', dark: '#26262d', belly: '#f4f4f4', stripe: '#1e1e24',
-    earIn: '#c98f96', nose: '#b56b74', eye: '#93bb4e', pupil: '#0e0e12',
-    socks: true, tongue: '#d98a94',
-  },
-  // ---------------- v3.1: more designs + body types ----------------
-  bombay: {
-    name: "Bombay",          // sleek all-black panther-like cat, copper eyes
-    body: 'slim',
-    fur: '#3a3a42', dark: '#202026', belly: '#5a5a64', stripe: null,
-    earIn: '#8a5a62', nose: '#41363b', eye: '#c9822e', pupil: '#0a0a0e',
-    tongue: '#d98a94', sheen: true,
-  },
-  russian_blue: {
-    name: "Russian Blue",    // plush blue-grey coat, emerald eyes
-    fur: '#93a7b8', dark: '#5f7488', belly: '#d3dee6', stripe: null,
-    earIn: '#b98f96', nose: '#7d8894', eye: '#4fb573', pupil: '#131c22',
-    tongue: '#d98a94',
-  },
-  ginger_kitten: {
-    name: "Ginger Kitten",   // tiny kitten: big head, short legs, big eyes
-    body: 'kitten',
-    fur: '#f0b268', dark: '#cf8b42', belly: '#fae8cd', stripe: '#b06226',
-    earIn: '#e2a79b', nose: '#d07f6e', eye: '#93bb4e', pupil: '#241a10',
-    tongue: '#d98a94',
-  },
-  ragdoll: {
-    name: "Ragdoll",         // big fluffy chubby cat, seal points, blue eyes
-    body: 'chubby', fluffy: true,
-    fur: '#efe6da', dark: '#7a624e', belly: '#f9f3ea', stripe: '#7a624e',
-    earIn: '#c9a49b', nose: '#c08a80', eye: '#6fa8dc', pupil: '#1a2230',
-    points: true, tongue: '#d98a94',
-  },
-  bengal: {
-    name: "Bengal",          // golden coat with dark rosette spots
-    body: 'slim',
-    fur: '#dfb570', dark: '#9c6b2e', belly: '#f6e8cd', stripe: null,
-    earIn: '#cf9d8c', nose: '#b5765e', eye: '#8fb84e', pupil: '#20180e',
-    spots: true, tongue: '#d98a94',
-  },
-  maine_coon: {
-    name: "Maine Coon",      // extra-large, fluffy, lynx ear tufts
-    body: 'large', fluffy: true,
-    fur: '#a8835c', dark: '#6d4f30', belly: '#e8d9c2', stripe: '#5a3f24',
-    earIn: '#b98f96', nose: '#a06a58', eye: '#79b356', pupil: '#1c1710',
-    tufts: true, tongue: '#d98a94',
-  },
-  panda: {
-    name: "Panda",           // giant panda: white body, black limbs/ears/eye-patches
-    body: 'panda',
-    fur: '#f5f3ee', dark: '#26262b', belly: '#f5f3ee', stripe: null,
-    earIn: '#26262b', earCol: '#26262b', nose: '#26262b', eye: '#8a6a3a',
-    pupil: '#101014', limbCol: '#26262b', eyePatch: true, roundEars: true,
-    pandaFace: true, band: true, tongue: '#c97884',
-  },
-  // ---------------- v3.2: completely new designs ----------------
-  mochi: {
-    name: "Mochi Kitten",    // the reference-picture kitten: fluffy orange-white
-                             // chibi, huge slate-blue eyes, white blaze & paws
-    body: 'chibi', fluffy: true,
-    fur: '#eca963', dark: '#c98343', belly: '#fbf3e4', stripe: '#b06a28',
-    earIn: '#f0b6ad', nose: '#e2907f', eye: '#5f7d99', pupil: '#1c2733',
-    patches: [
-      { c: '#9b8474', dk: '#6f5d50' },   // grey-brown saddle like the photo
-      { c: '#e79a4e', dk: '#bd7430' },   // deeper orange patch
-    ],
-    socks: true, blaze: true, beans: true, bigEye: true, tongue: '#d98a94',
-  },
-  scottish_fold: {
-    name: "Scottish Fold",   // round plush face, folded-forward ears, copper eyes
-    body: 'chubby', foldEars: true, bigEye: true, blush: true,
-    fur: '#d9cfc4', dark: '#a89a8c', belly: '#f2ede6', stripe: null,
-    earIn: '#c9a29a', nose: '#c58a80', eye: '#d08a3a', pupil: '#241a10',
-    tongue: '#d98a94',
-  },
-  snow_angora: {
-    name: "Snow Angora",     // all-white longhair with odd eyes (blue + green)
-    body: 'large', fluffy: true,
-    fur: '#f7f5f0', dark: '#d9d4cb', belly: '#ffffff', stripe: null,
-    earIn: '#f0c9c4', nose: '#e8a3a8', eye: '#5f9fd8', eye2: '#6cb489',
-    pupil: '#1c2733', hetero: true, beans: true, tongue: '#d98a94',
-  },
-  somali: {
-    name: "Somali",          // russet fox-like fluff, brush tail, tufted ears
-    body: 'slim', fluffy: true, tufts: true, brushTail: true,
-    fur: '#cf7f46', dark: '#9c5526', belly: '#f4d9b8', stripe: '#7e3f18',
-    earIn: '#d99a86', nose: '#a55f48', eye: '#d9a53a', pupil: '#20180e',
-    tongue: '#d98a94',
-  },
-  british_plush: {
-    name: "British Plush",   // dense blue-cream teddy, round everything
-    body: 'chubby', bigEye: true,
-    fur: '#b5c4cf', dark: '#7f93a3', belly: '#e6edf2', stripe: null,
-    earIn: '#c9a2a8', nose: '#8f9aa5', eye: '#e0902e', pupil: '#1c1a18',
-    tongue: '#d98a94',
-  },
-  choco_munchkin: {
-    name: "Choco Munchkin",  // chocolate sausage cat with cream socks
-    body: 'munchkin', socks: true, blush: true, beans: true,
-    fur: '#6b4a37', dark: '#43301f', belly: '#8a6a52', stripe: null,
-    earIn: '#c99a90', nose: '#3d2a1e', eye: '#e8b34a', pupil: '#181008',
-    tongue: '#d98a94',
-  },
-  sakura: {
-    name: "Sakura Kitten",   // pale cream-pink chibi with blush cheeks
-    body: 'chibi', bigEye: true, blush: true, beans: true, fluffy: true,
-    fur: '#f4ddc9', dark: '#dcbb9f', belly: '#fdf6ee', stripe: '#e8b8a0',
-    earIn: '#f4b8b0', nose: '#eb9a96', eye: '#7fb0d8', pupil: '#22303e',
-    tongue: '#e89a9a',
-  },
-  // ---------------- v3.11: the kitten litter (ginger_kitten's friends) ----------------
-  cocoa_kitten: {
-    name: "Cocoa Kitten",    // chocolate-brown baby with cream socks & blush
-    body: 'kitten', bigEye: true, blush: true, socks: true, beans: true,
-    fur: '#8a5f42', dark: '#5f3f2b', belly: '#e9d3ba', stripe: '#4a3020',
-    earIn: '#d9a294', nose: '#5f4030', eye: '#d9a53a', pupil: '#1c1208',
-    tongue: '#d98a94',
-  },
-  milky_kitten: {
-    name: "Milky Kitten",    // cream-white fluffy baby, blue eyes, pink beans
-    body: 'kitten', fluffy: true, bigEye: true, blush: true, beans: true,
-    fur: '#f6efe2', dark: '#d8c9ae', belly: '#fffbf2', stripe: '#e2d2b4',
-    earIn: '#f2c1ba', nose: '#eba8a0', eye: '#6fa8dc', pupil: '#1c2733',
-    tongue: '#e89a9a',
   },
   smokey_kitten: {
     name: "Smokey Kitten",   // blue-grey plush baby with white socks
@@ -173,13 +25,9 @@ export const PALETTES = {
     earIn: '#d3a3ab', nose: '#7d8894', eye: '#8fce6e', pupil: '#131c22',
     tongue: '#d98a94',
   },
-  midnight_kitten: {
-    name: "Midnight Kitten", // tiny black kitten, huge amber eyes, white whisker dots
-    body: 'kitten', bigEye: true, sheen: true,
-    fur: '#33333c', dark: '#1c1c24', belly: '#4a4a56', stripe: null,
-    earIn: '#8a5a62', nose: '#2a2a34', eye: '#f0b03a', pupil: '#0a0a0e',
-    tongue: '#d98a94',
-  },
+  // v3.18: every other built-in breed was REMOVED at the user's request —
+  // the Cat Store now carries exactly three cats (grey tabby + ginger cat
+  // free, smokey kitten unlockable) plus hats and dresses.
 };
 
 // ---------------- body types (v3.1) ----------------
@@ -382,10 +230,10 @@ export function drawCat(ctx, opts) {
   const nearFill = pal.limbCol || pal.fur;
   const farFill = pal.limbCol ? shade(pal.limbCol, 0.24) : shade(pal.dark, 0.18);
 
-  // ---------------- FAR legs (slightly darker; skipped when tucked)
+  // ---------------- FAR legs (slightly darker; skipped when tucked or lifted)
   if (!P.hideLegs) {
-    drawLeg(ctx, shoulder.x, shoulder.y, P.legs[1], pal, farFill, -1, pal.dark, B, P.legK);
-    drawLeg(ctx, hip.x, hip.y, P.legs[3], pal, farFill, -1, pal.dark, B, P.legK);
+    if (P.legs[1]) drawLeg(ctx, shoulder.x, shoulder.y, P.legs[1], pal, farFill, -1, pal.dark, B, P.legK);
+    if (P.legs[3]) drawLeg(ctx, hip.x, hip.y, P.legs[3], pal, farFill, -1, pal.dark, B, P.legK);
   }
 
   // ---------------- body (tail drawn INSIDE this transform so it stays
@@ -477,6 +325,11 @@ export function drawCat(ctx, opts) {
   }
   ctx.restore(); // clip
 
+  // v3.18: a store DRESS covers the torso — drawn inside the body transform
+  // so it rotates/squashes with the cat, before the near legs (which stay in
+  // front of the skirt, like a real dress over legs).
+  if (opts.dress) drawDress(ctx, opts.dress, B, P);
+
   // rim light top
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';
   ctx.lineWidth = 3; ctx.lineCap = 'round';
@@ -492,8 +345,8 @@ export function drawCat(ctx, opts) {
     ell(ctx, B.rx * 0.12, bodyY + B.ry * 0.48, 7.5, 5, 0.35);
     ctx.fill();
   } else {
-    drawLeg(ctx, shoulder.x, shoulder.y, P.legs[0], pal, nearFill, 1, pal.dark, B, P.legK);
-    drawLeg(ctx, hip.x, hip.y, P.legs[2], pal, nearFill, 1, pal.dark, B, P.legK);
+    if (P.legs[0]) drawLeg(ctx, shoulder.x, shoulder.y, P.legs[0], pal, nearFill, 1, pal.dark, B, P.legK);
+    if (P.legs[2]) drawLeg(ctx, hip.x, hip.y, P.legs[2], pal, nearFill, 1, pal.dark, B, P.legK);
   }
 
   // ---------------- held / ground props (panda bamboo, cat fish)
@@ -506,8 +359,10 @@ export function drawCat(ctx, opts) {
 
   // v3.15: the salute paw rides OVER the head (drawn last) so the pose reads
   // as a paw pressed to the brow instead of vanishing behind the face.
-  // v3.16: overlayPaw may be an ARRAY — the dance's HANDS UP raises both
-  // front paws beside the head, and the FINALE rests one by the cheek.
+  // v3.18: the overlay paw IS a front paw that LIFTED — a null slot in
+  // P.legs means that limb is airborne, riding overlayPaw instead, so the
+  // cat keeps exactly FOUR limbs (v3.17 drew the raised paws AND the chest
+  // paws at the same time: "when dancing why the cat has 6 legs").
   if (P.overlayPaw) {
     const paws = Array.isArray(P.overlayPaw) ? P.overlayPaw : [P.overlayPaw];
     for (const paw of paws) {
@@ -526,6 +381,74 @@ export function drawCat(ctx, opts) {
   if (opts.hat && HATS.includes(opts.hat)) drawHat(ctx, opts.hat, headC);
 
   ctx.restore();
+}
+
+// ---------------------------------------------------------------- dresses
+// v3.18: the Cat Store dresses. Procedural garment: bodice + A-line skirt
+// with a hem band, waist sash and a per-style pattern, fitted to any body
+// type from the B geometry (rx/ry). Drawn in BODY space (rotates with the
+// torso), UNDER the near legs.
+export const DRESSES = ['red', 'blue', 'pink', 'midnight'];
+
+export const DRESS_STYLES = {
+  red:      { base: '#d84a4a', dark: '#a83232', trim: '#f6e7c8', pattern: 'hearts' },
+  blue:     { base: '#4a7fd8', dark: '#33619f', trim: '#e8f1fb', pattern: 'stripes' },
+  pink:     { base: '#e88ab0', dark: '#c06288', trim: '#fdf1f6', pattern: 'dots' },
+  midnight: { base: '#3a3a5c', dark: '#26263e', trim: '#8f8fc9', pattern: 'stars' },
+};
+
+export function drawDress(ctx, kind, B, P) {
+  const D = DRESS_STYLES[kind] || DRESS_STYLES.red;
+  const rx = B.rx, ry = B.ry;
+  // skirt: A-line flare from the waist over the haunch, hem above the feet
+  ctx.beginPath();
+  ctx.moveTo(-rx * 0.88, -14);
+  ctx.quadraticCurveTo(-rx * 1.16, 0, -rx * 0.98, 13);
+  ctx.quadraticCurveTo(0, 18, rx * 0.98, 13);            // scalloped-ish hem
+  ctx.quadraticCurveTo(rx * 1.16, 0, rx * 0.88, -14);
+  ctx.closePath();
+  ctx.fillStyle = D.base; ctx.fill();
+  ctx.strokeStyle = D.dark; ctx.lineWidth = 1.4; ctx.stroke();
+  // pattern clipped to the skirt
+  ctx.save();
+  ctx.clip();
+  if (D.pattern === 'dots') {
+    ctx.fillStyle = D.trim;
+    for (const [px, py, pr] of [[-22, -2, 2.6], [-6, 4, 2.6], [12, -4, 2.6], [26, 4, 2.6], [-14, 9, 2.2], [6, 11, 2.2]]) {
+      ctx.beginPath(); ctx.ellipse(px, py, pr, pr, 0, 0, TAU); ctx.fill();
+    }
+  } else if (D.pattern === 'stripes') {
+    ctx.strokeStyle = D.trim; ctx.lineWidth = 2.4; ctx.globalAlpha *= 0.75;
+    for (let i = -3; i <= 3; i++) {
+      ctx.beginPath(); ctx.moveTo(i * 11, -14); ctx.lineTo(i * 13, 14); ctx.stroke();
+    }
+    ctx.globalAlpha /= 0.75;
+  } else if (D.pattern === 'hearts') {
+    ctx.fillStyle = D.trim; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    for (const [px, py] of [[-20, 0], [0, 5], [20, -1]]) ctx.fillText('\u2665', px, py);
+  } else if (D.pattern === 'stars') {
+    ctx.fillStyle = D.trim;
+    for (const [px, py, pr] of [[-24, -4, 1.7], [-8, 3, 1.4], [10, -6, 1.7], [24, 2, 1.4], [-16, 10, 1.2], [4, 12, 1.2]]) {
+      ctx.beginPath(); ctx.ellipse(px, py, pr, pr, 0, 0, TAU); ctx.fill();
+    }
+  }
+  ctx.restore();
+  // hem band
+  ctx.beginPath();
+  ctx.moveTo(-rx * 0.98, 11);
+  ctx.quadraticCurveTo(0, 16, rx * 0.98, 11);
+  ctx.strokeStyle = D.trim; ctx.lineWidth = 2.6; ctx.stroke();
+  // waist sash + bow knot
+  ctx.beginPath();
+  ctx.moveTo(-rx * 0.9, -12);
+  ctx.quadraticCurveTo(0, -6, rx * 0.9, -12);
+  ctx.strokeStyle = D.dark; ctx.lineWidth = 4.4; ctx.stroke();
+  ell(ctx, 0, -10, 4.6, 3.4, -0.3);
+  ctx.fillStyle = D.trim; ctx.fill();
+  // shoulder straps
+  ctx.strokeStyle = D.base; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(rx * 0.28, -ry - 6); ctx.lineTo(rx * 0.44, -14); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-rx * 0.18, -ry - 4); ctx.lineTo(-rx * 0.30, -14); ctx.stroke();
 }
 
 // ---------------------------------------------------------------- hats
@@ -596,6 +519,55 @@ export function drawHat(ctx, kind, headC) {
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ell(ctx, -r * 0.55, -1.6, 2.7, 1.4, -0.4); ctx.fill();
     ell(ctx, r * 0.37, -1.6, 2.7, 1.4, -0.4); ctx.fill();
+    ctx.restore();
+  } else if (kind === 'tophat') {
+    // v3.18 store hat: a tall black top hat with a red band
+    ctx.save();
+    ctx.translate(0, -r * 0.62);
+    ctx.fillStyle = '#26262e';
+    ell(ctx, 0, 6.5, r * 0.95, 3.4); ctx.fill();               // brim
+    rr(ctx, -r * 0.58, -r * 0.85, r * 1.16, r * 0.95 + 7, 2.5); ctx.fill();  // crown
+    ctx.fillStyle = '#b23a3a';
+    ctx.fillRect(-r * 0.58, -2.4, r * 1.16, 5.2);              // band
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    rr(ctx, -r * 0.5, -r * 0.8, r * 0.22, r * 0.8, 2); ctx.fill();  // sheen
+    ctx.restore();
+  } else if (kind === 'crown') {
+    // v3.18 store hat: a little gold crown pushed between the ears
+    ctx.save();
+    ctx.translate(0, -r * 0.78);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.62, 4);
+    ctx.lineTo(-r * 0.62, -4);
+    ctx.lineTo(-r * 0.31, 0);
+    ctx.lineTo(0, -7);
+    ctx.lineTo(r * 0.31, 0);
+    ctx.lineTo(r * 0.62, -4);
+    ctx.lineTo(r * 0.62, 4);
+    ctx.closePath();
+    ctx.fillStyle = '#e8b83a'; ctx.fill();
+    ctx.strokeStyle = '#b8862a'; ctx.lineWidth = 1.4; ctx.stroke();
+    for (const [jx, jy, jc] of [[0, -1, '#e05a7a'], [-r * 0.36, 1.6, '#5a9fe0'], [r * 0.36, 1.6, '#5ac98a']]) {
+      ell(ctx, jx, jy, 1.9, 1.9); ctx.fillStyle = jc; ctx.fill();
+    }
+    ctx.restore();
+  } else if (kind === 'bow') {
+    // v3.18 store hat: a big ribbon bow perched on the head
+    ctx.save();
+    ctx.translate(r * 0.1, -r * 0.9);
+    ctx.rotate(-0.12);
+    const bl = r * 0.52, bh = r * 0.34;
+    ctx.fillStyle = '#e06a9a';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(s * bl * 0.6, -bh, s * bl, 0);
+      ctx.quadraticCurveTo(s * bl * 0.6, bh * 0.9, 0, 0);
+      ctx.closePath(); ctx.fill();
+    }
+    ell(ctx, 0, 0, bl * 0.2, bh * 0.34); ctx.fillStyle = '#c24a7e'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-bl * 0.9, -bh * 0.18); ctx.quadraticCurveTo(-bl * 0.4, -bh * 0.7, 0, -bh * 0.2); ctx.stroke();
     ctx.restore();
   }
   ctx.restore();
@@ -789,18 +761,27 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
         P.headRot = -0.09 * w;
         P.tailMode = 'sway'; P.eyeState = 'happy';
       } else if (st < 5.6) {
-        // 3 HANDS UP: glide back to center, then both paws rise to just
-        // OVER the ears (overlayPaw rides above the head), bouncing on the
-        // beat — the reference sheet's peak pose
-        const st3 = st - 3.4, f = 4 * Math.PI / 2.2, w = Math.sin(st3 * f);
+        // 3 HANDS UP: the raised paws ARE the front paws — legs[0]/legs[1]
+        // go NULL so the cat keeps FOUR limbs (the reference sheet shows no
+        // spare paws at chest height). They LIFT continuously from the
+        // chest-height hand-off (where steps 1-2 leave them), hover OVER
+        // the ears for the beat bounce, then LOWER back to the hand-off so
+        // the spin takes them seamlessly.
+        const st3 = st - 3.4;
         stand(0);
         P.bodyX = -13 * (1 - smooth(st3 / 0.6));
+        P.legs[0] = null; P.legs[1] = null;
+        const RISE = 0.9, HOLD = 1.5;
+        const g = st3 < RISE ? smooth(st3 / RISE)
+                : st3 < HOLD ? 1
+                : 1 - smooth((st3 - HOLD) / (2.2 - HOLD));
+        const w = st3 > RISE && st3 < HOLD ? Math.sin(st3 * Math.PI * 3) : 0;
         P.bobY = -Math.abs(w) * 6.5;
-        P.legs[0].fx = F[0] + 12 + w * 3; P.legs[0].fy = -33 - Math.max(0, w) * 6;
-        P.legs[1].fx = F[1] + 7 - w * 3; P.legs[1].fy = -29 - Math.max(0, -w) * 6;
         P.overlayPaw = [
-          { fx: -2 + w * 3, fy: -112 - Math.max(0, w) * 5 },    // near paw over the ear
-          { fx: 40 - w * 3, fy: -106 - Math.max(0, -w) * 5 },   // far paw over the other ear
+          { fx: (F[0] + 12) + (-2 - (F[0] + 12)) * g + w * 3,           // near paw → left ear
+            fy: -33 + (-112 + 33) * g - Math.max(0, w) * 5 },
+          { fx: (F[1] + 7) + (40 - (F[1] + 7)) * g - w * 3,             // far paw → right ear
+            fy: -29 + (-106 + 29) * g - Math.max(0, -w) * 5 },
         ];
         P.headY = -6; P.headRot = w * 0.04;
         P.tailMode = 'spiral'; P.eyeState = 'open';
@@ -835,13 +816,18 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
         P.legs[1].fx = F[1] + 7; P.legs[1].fy = -26 - w * 5;
         P.eyeState = st5 < 0.8 ? 'open' : 'happy';
       } else {
-        // 6 FINISH!: happy squint, near paw resting BY THE CHEEK, head
-        // tilt easing in, a heart — the sheet's final pose
+        // 6 FINISH!: happy squint, the NEAR paw rises BY THE CHEEK — it IS
+        // the near front leg (legs[0] null, no planted copy), lifting from
+        // the phase-5 hand-off; head tilt easing in, a heart
         const st6 = st - 9.4;
         stand(-0.06 * Math.min(1, st6 / 0.5));
-        P.legs[0].fx = F[0] + 12; P.legs[0].fy = -30;
         P.legs[1].fx = F[1] + 7; P.legs[1].fy = -26;
-        P.overlayPaw = { fx: F[0] + 1, fy: -78 + Math.sin(st6 * 8) * 3 };
+        P.legs[0] = null;
+        const g6 = smooth(Math.min(1, st6 / 0.7));
+        P.overlayPaw = {
+          fx: (F[0] + 12) + (F[0] + 1 - (F[0] + 12)) * g6,
+          fy: -30 + (-78 + 30) * g6 + (st6 > 0.7 ? Math.sin(st6 * 8) * 3 : 0),
+        };
         P.headRot = 0.14 * Math.min(1, st6 / 0.5);
         P.tailMode = 'spiral'; P.eyeState = 'happy';
         P.particles = { kind: 'heart', f: 3 };
@@ -1154,29 +1140,6 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
         P.legs[1].fx = F[1] + 5 * d; P.legs[1].fy = -48 * d;
         P.tailMode = 'sway';
       }
-      break;
-    }
-    case 'salute': {   // v3.15: a spoken command was heard — the proud
-                       // one-paw salute (sit base, near paw pressed to the brow)
-      const T = stateT || 0;
-      const RISE = 0.28, END = 1.34;
-      const k = T < RISE ? T / RISE : T > END ? Math.max(0, 1 - (T - END) / 0.34) : 1;
-      const up = k * k * (3 - 2 * k);              // smoothstep up, hold, back down
-      P.bodyY = 4; P.bodyRot = 0.10 + 0.02 * up;   // sit base, chest out a touch
-      P.sqx = -0.04; P.sqy = 0.05;
-      P.legs[2].fx = F[2] + 8; P.legs[2].fy = -2;
-      P.legs[3].fx = F[3] + 10; P.legs[3].fy = -2;
-      P.legs[1].fx = F[1] + 1;                     // far front paw planted
-      P.legs[0].fx = F[0] + 2;                     // near paw stays planted…
-      // …and its COPY is drawn over the head (overlayPaw), rising to the
-      // brow and pressing it over the near eye (the reference photo: elbow
-      // out, paw flat on the brow), trembling with pride
-      const tremble = up > 0.9 ? Math.sin(T * 26) * 0.9 : 0;
-      P.overlayPaw = { fx: F[0] + 3 + 5 * up, fy: -85 * up + tremble };
-      P.headY = -2.5 * up; P.headX = 1 * up; P.headRot = -0.10 * up;   // chin lifted to the command-giver
-      P.eyeState = 'open';
-      P.tailMode = 'spiral';
-      P.bobY = Math.sin(t * 1.7) * 0.7;
       break;
     }
     case 'bop': {       // music playing: sway to the beat
@@ -1933,7 +1896,7 @@ export const EMOTES = [
 ];
 
 // v3.6 seasonal hats (opt-in via Settings → "Seasonal skins")
-export const HATS = ['pumpkin', 'santa', 'flower', 'shades'];
+export const HATS = ['pumpkin', 'santa', 'flower', 'shades', 'tophat', 'crown', 'bow'];
 export function seasonHat(month) {
   if (month === 9) return 'pumpkin';                 // October — jack-o'-lantern hours
   if (month === 11) return 'santa';                  // December — festive mode

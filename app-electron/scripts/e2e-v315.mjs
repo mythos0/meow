@@ -105,101 +105,13 @@ try {
   await cat.waitForFunction('window.__catBooted === true', null, { timeout: 20000 }).catch(() => {});
   await cat.evaluate(() => { window.__stopButterfly && window.__stopButterfly(); return true; }).catch(() => {});
   // collect the cat's voice bubbles for the real feedback check
-  await cat.evaluate(() => {
-    window.__voiceBubbles = [];
-    window.meow.on('voice-bubble', d => { if (d && d.text) window.__voiceBubbles.push(d.text); });
-    return true;
-  });
 
-  // ================= 1. VOICE COMMANDS through the real app =================
+  // ================= 1. VOICE IS GONE (v3.18) =================
   {
-    const st0 = await cat.evaluate(async () => window.meow.voiceGet());
-    ok('voice status reachable (v3.16: the web engine is available everywhere, engine chain present)',
-      st0 && st0.enabled === true && st0.available === true && ['web', 'sapi', null].includes(st0.engine), JSON.stringify(st0));
-
-    // --- the exact user flow: hey cat + play music + <title> ---
-    await cat.evaluate(() => window.meow.voiceInject('hey cat play music ghum kariya nilo sokhi'));
-    let launch = null;
-    for (let i = 0; i < 40 && !launch; i++) {
-      await sleep(250);
-      launch = await cat.evaluate(async () => {
-        const s = await window.meow.voiceState();
-        return s.launches.length ? s.launches[s.launches.length - 1] : null;
-      });
-    }
-    ok('VOICE: "hey cat play music <title>" fired a launch', !!launch, JSON.stringify(launch || 'none'));
-    ok('VOICE: Brave is the browser (preferred), as a NEW window',
-      !!launch && /brave\.exe$/i.test(String(launch.cmd).replace(/"/g, '')) &&
-      Array.isArray(launch.args) && launch.args[0] === '--new-window', JSON.stringify(launch && launch.args));
-    ok('VOICE: it plays the FIRST YouTube result (watch URL with the fixture videoId)',
-      !!launch && String(launch.args[1]).startsWith('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
-      launch && launch.args[1]);
-    const bubbles1 = await cat.evaluate(() => window.__voiceBubbles);
-    ok('VOICE: the command was ECHOED (▶ bubble shows what was received)',
-      bubbles1.some(b => b.startsWith('▶ ') && /play music: ghum kariya nilo sokhi/.test(b)), JSON.stringify(bubbles1));
-    ok('VOICE: the cat bubbled feedback (searching/now playing)',
-      bubbles1.some(b => /ghum kariya nilo sokhi/.test(b) && !b.startsWith('▶')), JSON.stringify(bubbles1));
-
-    // --- the SALUTE: a heard command snaps the cat to the salute pose ---
-    await cat.evaluate(() => {
-      const b = window.__brain();
-      b.stopStalk?.(); b._enter('idle', 30); b.x = 800;
-      return true;
-    });
-    await sleep(200);
-    await cat.evaluate(() => window.meow.voiceInject('hey cat volume up'));
-    let saluted = null;
-    for (let i = 0; i < 30 && !saluted; i++) {
-      await sleep(80);
-      saluted = await cat.evaluate(() => {
-        const p = window.__pose();
-        return p.state === 'salute' ? { stateT: p.stateT } : null;
-      });
-    }
-    ok('VOICE: the cat SALUTES when it hears a command (paw to the brow)', !!saluted, JSON.stringify(saluted || 'no salute'));
-
-    // --- transport + volume ---
-    const inject = async phrase => { await cat.evaluate(t => window.meow.voiceInject(t), phrase); await sleep(300); };
-    await inject('hey cat pause');
-    await inject('hey cat next song');
-    await inject('hey cat volume up');
-    await inject('unmute');
-    const mediaKeys = await cat.evaluate(async () => (await window.meow.voiceState()).mediaKeys);
-    ok('VOICE: pause/resume/stop → media play-pause key', mediaKeys.includes('play_pause'), JSON.stringify(mediaKeys));
-    ok('VOICE: next song → next-track key', mediaKeys.includes('next'));
-    ok('VOICE: volume up → volume-up key', mediaKeys.includes('volup'));
-    ok('VOICE: unmute → mute-toggle key', mediaKeys.includes('mute'));
-
-    // --- noise must stay inert ---
-    const keysBefore = await cat.evaluate(async () => (await window.meow.voiceState()).mediaKeys.length);
-    await inject('hey cat meow loudly');               // woke but not a command
-    await inject('I played football yesterday');       // no wake, no command
-    await sleep(400);
-    const after = await cat.evaluate(async () => {
-      const s = await window.meow.voiceState();
-      return { keys: s.mediaKeys.length, phrases: s.phrases.length };
-    });
-    ok('VOICE: noise NEVER triggers a media key or a launch', after.keys === keysBefore, JSON.stringify(after));
-
-    // --- every step journaled in the real execution log ---
-    const journaled = await cat.evaluate(async () => {
-      const r = await window.meow.execLogGet();
-      return {
-        heard: r.entries.some(e => e.tag === 'voice' && /ghum kariya nilo sokhi/.test(e.msg)),
-        key: r.entries.some(e => /media key: play_pause/.test(e.msg)),
-        ignored: r.entries.some(e => e.tag === 'voice' && /ignored/.test(e.msg)),
-      };
-    });
-    ok('EXEC LOG: voice heard / media key / ignored noise are all journaled',
-      journaled.heard && journaled.key && journaled.ignored, JSON.stringify(journaled));
-
-    // --- "stop listening" turns the feature off through the real store ---
-    await inject('hey cat stop listening');
-    await sleep(400);
-    const off = await cat.evaluate(async () => window.meow.voiceGet());
-    ok('VOICE: "hey cat stop listening" disables the feature (real store write)',
-      off && off.enabled === false, JSON.stringify(off));
-    await cat.evaluate(() => window.meow.voiceSet(true));   // restore for later checks
+    // "remove all voice features totally" — the launcher, both engines, the
+    // salute trigger and the voice IPC no longer exist anywhere.
+    ok('VOICE REMOVED: nothing left to exercise — the cat expresses itself visually',
+      true, 'voice feature deleted end-to-end');
   }
 
   // ================= 2. EXECUTION-LOG TERMINAL: the FOLLOW fix =================

@@ -1,24 +1,18 @@
-// breeds.test.mjs — v3.2 breed/body integrity: 20 breeds, 8 body types,
-// distinct palettes, panda anatomy flags, price coverage.
+// breeds.test.mjs — v3.18 store catalog: THREE cats (grey tabby, ginger cat,
+// smokey kitten), body-type integrity, distinct palettes, price coverage.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { PALETTES, BODIES, STATES, EMOTES, CAT_BBOX, emoteAnchor } from '../src/cat-renderer.js';
+import { PALETTES, BODIES, STATES, EMOTES, CAT_BBOX, emoteAnchor, DRESSES, HATS } from '../src/cat-renderer.js';
 import { BREED_PRICES } from '../src/settings-store.js';
 
 const REQUIRED_KEYS = ['fur', 'dark', 'belly', 'nose', 'eye', 'pupil', 'earIn', 'tongue'];
 
 describe('breeds & bodies (v3.2)', () => {
-  test('24 breeds exist (20 through v3.10 + 4 v3.11 kittens)', () => {
-    const expected = [
-      'grey_tabby', 'orange_tabby', 'siamese', 'calico', 'persian', 'tuxedo',
-      'bombay', 'russian_blue', 'ginger_kitten', 'ragdoll', 'bengal',
-      'maine_coon', 'panda',
-      'mochi', 'scottish_fold', 'snow_angora', 'somali', 'british_plush',
-      'choco_munchkin', 'sakura',
-      'cocoa_kitten', 'milky_kitten', 'smokey_kitten', 'midnight_kitten',
-    ];
+  test('exactly THREE store cats exist (grey tabby, ginger cat, smokey kitten)', () => {
+    const expected = ['grey_tabby', 'orange_tabby', 'smokey_kitten'];
     for (const b of expected) assert.ok(PALETTES[b], `missing breed: ${b}`);
-    assert.equal(Object.keys(PALETTES).length, 24);
+    assert.deepEqual(Object.keys(PALETTES).sort(), [...expected].sort(),
+      'the removed breeds must stay removed (user directive)');
   });
 
   test('every palette is complete and references a valid body type', () => {
@@ -52,16 +46,11 @@ describe('breeds & bodies (v3.2)', () => {
     assert.ok(BODIES.munchkin.legL1 + BODIES.munchkin.legL2 < BODIES.normal.legL1 + BODIES.normal.legL2, 'munchkin legs shortest');
   });
 
-  test('panda anatomy: dark limbs, round ears, eye patches, shoulder band, bear face', () => {
-    const p = PALETTES.panda;
-    assert.equal(p.limbCol, p.dark, 'black limbs');
-    assert.equal(p.earCol, p.dark, 'black round ears');
-    assert.equal(p.roundEars, true);
-    assert.equal(p.eyePatch, true);
-    assert.equal(p.band, true);
-    assert.equal(p.pandaFace, true, 'bear face (dark muzzle, slanted patches)');
-    assert.ok(p.fur !== p.dark, 'white body vs black marks');
-    assert.equal(BODIES.panda.tail.segs, 4, 'stubby tail');
+  test('store hats and dresses exist for the Cat Store', () => {
+    for (const h of ['pumpkin', 'santa', 'flower', 'shades', 'tophat', 'crown', 'bow']) {
+      assert.ok(HATS.includes(h), `missing hat ${h}`);
+    }
+    assert.deepEqual([...DRESSES].sort(), ['blue', 'midnight', 'pink', 'red']);
   });
 
   test('emote anchors hug every head (no more far-away icons)', () => {
@@ -76,14 +65,16 @@ describe('breeds & bodies (v3.2)', () => {
 
   test('all palettes are visually distinct (JSON signatures unique)', () => {
     const sigs = new Set(Object.values(PALETTES).map(p => JSON.stringify(p)));
-    assert.equal(sigs.size, 24);
+    assert.equal(sigs.size, 3);
   });
 
   test('prices cover every breed', () => {
     for (const b of Object.keys(PALETTES)) {
       assert.ok(Number.isFinite(BREED_PRICES[b]), `${b} has no price`);
     }
-    assert.ok(BREED_PRICES.panda > BREED_PRICES.grey_tabby);
+    assert.ok(BREED_PRICES.smokey_kitten > BREED_PRICES.grey_tabby, 'the unlockable kitten costs coins');
+    assert.equal(BREED_PRICES.grey_tabby, 0, 'the default cat is free');
+    assert.equal(BREED_PRICES.orange_tabby, 0, 'the ginger cat is free');
   });
 
   test('31 states + 16 emotes are exported for the visual tests', () => {

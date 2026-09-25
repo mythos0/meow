@@ -97,7 +97,7 @@ try {
   ok('renderer bridge alive', await cat.evaluate(() => !!window.__catBooted && !!window.meow));
 
   const breed = await cat.evaluate(async () => (await window.meow.getSettings()).breed);
-  ok('default cat IS the ginger kitten', breed === 'ginger_kitten', String(breed));
+  ok('default cat IS the grey tabby (v3.18 catalog)', breed === 'grey_tabby', String(breed));
 
   // ------------------------------------------------ 2. lane architecture
   const region = await cat.evaluate(() => window.__region());
@@ -208,7 +208,7 @@ try {
     const afterPose = window.__brain().pose;
     const afterVis = readVisible();
     const moves = window.__regionMoves || 0;
-    return { before, samples, afterPose: { x: afterPose.x, y: afterPose.y }, afterVis, moves };
+    return { before, samples, afterPose: { x: afterPose.x, y: afterPose.y }, afterVis, moves, maxX: window.__brain().bounds.x + window.__brain().bounds.w };
   });
   ok('drag moves the window with the cat (follow)', dragInfo.moves > 0, `${dragInfo.moves} region moves`);
   ok('cat stays ON the canvas during the whole drag',
@@ -216,9 +216,9 @@ try {
   ok('cat visible in EVERY drag sample (no hidden-outside-the-box)',
     dragInfo.samples.every(s => s.vis > 300), dragInfo.samples.map(s => s.vis).join(','));
   ok('cat still visible after drop', dragInfo.afterVis > 300, String(dragInfo.afterVis));
-  ok('drop landed where released (no snap-back)',
-    Math.abs(dragInfo.afterPose.x - (dragInfo.before.x + 620)) < 60,
-    `dx=${(dragInfo.afterPose.x - dragInfo.before.x).toFixed(0)}`);
+  ok('drop landed where released (no snap-back, bound-clamped)',
+    Math.abs(dragInfo.afterPose.x - Math.min(dragInfo.before.x + 620, dragInfo.maxX - 70)) < 60,
+    `dx=${(dragInfo.afterPose.x - dragInfo.before.x).toFixed(0)} maxX=${dragInfo.maxX.toFixed(0)}`);
 
   // ------------------------------------------------ 5. SOUNDS
   await cat.evaluate(() => window.meow.setSettings({ sounds: true, randomMeows: true, achievements: false }));

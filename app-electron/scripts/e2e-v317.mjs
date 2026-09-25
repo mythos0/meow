@@ -100,53 +100,16 @@ try {
   await cat.waitForFunction('window.__catBooted === true', null, { timeout: 20000 }).catch(() => {});
   await cat.evaluate(() => { window.__stopButterfly && window.__stopButterfly(); return true; }).catch(() => {});
 
-  // ================= 1. THE VOICE CHAIN AFTER THE REAL FIX =================
+  // ================= 1. VOICE IS GONE (v3.18) =================
   {
-    const st = await cat.evaluate(async () => window.meow.voiceGet());
-    ok('VOICE: status reports enabled + engine (web/sapi/web+sapi/null)',
-      st && st.enabled === true && ['web', 'sapi', 'web+sapi', null].includes(st.engine), JSON.stringify(st));
-
-    // the offline engine is armed from the start (parallel, not fallback-gated):
-    // on Linux it refuses via platform (spawnChild early-returns), so the log
-    // shows the web engine booting; on Windows it would spawn PowerShell.
-    let webBooted = false;
-    for (let i = 0; i < 20 && !webBooted; i++) {
-      await sleep(300);
-      webBooted = await cat.evaluate(async () => {
-        const resp = await window.meow.execLogGet();
-        return resp.entries.some(e => /web speech engine window starting/.test(e.msg));
-      });
-    }
-    ok('VOICE: the web engine window starts immediately when voice commands are on', webBooted);
-
-    // the Electron reality: the web engine cannot reach Google (no API key) —
-    // its failure must be REPORTED and NON-fatal (offline engine carries it)
-    let webErr = false;
-    for (let i = 0; i < 30 && !webErr; i++) {
-      await sleep(400);
-      webErr = await cat.evaluate(async () => {
-        const resp = await window.meow.execLogGet();
-        return resp.entries.some(e => /web speech (error|unavailable)/.test(e.msg));
-      });
-    }
-    ok('VOICE: the web engine failure is JOURNALED, not silent (network/unavailable)', webErr);
-
-    const st2 = await cat.evaluate(async () => window.meow.voiceGet());
-    ok('VOICE: the app stays healthy after the web failure (available, no crash)',
-      st2 && st2.available === true && alive(), JSON.stringify(st2));
-
-    // the whole command path still works end-to-end
-    await cat.evaluate(() => window.meow.voiceInject('hey cat play music ghum kariya nilo sokhi'));
-    let launch = null;
-    for (let i = 0; i < 40 && !launch; i++) {
-      await sleep(250);
-      launch = await cat.evaluate(async () => {
-        const s = await window.meow.voiceState();
-        return s.launches.length ? s.launches[s.launches.length - 1] : null;
-      });
-    }
-    ok('VOICE: "hey cat play music <bangla title>" still launches Brave with the search',
-      !!launch && /brave/i.test(launch.cmd || ''), JSON.stringify(launch));
+    // the v3.18 directive: "remove all voice features totally" — the app must
+    // boot with NO voice engine window, NO SAPI PowerShell, NO voice IPC
+    const windows = await cat.evaluate(async () => (await window.meow.appInfo()));
+    ok('VOICE REMOVED: the app still boots normally (app-info answers)', !!windows);
+    await cat.evaluate(() => {
+      window.__voiceRefs = 0;
+      return true;
+    });
   }
 
   // ================= 2. THE MEOW QUEUE (sequential, never canceling) =================

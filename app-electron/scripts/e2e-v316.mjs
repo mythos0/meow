@@ -103,77 +103,8 @@ try {
   if (!cat) throw new Error('no cat window');
   await cat.waitForFunction('window.__catBooted === true', null, { timeout: 20000 }).catch(() => {});
   await cat.evaluate(() => { window.__stopButterfly && window.__stopButterfly(); return true; }).catch(() => {});
-  await cat.evaluate(() => {
-    window.__voiceBubbles = [];
-    window.meow.on('voice-bubble', d => { if (d && d.text) window.__voiceBubbles.push(d.text); });
-    return true;
-  });
-
-  // ================= 1. THE VOICE CHAIN + FUZZY WAKE =================
-  {
-    const st0 = await cat.evaluate(async () => window.meow.voiceGet());
-    ok('VOICE CHAIN: status carries the v3.16 engine field (available everywhere)',
-      st0 && st0.enabled === true && st0.available === true && ['web', 'sapi', null].includes(st0.engine), JSON.stringify(st0));
-
-    // the hidden Web Speech engine window really boots and reports
-    let engineBooted = false;
-    for (let i = 0; i < 20 && !engineBooted; i++) {
-      await sleep(300);
-      const r = await cat.evaluate(async () => {
-        const resp = await window.meow.execLogGet();
-        return resp.entries.some(e => /web speech engine/.test(e.msg) || /SAPI engine/.test(e.msg) || /falling back/.test(e.msg));
-      });
-      engineBooted = r;
-    }
-    ok('VOICE CHAIN: the hidden engine window boots and is journaled (web start or a reported fallback)', engineBooted);
-
-    // --- THE HEADLINE FIX: a mangled wake word plays the music ---
-    await cat.evaluate(() => window.meow.voiceInject('hey kat play music summer breeze 2010'));
-    let launch = null;
-    for (let i = 0; i < 40 && !launch; i++) {
-      await sleep(250);
-      launch = await cat.evaluate(async () => {
-        const s = await window.meow.voiceState();
-        return s.launches.length ? s.launches[s.launches.length - 1] : null;
-      });
-    }
-    ok('FUZZY WAKE: "hey kat play music <title>" fires a launch (the accent path works)',
-      !!launch, JSON.stringify(launch || 'none'));
-    ok('FUZZY WAKE: Brave, new window, FIRST YouTube result',
-      !!launch && /brave\.exe$/i.test(String(launch.cmd).replace(/"/g, '')) &&
-      launch.args[0] === '--new-window' &&
-      String(launch.args[1]).startsWith('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
-      JSON.stringify(launch && launch.args));
-    ok('FUZZY WAKE: the query rode along intact (journaled with the parsed command)',
-      await cat.evaluate(async () => {
-        const r = await window.meow.execLogGet();
-        return r.entries.some(e => e.tag === 'voice' && /play_music/.test(e.msg) && /summer breeze 2010/.test(e.msg));
-      }), 'exec log: play_music : summer breeze 2010');
-
-    // --- mangled wake + transport ---
-    await cat.evaluate(() => window.meow.voiceInject('hay cat pause'));
-    let keys = [];
-    for (let i = 0; i < 20; i++) {
-      await sleep(150);
-      keys = await cat.evaluate(async () => (await window.meow.voiceState()).mediaKeys);
-      if (keys.includes('play_pause')) break;
-    }
-    ok('FUZZY WAKE: "hay cat pause" hits the media play-pause key', keys.includes('play_pause'), JSON.stringify(keys));
-
-    // --- mangled wake + chatter stays inert ---
-    const before = await cat.evaluate(async () => {
-      const s = await window.meow.voiceState();
-      return { keys: s.mediaKeys.length, launches: s.launches.length };
-    });
-    await cat.evaluate(() => window.meow.voiceInject('the cat sat on the mat'));
-    await cat.evaluate(() => window.meow.voiceInject('hey kat what a lovely day'));
-    await sleep(500);
-    const after = await cat.evaluate(async () => {
-      const s = await window.meow.voiceState();
-      return { keys: s.mediaKeys.length, launches: s.launches.length };
-    });
-    ok('NOISE: mangled-wake chatter NEVER launches or taps a key', before.keys === after.keys && before.launches === after.launches, JSON.stringify({ before, after }));
-  }
+  // v3.18: the whole voice-chain section is gone with the voice feature.
+  // The user directive: "remove all voice features totally."
 
   // ================= 2. THE MEOW GATE =================
   {
@@ -322,21 +253,7 @@ try {
     ok('DANCE: the triggered routine runs the full ~11.4s', dur > 10.5 && dur <= 12.5, `${dur.toFixed(2)}s`);
   }
 
-  // ================= 4. the salute still answers commands =================
-  {
-    await cat.evaluate(() => { const b = window.__brain(); b._enter('idle', 30); return true; });
-    await sleep(200);
-    await cat.evaluate(() => window.meow.voiceInject('hey cat volume down'));
-    let saluted = null;
-    for (let i = 0; i < 30 && !saluted; i++) {
-      await sleep(80);
-      saluted = await cat.evaluate(() => {
-        const p = window.__pose();
-        return p.state === 'salute' ? { stateT: p.stateT } : null;
-      });
-    }
-    ok('SALUTE: the paw still snaps to the brow when a command is heard', !!saluted, JSON.stringify(saluted || 'no salute'));
-  }
+  // v3.18: the salute is retired with the voice feature — nothing fires it.
 
   // ================= housekeeping =================
   ok('app alive at the end', alive());

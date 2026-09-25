@@ -3,9 +3,7 @@
 'use strict';
 
 export const DEFAULTS = {
-  breed: 'ginger_kitten',   // v3.11: the default cat IS the ginger kitten
-  breedExplicit: false,     // v3.11: set true the first time the USER picks a breed —
-                            // while false, the grey_tabby→ginger_kitten migration may run
+  breed: 'grey_tabby',      // v3.18: the default cat IS the grey tabby
   size: 1.0,            // 0.5 .. 2.0
   opacity: 1.0,         // 0.3 .. 1
   sounds: true,
@@ -30,8 +28,7 @@ export const DEFAULTS = {
   // stalkCursor / reactBuildStatus / statusFile) were REMOVED at the user's
   // request, together with the Reactions settings page. sanitize() drops
   // them from old persisted files automatically.
-  voiceCommands: true,       // v3.15: "hey cat, play music …" + transport controls
-                             // (SAPI runs locally on the device; nothing is uploaded)
+  // v3.18: voiceCommands removed — the whole voice feature is gone.
   // v3.10: hideDuringCalls / duckDuringCalls / hideInFullscreen were REMOVED —
   // the cat never hides on its own; only the user may hide or quit it.
   // interaction & progression
@@ -45,6 +42,8 @@ export const DEFAULTS = {
   dancePartyIdle: true,      // long idle -> mini dance party (screensaver mode)
   // customization & community
   seasonalSkins: false,      // pumpkin hat in October, santa hat in December...
+  hat: null,                 // v3.18: the store hat the user equipped (id from HATS)
+  dress: null,               // v3.18: the store dress the user equipped (id from DRESSES)
   achievements: true,        // unlockables tied to interaction
   communitySkins: true,      // allow importing JSON skins (Cat Store)
   // quality-of-life
@@ -64,15 +63,37 @@ export const DEFAULTS = {
 const OBJECT_KEYS = new Set(['stats']);
 const ARRAY_KEYS = new Set(['noWalkZoneList', 'customSkins', 'unlocked', 'feedbackList']);
 
-export const BREED_PRICES = {
-  grey_tabby: 0, orange_tabby: 100, siamese: 200, calico: 300, persian: 400, tuxedo: 500,
-  bombay: 150, russian_blue: 250, ginger_kitten: 300, ragdoll: 450, bengal: 550,
-  maine_coon: 650, panda: 1000,
-  mochi: 350, scottish_fold: 400, snow_angora: 500, somali: 450,
-  british_plush: 380, choco_munchkin: 420, sakura: 300,
-  // v3.11: the kitten litter — more cute cats in the ginger_kitten spirit
-  cocoa_kitten: 280, milky_kitten: 320, smokey_kitten: 360, midnight_kitten: 420,
-};
+// v3.18 THE STORE CATALOG — three cats, hats, dresses. Everything else was
+// removed at the user's request; the sanitize step walks old save files back
+// onto the catalog (unknown breeds/hats/dresses reset to the defaults).
+export const CAT_ITEMS = [
+  { id: 'grey_tabby', price: 0 },      // the default cat — free, always owned
+  { id: 'orange_tabby', price: 0 },    // the ginger cat — free
+  { id: 'smokey_kitten', price: 120 }, // the blue-grey plush baby — unlockable
+];
+
+// v3.18 store hats (renderer HATS — pumpkin/santa/flower/shades stay seasonal
+// extras that are also buyable; tophat/crown/bow are new).
+export const HAT_ITEMS = [
+  { id: 'pumpkin', price: 40 }, { id: 'santa', price: 40 }, { id: 'flower', price: 30 },
+  { id: 'shades', price: 50 }, { id: 'tophat', price: 60 }, { id: 'crown', price: 120 },
+  { id: 'bow', price: 35 },
+];
+
+// v3.18 store dresses (renderer DRESSES / DRESS_STYLES)
+export const DRESS_ITEMS = [
+  { id: 'red', price: 80 }, { id: 'blue', price: 80 },
+  { id: 'pink', price: 80 }, { id: 'midnight', price: 110 },
+];
+
+const _catPrices = Object.fromEntries(CAT_ITEMS.map(i => [i.id, i.price]));
+const _hatPrices = Object.fromEntries(HAT_ITEMS.map(i => [i.id, i.price]));
+const _dressPrices = Object.fromEntries(DRESS_ITEMS.map(i => [i.id, i.price]));
+export const BREED_PRICES = _catPrices;                                   // back-compat name
+export const ITEM_PRICES = { ..._catPrices, ..._hatPrices, ..._dressPrices };
+export const KNOWN_CATS = new Set(CAT_ITEMS.map(i => i.id));
+export const KNOWN_HATS = new Set(HAT_ITEMS.map(i => i.id));
+export const KNOWN_DRESSES = new Set(DRESS_ITEMS.map(i => i.id));
 
 export function createSettings(backend) {
   // backend: { read(): string|null, write(str) }
@@ -83,22 +104,12 @@ export function createSettings(backend) {
       const raw = b.read();
       if (!raw) return sanitize({});
       const parsed = JSON.parse(raw);
-      return migrate(sanitize(parsed), parsed);
+      return sanitize(parsed);
     } catch { return sanitize({}); }
   }
 
-  // v3.11: the default cat is the ginger kitten. Users who upgraded from older
-  // releases carry breed:'grey_tabby' in their saved file — never having had a
-  // chance to see the kitten. While the user has never explicitly picked a
-  // breed (breedExplicit), migrate the old default to ginger_kitten; the
-  // moment they pick ANY breed themselves the marker latches and their choice
-  // is final forever.
-  function migrate(d, rawParsed) {
-    if (!d.breedExplicit && rawParsed && rawParsed.breed === 'grey_tabby') {
-      d.breed = 'ginger_kitten';
-    }
-    return d;
-  }
+  // v3.18: the v3.11 grey_tabby→ginger_kitten default migration is gone —
+  // grey_tabby IS the default again and ginger_kitten no longer exists.
 
   function sanitize(p) {
     const d = structuredClone(DEFAULTS);
@@ -150,17 +161,30 @@ export function createSettings(backend) {
         if (typeof p.coins === 'number' && Number.isFinite(p.coins) && p.coins >= 0) {
           d.coins = Math.min(9_999_999, Math.floor(p.coins));
         }
+      } else if (k === 'hat' || k === 'dress') {
+        // v3.18: nullable string settings — a null DEFAULT cannot ride the
+        // generic typeof branch (typeof null === 'object')
+        d[k] = (typeof p[k] === 'string' && p[k]) ? p[k] : null;
       } else if (OBJECT_KEYS.has(k)) {
         if (p[k] && typeof p[k] === 'object' && !Array.isArray(p[k])) d[k] = p[k];
       } else if (ARRAY_KEYS.has(k)) {
         if (Array.isArray(p[k])) d[k] = p[k];
       } else if (typeof d[k] === typeof p[k]) d[k] = p[k];
     }
+    // v3.18: walk the catalog — a breed/hat/dress that no longer exists
+    // (removed cats, or a save file touched by hand) resets to the default.
+    if (d.breed && !d.breed.startsWith('custom:') && !KNOWN_CATS.has(d.breed)) d.breed = DEFAULTS.breed;
+    if (d.hat != null && !KNOWN_HATS.has(d.hat)) d.hat = null;
+    if (d.dress != null && !KNOWN_DRESSES.has(d.dress)) d.dress = null;
+    if (Array.isArray(d.owned)) {
+      d.owned = d.owned.filter(x => typeof x === 'string' &&
+        (x.startsWith('custom:') || x in ITEM_PRICES));
+    }
     if (p.version) d.version = p.version;
     // v3.1 promo: unlimited coins -> everything unlocked
     // v3.6: custom (community) skins stay owned too — they live in customSkins
     if (d.unlimitedCoins) {
-      d.owned = [...new Set([...Object.keys(BREED_PRICES), ...d.customSkins.map(s => 'custom:' + s.id)])];
+      d.owned = [...new Set([...Object.keys(ITEM_PRICES), ...d.customSkins.map(s => 'custom:' + s.id)])];
     }
     return d;
   }
@@ -195,26 +219,29 @@ export function createSettings(backend) {
       persist();
       return data.coins;
     },
-    canAfford(breed) {
+    canAfford(item) {
       if (data.unlimitedCoins) return true;
-      return (BREED_PRICES[breed] ?? Infinity) <= data.coins;
+      return (ITEM_PRICES[item] ?? Infinity) <= data.coins;
     },
-    buyBreed(breed) {
-      if (!(breed in BREED_PRICES)) return { ok: false, reason: 'unknown' };
-      if (data.owned.includes(breed)) return { ok: true, alreadyOwned: true, coins: data.coins };
+    // v3.18: buys ANY catalog item — a cat, a hat or a dress (the id space
+    // is shared; the store page sends whatever card was clicked).
+    buyItem(item) {
+      if (!(item in ITEM_PRICES)) return { ok: false, reason: 'unknown' };
+      if (data.owned.includes(item)) return { ok: true, alreadyOwned: true, coins: data.coins };
       // v3.1 promo: unlimited coins -> free unlock, nothing deducted
       if (data.unlimitedCoins) {
-        data.owned.push(breed);
+        data.owned.push(item);
         persist();
         return { ok: true, free: true, coins: data.coins };
       }
-      const price = BREED_PRICES[breed];
+      const price = ITEM_PRICES[item];
       if (data.coins < price) return { ok: false, reason: 'insufficient', needed: price - data.coins };
       data.coins -= price;
-      data.owned.push(breed);
+      data.owned.push(item);
       persist();
       return { ok: true, coins: data.coins };
     },
+    buyBreed(breed) { return this.buyItem(breed); },   // back-compat name
     ownBreed(breed) { // free grant (e.g. via settings sync)
       if (!data.owned.includes(breed)) { data.owned.push(breed); persist(); }
     },

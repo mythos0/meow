@@ -7,7 +7,8 @@ import { readFileSync } from 'fs';
 import { NtExecutable, NtExecutableResource, Resource } from 'resedit';
 
 const file = process.argv[2];
-const VERSION = process.argv[3] || '3.5.0';
+import { readFileSync as _rf } from 'fs';
+const VERSION = process.argv[3] || JSON.parse(_rf(new URL('../package.json', import.meta.url), 'utf8')).version;   // v3.18: never hardcoded again
 const bin = readFileSync(file);
 const exe = NtExecutable.from(bin);
 const res = NtExecutableResource.from(exe);

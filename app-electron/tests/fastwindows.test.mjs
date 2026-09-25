@@ -47,13 +47,13 @@ describe('fast-windows pool', () => {
     assert.ok(ms < 25, `show() after warm took ${ms.toFixed(2)}ms`);
   });
 
-  test('close event hides instead of destroying (pool stays warm)', () => {
+  test('close event DESTROYS the window (v3.18 process diet)', () => {
     const fw = createFastWindows({ factory: { settings: () => fakeWin('settings') } });
     const w = fw.show('settings');
     w.close();                       // user closes the window
-    assert.equal(w._destroyed, false, 'not destroyed');
-    assert.ok(w.hidden >= 1, 'hidden instead');
-    assert.equal(fw.isAlive('settings'), true);
+    assert.equal(w._destroyed, false, 'the interceptor swallowed the first close request…');
+    assert.equal(w.closed >= 1, true, '…and issued a real close');
+    assert.equal(fw.isAlive('settings'), false, 'the pool drops the window — one less process');
   });
 
   test('hide(name) hides an alive window and ignores destroyed ones', () => {

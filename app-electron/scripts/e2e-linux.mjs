@@ -124,9 +124,9 @@ try {
     pb.main === 1 && (pb.mainComm === 'MeowCat' || pb.mainComm === 'electron'), `comm=${pb.mainComm}`);
   ok('process diet: no GPU process', pb.gpu === 0, String(pb.gpu));
   ok('process diet: no crashpad handler process', pb.crashpad === 0, String(pb.crashpad));
-  // v3.17: TWO renderers at rest — the cat window AND the hidden always-alive
-  // voice-engine window (voiceCommands default on)
-  ok('process diet: exactly the cat + the hidden voice engine at rest (2 renderers)', pb.renderer === 2, String(pb.renderer));
+  // v3.18: ONE renderer at rest — the voice-engine window is gone with the
+  // whole voice feature ("remove all voice features totally")
+  ok('process diet: exactly the cat renderer at rest (1 renderer)', pb.renderer === 1, String(pb.renderer));
   const expectMax = process.platform === 'win32' ? 3 : 8; // linux adds 2 zygotes + network/audio utilities
   ok(`process diet: total app processes <= ${expectMax} at rest`, pb.total <= expectMax,
     `${pb.total} procs (main=${pb.main} renderer=${pb.renderer} utility=${pb.utility} zygote=${pb.zygote})`);
@@ -193,83 +193,75 @@ try {
   ok('settings window opens', !!set);
   if (set) {
     ok('settings open (warm) is fast (<300ms)', openMs < 300, openMs + 'ms');
-    // close via IPC → pool must stay warm (page target stays alive)
-    await set.evaluate(() => window.meow.closeWindow('settings'));
-    await cat.waitForTimeout(350);
+    // v3.18 process diet: close via IPC DESTROYS the window (page target dies)
+    // — the user wants fewer processes, not a warm hidden renderer.
+    await cat.evaluate(() => window.meow.closeWindow('settings'));   // v3.18: close from the cat — the settings page dies with the destroy
+    await cat.waitForTimeout(450);
     const stillAlive = await set.evaluate(() => document.title !== undefined).then(() => true).catch(() => false);
-    ok('close keeps the window warm (page target alive)', stillAlive);
-    // reopen — must be instant AND focused
+    ok('close DESTROYS the settings window (process diet — page target gone)', stillAlive === false);
+    // reopen — recreates on demand, still fast AND focused
     const openMs2 = await cat.evaluate(async () => {
       const t = Date.now();
       await window.meow.openWindow('settings');
       return Date.now() - t;
     });
+    const set2 = await findPage('settings.html');
     let focused = false;
     const tF = Date.now();
     while (Date.now() - tF < 1500) {
-      focused = await set.evaluate(() => document.hasFocus()).catch(() => false);
+      focused = set2 ? await set2.evaluate(() => document.hasFocus()).catch(() => false) : false;
       if (focused) break;
       await cat.waitForTimeout(25);
     }
-    ok('reopen is instant (warm reuse, <300ms)', openMs2 < 300, openMs2 + 'ms');
+    ok('reopen is instant (pool recreates, <400ms)', openMs2 < 400, openMs2 + 'ms');
     ok('reopened settings window takes focus', focused);
 
-    await set.waitForTimeout(500);
-    const breedCount = await set.evaluate(() => document.querySelectorAll('.breed').length);
-    const hasAllBase = await set.evaluate(() => {
-      const have = new Set([...document.querySelectorAll('.breed')].map(b => b.dataset.breed));
-      return ['grey_tabby', 'orange_tabby', 'siamese', 'calico', 'persian', 'tuxedo', 'bombay',
-        'russian_blue', 'ginger_kitten', 'ragdoll', 'bengal', 'maine_coon', 'panda', 'mochi',
-        'scottish_fold', 'snow_angora', 'somali', 'british_plush', 'choco_munchkin', 'sakura']
-        .every(b => have.has(b));
+    const useSet = set2 || set;
+    if (!set2) throw new Error('settings page did not come back after destroy');
+    await useSet.waitForTimeout(500);
+    // v3.18 store: 3 cats + 7 hats + 4 dresses (+ No-hat / No-dress slots)
+    const cardCount = await useSet.evaluate(() => document.querySelectorAll('.breed').length);
+    const hasAllBase = await useSet.evaluate(() => {
+      const nms = [...document.querySelectorAll('.breed .nm')].map(n => n.textContent);
+      return ['Grey Tabby', 'Ginger Cat', 'Smokey Kitten', 'tophat', 'crown', 'red dress'].every(n => nms.includes(n));
     });
-    ok('settings shows all 20 base breed cards (plus any community skins)',
-      breedCount >= 20 && hasAllBase, `${breedCount} cards, base covered: ${hasAllBase}`);
-    const unlimited = await set.evaluate(() => !document.querySelector('.breed.locked'));
-    ok('unlimited coins: no locked breeds', unlimited);
-    const storeUi = await set.evaluate(() => !!document.querySelector('.coins-pill') && !!document.querySelector('.tagnew'));
-    ok('premium store UI renders (pill + NEW badges)', storeUi);
-    const hopOn = await set.evaluate(() => { const el = document.getElementById('hopToggle'); return !!el && el.checked; });
+    ok('store shows 3 cats + hats + dresses (15+ cards, catalog covered)',
+      cardCount >= 15 && hasAllBase, `${cardCount} cards, catalog covered: ${hasAllBase}`);
+    const unlimited = await useSet.evaluate(() => !document.querySelector('.breed.locked'));
+    ok('unlimited coins: no locked items', unlimited);
+    const storeUi = await useSet.evaluate(() => !!document.querySelector('.coins-pill'));
+    ok('store UI renders (coins pill)', storeUi);
+    const hopOn = await useSet.evaluate(() => { const el = document.getElementById('hopToggle'); return !!el && el.checked; });
     ok('window-hopping toggle present, default on', hopOn === true);
     await cat.evaluate(() => window.meow.setSettings({ windowHopping: false }));
-    const hopOff = await set.evaluate(() => window.meow.getSettings().then(s => s.windowHopping));
+    const hopOff = await useSet.evaluate(() => window.meow.getSettings().then(s => s.windowHopping));
     ok('window-hopping setting round-trips through IPC', hopOff === false);
     await cat.evaluate(() => window.meow.setSettings({ windowHopping: true }));
-    await set.screenshot({ path: path.join(OUT, 'settings_live.png') });
+    await useSet.screenshot({ path: path.join(OUT, 'settings_live.png') });
   }
 
-  // ------------------------------------------------ 7b. double-click on cat opens settings
-  if (set) {
-    await set.evaluate(() => window.meow.closeWindow('settings'));   // start hidden
-    await cat.waitForTimeout(350);
-    // click in WINDOW-LOCAL coords (the overlay is a small follower now)
+  // ------------------------------------------------ 7b. double-click = meow, never a window (v3.12 rule)
+  {
+    await cat.evaluate(() => window.meow.closeWindow('settings'));   // start hidden (v3.18: close from the cat — the page dies with the destroy)
+    await cat.waitForTimeout(450);
+    const winsBefore = (await cat.evaluate(async () => (await window.meow.appInfo()).hidden)) === undefined
+      ? null : (await cat.evaluate(() => window.meow.getSettings === undefined));
     const pos = await cat.evaluate(() => window.__catLocal());
     await cat.mouse.dblclick(pos.x, pos.y - 40);
-    let dblOk = false;
-    const tD = Date.now();
-    while (Date.now() - tD < 3000) {
-      const v = await set.evaluate(() => document.visibilityState === 'visible').catch(() => false);
-      if (v) { dblOk = true; break; }
-      await cat.waitForTimeout(30);
-    }
-    ok('double-click on the cat opens the settings popup', dblOk);
-    // About page: version + developer link
-    const about = await set.evaluate(async () => {
-      const ver = document.getElementById('ver');
-      for (let i = 0; i < 40 && !ver.textContent; i++) await new Promise(r => setTimeout(r, 50));
-      return { ver: ver.textContent, dev: !!document.getElementById('lnkDev') };
-    });
-    ok('about page shows version + developer link', about.dev && about.ver.startsWith('v'), JSON.stringify(about));
+    await cat.waitForTimeout(1200);
+    const pages = browser.contexts().flatMap(c => c.pages());
+    const noWin = pages.filter(p => p.url().includes('settings.html')).length === 0;
+    ok('double-click plays the meow and opens NO window (v3.12+ rule)', noWin);
   }
 
-  // ------------------------------------------------ 7c. store: panda unlocks free under unlimited promo
+  // ------------------------------------------------ 7c. store: smokey kitten unlocks free under unlimited promo
   const buy = await cat.evaluate(async () => {
     const before = await window.meow.getCoins();
-    const r = await window.meow.buyBreed('panda');
+    const r = await window.meow.buyBreed('smokey_kitten');
     const after = await window.meow.getCoins();
     return { r, before, after };
   });
-  ok('panda unlocks free (unlimited coins promo)', buy.r && buy.r.ok && buy.after === buy.before,
+  ok('smokey kitten unlocks free (unlimited coins promo)', buy.r && buy.r.ok && buy.after === buy.before,
     JSON.stringify(buy.r));
 
   // ------------------------------------------------ 8. reminders UI lives inside the settings window (v3.2 merge)
@@ -502,7 +494,7 @@ try {
   const set2 = await findPage('settings.html');
   ok('settings reopened for idle-destroy test', !!set2);
   if (set2) {
-    await set2.evaluate(() => window.meow.closeWindow('settings'));
+    await cat.evaluate(() => window.meow.closeWindow('settings'));   // v3.18: close from the cat
     await cat.waitForTimeout(4300);   // MEOW_WARM_IDLE_MS=3000 in the e2e run
     const dead = await set2.evaluate(() => true).then(() => false).catch(() => true);
     ok('idle settings window self-destroys (frees its renderer process)', dead);
@@ -518,7 +510,7 @@ try {
   // topmost enforcer sanity: window has always-on-top state via CDP? (skip on Linux)
   ok('e2e screenshots saved', true, OUT);
 } catch (e) {
-  console.error('E2E error:', e.message);
+  console.error('E2E error:', e.message, '\n', (e.stack || '').split('\n').slice(0, 4).join('\n'));
   results.push({ name: 'e2e run completed', pass: false, extra: e.message });
 } finally {
   writeFileSync(path.join(OUT, 'results.json'), JSON.stringify(results, null, 2));

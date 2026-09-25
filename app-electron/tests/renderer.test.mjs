@@ -7,7 +7,7 @@ import http from 'http';
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { STATES, PALETTES, EMOTES } from '../src/cat-renderer.js';
+import { STATES, PALETTES, EMOTES, DRESSES } from '../src/cat-renderer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -131,9 +131,9 @@ describe('cat-renderer visual', () => {
       `breeds should be visually distinct, got ${uniq.size}/${Object.keys(PALETTES).length}`);
   });
 
-  // ---- every body type keeps feet on the ground while walking ----
-  for (const body of ['normal', 'slim', 'kitten', 'chubby', 'large', 'panda', 'chibi', 'munchkin']) {
-    const breed = Object.keys(PALETTES).find(b => (PALETTES[b].body || 'normal') === body);
+  // ---- every store cat keeps feet on the ground while walking ----
+  for (const [breed, pal] of Object.entries(PALETTES)) {
+    const body = pal.body || 'normal';
     test(`body "${body}" (${breed}) walks with feet near the ground`, async () => {
       const page = await browser.newPage();
       await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=walk&t=0.15&breed=${breed}`);
@@ -145,27 +145,60 @@ describe('cat-renderer visual', () => {
     });
   }
 
-  // ---- panda specifics ----
-  test('panda shows black + white anatomy (dark and light regions)', async () => {
+  // ---- v3.18 store dress: every style repaints a big chunk of the torso ----
+  const barePx = async (q) => {
     const page = await browser.newPage();
-    await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=sit&t=0.2&breed=panda`);
+    await page.goto(`http://127.0.0.1:${port}/test/harness.html?${q}`);
     await page.waitForFunction('window.__ready === true');
-    const colors = await page.evaluate(() => {
+    const data = await page.evaluate(() => {
       const cv = document.getElementById('cv');
       const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
-      let dark = 0, light = 0;
-      for (let i = 0; i < d.length; i += 4) {
-        if (d[i + 3] < 40) continue;
-        const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
-        if (lum < 70) dark++;
-        else if (lum > 215) light++;
+      const bbox = [cv.width, cv.height, 0, 0];
+      const px = [];
+      for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) {
+        const i = (y * cv.width + x) * 4;
+        if (d[i + 3] > 40) { px.push(d[i], d[i + 1], d[i + 2]); if (x < bbox[0]) bbox[0] = x; if (x > bbox[2]) bbox[2] = x; if (y < bbox[1]) bbox[1] = y; if (y > bbox[3]) bbox[3] = y; }
       }
-      return { dark, light };
+      return { bbox, px };
     });
     await page.close();
-    assert.ok(colors.dark > 300, `panda needs black limbs/ears/patches (${colors.dark}px)`);
-    assert.ok(colors.light > 2000, `panda needs a white body (${colors.light}px)`);
-  });
+    return data;
+  };
+  for (const dress of DRESSES) {
+    test(`dress "${dress}" visibly covers the torso`, async () => {
+      const bare = await barePx('state=sit&t=0.2&bg=alpha');
+      const dressed = await barePx(`state=sit&t=0.2&bg=alpha&dress=${dress}`);
+      let changed = 0;
+      for (let i = 0; i < Math.min(bare.px.length, dressed.px.length); i += 3) {
+        if (Math.abs(bare.px[i] - dressed.px[i]) > 24 ||
+            Math.abs(bare.px[i + 1] - dressed.px[i + 1]) > 24 ||
+            Math.abs(bare.px[i + 2] - dressed.px[i + 2]) > 24) changed++;
+      }
+      assert.ok(changed > 700, `dress "${dress}" should repaint the torso (${changed}px changed vs bare)`);
+    });
+  }
+
+  // ---- v3.18 store hats: each hat paints a visible footprint on the head ----
+  for (const hat of ['tophat', 'crown', 'bow']) {
+    test(`hat "${hat}" paints the head region`, async () => {
+      const bare = await barePx('state=sit&t=0.2&bg=alpha');
+      const hatted = await barePx(`state=sit&t=0.2&bg=alpha&hat=${hat}`);
+      let changed = 0, minChangedY = 1e9;
+      const span = bare.bbox[3] - bare.bbox[1];
+      for (let i = 0; i < Math.min(bare.px.length, hatted.px.length); i += 3) {
+        const px = i / 3, x = px % 360, y = Math.floor(px / 360);
+        if (Math.abs(bare.px[i] - hatted.px[i]) > 24 ||
+            Math.abs(bare.px[i + 1] - hatted.px[i + 1]) > 24 ||
+            Math.abs(bare.px[i + 2] - hatted.px[i + 2]) > 24) {
+          changed++;
+          if (y < minChangedY) minChangedY = y;
+        }
+      }
+      assert.ok(changed > 250, `hat "${hat}" should paint a visible shape (${changed}px changed)`);
+      assert.ok(minChangedY <= bare.bbox[1] + span * 0.45,
+        `hat "${hat}" must sit in the head region (top of change y=${minChangedY} vs body top ${bare.bbox[1]})`);
+    });
+  }
 
   // ---- every emote renders above the cat ----
   for (const em of EMOTES) {

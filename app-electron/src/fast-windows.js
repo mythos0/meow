@@ -38,12 +38,20 @@ export function createFastWindows({ factory } = {}) {
         throw new Error('no factory for window: ' + name);
       }
       w = factory[name]();
-      // intercept the close: hide instead of destroy to keep the warm pool
+      // v3.18 process diet: intercept the close and DESTROY — a hidden warm
+      // renderer is a whole process + ~45MB the user explicitly asked to
+      // reclaim. The pool recreates the window on demand (~150ms).
       w.__allowClose = false;
       try {
         w.on('close', e => {
-          if (!w.__allowClose) { e.preventDefault(); w.hide(); armIdleDestroy(w, name); }
+          if (!w.__allowClose) {
+            e.preventDefault();
+            w.__allowClose = true;
+            pool.delete(name);
+            try { w.close(); } catch { /* already dying */ }
+          }
         });
+        w.on('closed', () => { if (pool.get(name) === w) pool.delete(name); });
       } catch { /* fake windows in tests may lack .on */ }
       pool.set(name, w);
     }
