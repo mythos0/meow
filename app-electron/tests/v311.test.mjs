@@ -10,7 +10,6 @@ import assert from 'node:assert/strict';
 import { createSettings, DEFAULTS, BREED_PRICES } from '../src/settings-store.js';
 import { PALETTES } from '../src/cat-renderer.js';
 import { computeRegionSize, slideIfNeeded, dragChaseTarget, unionWorkAreas } from '../src/region.js';
-import { createTypingHookManager } from '../src/typing-hook.js';
 import { toRelativeZone, toScreenZone, validZone, zonesToScreen } from '../src/no-walk.js';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -51,60 +50,6 @@ describe('v3.11 the default cat is the ginger kitten', () => {
 });
 
 // ---------------------------------------------------------------- auto-quit
-describe('v3.11 typing hook is isolated from the main process', () => {
-  test('manager spawns a child and relays key events', () => {
-    let keys = 0;
-    let exits = [];
-    const children = [];
-    const fakeChild = () => {
-      const listeners = {};
-      const c = {
-        on: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); return c; },
-        kill: () => { exits.push('kill'); (listeners.exit || []).forEach(f => f()); },
-        __emit: (ev, msg) => (listeners[ev] || []).forEach(f => f(msg)),
-      };
-      children.push(c);
-      return c;
-    };
-    const m = createTypingHookManager({ spawnFn: fakeChild, onKey: () => keys++ });
-    m.start();
-    assert.equal(children.length, 1, 'one child spawned');
-    children[0].__emit('message', { type: 'key' });
-    children[0].__emit('message', { type: 'key' });
-    assert.equal(keys, 2, 'keys relayed to the meter');
-    // a child death respawns (backoff — timer unref'd; poll briefly)
-    children[0].__emit('exit');
-    assert.equal(children.length, 1, 'no instant respawn (backoff pending)');
-    m.stop();
-    assert.equal(children.length, 1, 'stop() does not spawn');
-  });
-  test('stop() then start() recovers cleanly', () => {
-    const children = [];
-    const fakeChild = () => {
-      const ls = {};
-      const c = { on: (ev, fn) => { (ls[ev] = ls[ev] || []).push(fn); return c; }, kill: () => (ls.exit || []).forEach(f => f()) };
-      children.push(c);
-      return c;
-    };
-    const m = createTypingHookManager({ spawnFn: fakeChild, onKey: () => {} });
-    m.start(); m.stop(); m.start();
-    assert.equal(children.length, 2, 'fresh child after restart');
-    m.stop();
-  });
-  test('a spawnFn that throws never takes the app down', () => {
-    const m = createTypingHookManager({ spawnFn: () => { throw new Error('fork failed'); }, onKey: () => {} });
-    assert.doesNotThrow(() => m.start());
-    m.stop();
-  });
-  test('the child entrypoint exists and is a CJS file', () => {
-    const p = path.join(ROOT, 'src', 'typing-hook-child.cjs');
-    assert.ok(existsSync(p), 'typing-hook-child.cjs present');
-    const src = readFileSync(p, 'utf8');
-    assert.ok(src.includes('uiohook-napi'), 'child loads the native hook');
-    assert.ok(src.includes('process.parentPort'), 'child talks to the parent port');
-  });
-});
-
 // ---------------------------------------------------------------- lane / flicker
 describe('v3.11 the lane window never moves while the cat walks', () => {
   test('ground strolling across the full display issues zero slides', () => {

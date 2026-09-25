@@ -12,9 +12,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'events';
-import * as reactions from '../src/system-reactions.js';
 import { createSettings, DEFAULTS } from '../src/settings-store.js';
-import { createSysMonitor } from '../src/sys-monitor.js';
 
 const REMOVED_SETTINGS = ['hideDuringCalls', 'duckDuringCalls', 'hideInFullscreen'];
 const REMOVED_SYMBOLS = ['findCallApp', 'CALL_APP_RE', 'isFullscreenWindow', 'parseProcessList'];
@@ -46,59 +44,6 @@ describe('v3.10 contract: no auto-hide settings exist', () => {
     for (const k of REMOVED_SETTINGS) {
       assert.ok(!(k in s.all), `legacy ${k} must not resurface via all()`);
     }
-  });
-});
-
-describe('v3.10 contract: detection helpers are gone from the codebase', () => {
-  test('system-reactions exports no call/fullscreen/process-list logic', () => {
-    for (const sym of REMOVED_SYMBOLS) {
-      assert.ok(!(sym in reactions), `${sym} must not be exported anymore`);
-    }
-  });
-
-  test('findEditorApp (window-scan consumer) is untouched', () => {
-    assert.equal(typeof reactions.findEditorApp, 'function');
-    assert.equal(reactions.findEditorApp(['Code']), 'Code');
-  });
-});
-
-describe('v3.10 contract: no process-list sampling resurrection', () => {
-  test('win32 sampler spawns only the PowerShell stats streamer, never tasklist', async () => {
-    const spawned = [];
-    const mon = createSysMonitor({
-      spawnFn: (cmd, args) => {
-        spawned.push({ cmd, args: args.join(' ') });
-        const p = new EventEmitter();
-        p.stdout = new EventEmitter();
-        p.kill = () => p.emit('close', 0);
-        return p;
-      },
-      platform: 'win32',
-      intervalMs: 1000,
-      onSample: () => {},
-    });
-    mon.start();
-    await new Promise(r => setTimeout(r, 40));
-    mon.stop();
-    assert.ok(spawned.length >= 1, 'sampler runs');
-    for (const s of spawned) {
-      assert.equal(s.cmd, 'powershell.exe', `only powershell spawns, saw ${s.cmd}`);
-      assert.ok(!/tasklist/i.test(s.args), 'tasklist must never be spawned');
-    }
-  });
-
-  test('linux sampler spawns nothing at all', async () => {
-    let spawned = 0;
-    const mon = createSysMonitor({
-      spawnFn: () => { spawned++; return { stdout: { on() {} }, on() {}, kill() {} }; },
-      platform: 'linux',
-      intervalMs: 1000,
-      onSample: () => {},
-    });
-    mon.start();
-    await new Promise(r => setTimeout(r, 40));
-    mon.stop();
-    assert.equal(spawned, 0, 'zero subprocesses on linux');
   });
 });
 

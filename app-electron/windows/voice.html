@@ -35,7 +35,11 @@
   let timer = null;
   let restarts = 0;
   let netStrikes = 0;
-  let announced = false;
+  let recActive = false;   // v3.17: is a recognition session live right now
+
+  // v3.17: 5s heartbeat — main.js tracks webHealth from these; without it a
+  // hung web engine would silently block the offline engine's phrases
+  setInterval(() => { if (wanted) send({ type: 'hb', listening: recActive }); }, 5000);
 
   function scheduleRestart(ms) {
     if (!wanted) return;
@@ -56,8 +60,10 @@
       rec.lang = 'en-US';
       rec.maxAlternatives = 1;
       rec.onstart = () => {
-        if (announced) return;
-        announced = true;
+        recActive = true;
+        // v3.17: report EVERY start (Chromium restarts recognition ~60s) —
+        // main.js refreshes webHealth from each one; the old once-only
+        // 'announced' flag left health stale after the first restart
         send({ type: 'listening' });
       };
       rec.onresult = e => {
@@ -83,6 +89,7 @@
       };
       rec.onend = () => {
         rec = null;
+        recActive = false;
         if (!wanted) return;
         restarts++;
         scheduleRestart(Math.min(6000, 500 + restarts * 250));
@@ -98,7 +105,7 @@
     wanted = true;
     netStrikes = 0;
     restarts = 0;
-    announced = false;
+    recActive = false;
     send({ type: 'starting' });
     tryListen();
   };
@@ -106,12 +113,13 @@
     wanted = false;
     clearTimeout(timer);
     timer = null;
+    recActive = false;
     try { if (rec) rec.abort(); } catch { }
     rec = null;
     send({ type: 'stopped' });
   };
   window.__voiceState = function () {
-    return { wanted, listening: !!(rec && announced), restarts, netStrikes };
+    return { wanted, listening: recActive, restarts, netStrikes };
   };
 
   send({ type: 'booted' });

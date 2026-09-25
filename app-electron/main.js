@@ -12,21 +12,15 @@ import { createWindowScanner } from './src/window-scan.js';
 import { createFastWindows } from './src/fast-windows.js';
 import { createPlatformTracker } from './src/platform-tracker.js';
 import { computeRegionSize, initialOrigin, unionWorkAreas, dragWindowTarget } from './src/region.js';
-import { createSysMonitor } from './src/sys-monitor.js';
-import { createMusicWatcher } from './src/music-watcher.js';
-import {
-  createSpikeDetector, createTypingMeter,
-  batteryCrisis, shouldDanceParty, diffWindows,
-  findEditorApp, musicReaction, parseStatusFile,
-} from './src/system-reactions.js';
+import { toRelativeZone, validZone } from './src/no-walk.js';
+import { createMusicWatcher } from './src/music-watcher.js';   // v3.17: runs ALWAYS (the meow gate)
+import { shouldDanceParty } from './src/system-reactions.js';  // v3.17: the only survivor
 import { createPomodoro, fmtRemaining } from './src/pomodoro.js';
 import { checkUnlocks, ACHIEVEMENTS, affectionProgress, unlockedPerks } from './src/achievements.js';
 import { seasonHat, validateSkinDef } from './src/cat-renderer.js';
-import { toRelativeZone, validZone } from './src/no-walk.js';
-import { createTypingHookManager } from './src/typing-hook.js';
 import { createExecLog } from './src/exec-log.js';
 // v3.15 voice commands + the music launcher
-import { parseVoiceCommand } from './src/voice.js';
+import { parseVoiceCommand, acceptEnginePhrase } from './src/voice.js';
 import { createMusicLauncher } from './src/music-launcher.js';
 import { createVoiceListener } from './src/voice-listener.js';
 
@@ -177,15 +171,11 @@ function onExplicitShutdown() {
   try { enforcer?.stop(); } catch {}
   try { scanner?.stop(); } catch {}
   try { platTracker?.stop(); } catch {}   // v3.9: no orphan PowerShell
-  try { sysMon.stop(); } catch {}
-  try { musicWatcher.stop(); } catch {}
+  try { musicWatcher.stop(); } catch {}   // v3.17: still runs (meow gate) until the very end
   stopWebVoice();                          // v3.16: no orphan Web Speech engine window
   try { voiceListener.stop(); } catch {}   // v3.15: no orphan SAPI listener
   stopIdleTicker();
-  stopCursorWatch();
-  stopTypingHook();
   applyHotkeys(false);
-  if (statusPoller) clearInterval(statusPoller);
   try { fastWins.closeAll(); } catch {}
   if (schedTimer) clearInterval(schedTimer);
   if (coinTimer) clearInterval(coinTimer);
@@ -502,7 +492,6 @@ function startBackgroundJobs() {
   coinTimer.unref?.();
 
   // v3.6: pomodoro heartbeat (1s while a timer runs)
-  let pomoTickN = 0;
   quitTimer = setInterval(() => {
     const evt = pomodoroEngine.tick();
     if (evt === 'focus-done') {
@@ -510,9 +499,10 @@ function startBackgroundJobs() {
     } else if (evt === 'break-done') {
       onPomodoroDone('break');
     } else if (pomodoroEngine.mode !== 'idle') {
-      // live countdown to the settings UI — steady 5s cadence, no Date.now()% luck
-      if (++pomoTickN % 5 === 0) broadcastPomodoro('tick');
-    } else pomoTickN = 0;
+      // v3.17 REALTIME countdown: broadcast EVERY second — the old 5s cadence
+      // made the 🍅 badge and the Settings timer jump 5s at a time
+      broadcastPomodoro('tick');
+    }
   }, 1000);
   quitTimer.unref?.();
 }
@@ -558,44 +548,17 @@ function updateCatVisibility() {
   buildTrayMenu();   // refresh Hide/Show label
 }
 
-// ---------- system monitor (CPU/RAM spikes + battery relay) ----------
-const spikeDetector = createSpikeDetector({});
-let lastBatteryPushed = null;   // last battery state relayed to the renderer
-
-function onSystemSample({ cpu, ram, battery, charging }) {
-  if (store.get('reactSystemSpikes')) {
-    const verdict = spikeDetector.push({ cpu, ram });
-    if (verdict === 'stress') sendToCat('system-event', { type: 'stress' });
-  }
-  // v3.6.1: the low-battery feature finally has a real data source —
-  // relay battery state to the renderer whenever it CHANGES (5s sampler).
-  if (store.get('reactLowBattery') && battery != null && charging != null) {
-    const state = { level: battery / 100, charging: !!charging };
-    const sig = `${state.level}|${state.charging}`;
-    if (sig !== lastBatteryPushed) {
-      lastBatteryPushed = sig;
-      sendToCat('system-event', { type: 'battery', ...state });
-    }
-  }
-}
-
-// v3.10: onProcessList (call-app detection + ducking) is gone — the monitor
-// no longer samples process lists at all (one less recurring subprocess).
-
-const sysMon = createSysMonitor({
-  spawnFn: spawn,
-  readFn: p => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } },
-  intervalMs: process.platform === 'win32' ? 8000 : 5000,   // v3.7: Windows one-shots are expensive
-  onSample: onSystemSample,
-});
+// v3.17: the system-reaction pollers (CPU/RAM spike sampler + battery relay,
+// sys-monitor.js and system-reactions.js machinery) were REMOVED at the
+// user's request together with the Reactions settings page.
 
 // ---------- music watcher (SMTC / playerctl) ----------
-let prevMusic = null;
-// v3.16: system-wide "music is playing" state (from the same SMTC session
-// YouTube/Spotify report to the volume flyout). Relayed to the cat window so
-// a double-click can hold the meow while a song is actually on — the user's
-// ask: "when double click music is playing, that time shouldn't play single
-// meow sound".
+// v3.17: the watcher now serves ONE purpose — the system-wide "music is
+// playing" state (from the same SMTC session YouTube/Spotify report to the
+// volume flyout). Relayed to the cat window so a double-click can hold the
+// meow while a song is actually on — the user's ask: "when double click
+// music is playing, that time shouldn't play single meow sound". It runs
+// ALWAYS (the meow gate is core behavior, not a toggle).
 let musicPlayingNow = false;
 function pushMusicState() {
   sendToCat('music-state', { playing: musicPlayingNow });
@@ -603,11 +566,8 @@ function pushMusicState() {
 const musicWatcher = createMusicWatcher({
   spawnFn: spawn,
   onMusic: parsed => {
-    const action = musicReaction(prevMusic, parsed);
     const playing = !!(parsed && parsed.status === 'playing');
     if (playing !== musicPlayingNow) { musicPlayingNow = playing; pushMusicState(); }
-    prevMusic = parsed;
-    if (action && store.get('reactMusic')) sendToCat('music', { action, ...parsed });
   },
 });
 
@@ -663,7 +623,16 @@ const musicLauncher = createMusicLauncher({
       },
 });
 
-async function handleVoicePhrase(text, confidence) {
+async function handleVoicePhrase(text, confidence, engine = 'web') {
+  // v3.17 ENGINE PRIORITY: both engines run in parallel, but while the web
+  // engine is verifiably listening its phrases WIN — the offline SAPI
+  // recognizer is coarser and would only add mangled duplicates ("hey kat"
+  // vs "a cat"). SAPI phrases count only when the web engine is NOT healthy
+  // (which is always, in stock Electron — see the chain comment below).
+  if (engine === 'sapi' && !acceptEnginePhrase(engine, webHealthy())) {
+    xlog('cat', 'voice', `offline engine heard "${String(text).slice(0, 60)}" — web engine is live, ignored`);
+    return;
+  }
   const parsed = parseVoiceCommand(text);
   __voiceTest.phrases.push({ text, confidence, cmd: parsed && parsed.cmd });
   if (__voiceTest.phrases.length > 40) __voiceTest.phrases.shift();
@@ -722,25 +691,30 @@ function describeVoiceCommand(p) {
 }
 
 // v3.16 VOICE ENGINE CHAIN — why "voice cmd not works" happened and how it
-// is fixed. v3.15 relied on ONE engine (PowerShell SAPI). On real machines
-// it could fail silently: a non-English Windows has no en-US recognizer so
-// the grammar never loaded (and the error was swallowed); SAPI's accuracy
-// with accented English is poor; Windows mic-privacy switches are
-// undetectable from that side. The chain is now:
-//   1. WEB (primary): a hidden always-alive window (windows/voice.html)
-//      runs Chromium's Web Speech API — cloud-quality recognition, far
-//      better with accents, works on every OS, and its error events
-//      ('audio-capture', 'not-allowed', 'network', 'service-not-allowed')
-//      tell us exactly what is wrong instead of dead air.
-//   2. SAPI (offline fallback): the hardened PowerShell listener engages
-//      automatically when the web engine reports a fatal error or no
-//      network — recognizers are now enumerated explicitly and a failed
-//      grammar load is REPORTED, not swallowed.
-// Both engines feed the same pure parser (src/voice.js); phrases that look
-// like real commands do exactly what they did before.
-let voiceEngine = null;            // 'web' | 'sapi' | null
+// is REALLY fixed in v3.17. Two hard facts surfaced on the user's machine
+// (their exec log showed: `web speech error: network`):
+//   1. Chromium's Web Speech API ALWAYS fails with 'network' inside Electron
+//      — Electron ships no valid Google speech API key. It can never be the
+//      primary engine in a packaged build.
+//   2. The v3.16 fallback never ran: createVoiceListener was called WITHOUT
+//      a spawnFn, so the SAPI listener crashed into 'spawn-failed' forever.
+//      Dead engine + dead fallback = "voice cmd not works at all".
+// The v3.17 chain:
+//   · BOTH engines arm in PARALLEL the moment voice commands are enabled.
+//     The offline Windows SAPI listener (hardened in v3.16: enumerated
+//     recognizers, explicit culture, UTF-8 stdout, reported failures) is
+//     the WORKHORSE — it needs no network and no API keys.
+//   · The web window still starts: on builds where Chromium speech works
+//     (or a future Electron with a key) its phrases take priority via the
+//     webHealth gate in handleVoicePhrase; its 'network' errors are logged,
+//     not fatal.
+//   · A 5s heartbeat from the engine window keeps webHealth honest; without
+//     it a hung web engine would silently block SAPI phrases.
+let voiceEngine = null;            // 'web' | 'sapi' | 'web+sapi' | null
 let voiceWindow = null;            // the hidden Web Speech engine window
 let voiceWebError = '';            // last web-engine error (for Settings)
+let webLastListening = 0;         // v3.17: last time the web engine said it is listening
+const webHealthy = () => Date.now() - webLastListening < 15000;
 
 function startWebVoice() {
   if (voiceWindow && !voiceWindow.isDestroyed()) {
@@ -763,8 +737,7 @@ function startWebVoice() {
     voiceWindow.on('closed', () => { voiceWindow = null; });
     xlog('main', 'voice', 'web speech engine window starting');
   } catch (e) {
-    xlog('main', 'voice', `web engine window failed: ${e && e.message}`);
-    engageSapiFallback('web-window-failed');
+    xlog('main', 'voice', `web engine window failed: ${e && e.message} — the offline engine carries the voice`);
   }
 }
 
@@ -786,25 +759,24 @@ try {
     cb(true);
   });
 } catch { /* older Electron — ignore */ }
-
-function engageSapiFallback(reason) {
-  if (voiceEngine === 'sapi') return;
-  voiceEngine = 'sapi';
-  xlog('main', 'voice', `falling back to the offline SAPI engine (${reason})`);
-  voiceListener.start();
-  broadcastVoiceState();
-}
+// v3.17: engageSapiFallback is gone — the offline engine now starts IN
+// PARALLEL with the web engine (applyVoiceFlag), it never waits for a
+// failure report that sometimes never came.
 
 function onVoiceEngineEvent(ev = {}) {
   switch (ev.type) {
     case 'phrase':
-      handleVoicePhrase(String(ev.text || ''), Number(ev.confidence) || 0.8);
+      handleVoicePhrase(String(ev.text || ''), Number(ev.confidence) || 0.8, 'web');
       break;
     case 'listening':
-      voiceEngine = 'web';
+      webLastListening = Date.now();          // v3.17: EVERY onstart refreshes health
+      if (voiceEngine !== 'sapi') voiceEngine = 'web';
       voiceWebError = '';
       xlog('main', 'voice', 'web speech engine is listening');
       broadcastVoiceState();
+      break;
+    case 'hb':                                 // v3.17: 5s engine heartbeat
+      if (ev.listening) { webLastListening = Date.now(); if (voiceEngine !== 'sapi') voiceEngine = 'web'; }
       break;
     case 'net-retry':
       voiceWebError = 'network';
@@ -813,17 +785,15 @@ function onVoiceEngineEvent(ev = {}) {
     case 'error':
       voiceWebError = String(ev.error || 'unknown');
       xlog('main', 'voice', `web speech error: ${voiceWebError}`);
-      // fatal → offline fallback; 'audio-capture'/'not-allowed' mean the mic
-      // itself is blocked (Windows privacy switches) — SAPI reports the same
-      // thing from its side, which the Settings page shows either way.
-      if (['audio-capture', 'not-allowed', 'service-not-allowed', 'language-not-supported', 'network'].includes(voiceWebError)) {
-        engageSapiFallback(voiceWebError);
-      }
+      // 'network' is EXPECTED in Electron (no Google API key) — the offline
+      // engine is already running in parallel, so this is just bookkeeping.
+      // Mic-blocked errors surface in Settings either way.
       broadcastVoiceState();
       break;
     case 'unavailable':
       voiceWebError = String(ev.reason || 'unavailable');
-      engageSapiFallback(voiceWebError);
+      xlog('main', 'voice', `web speech unavailable: ${voiceWebError} — offline engine carries the voice`);
+      broadcastVoiceState();
       break;
     default:
       break;   // starting / stopped / booted — cosmetic
@@ -832,19 +802,29 @@ function onVoiceEngineEvent(ev = {}) {
 
 const voiceListener = createVoiceListener({
   platform: process.platform,
-  onPhrase: (text, conf) => { handleVoicePhrase(text, conf); },
+  // v3.17 CRITICAL FIX — THE root cause of "voice cmd not works at all":
+  // this options object NEVER passed a spawn function, so the moment the
+  // fallback engaged, createVoiceListener called null(...), caught its own
+  // TypeError and respawned into the same wall forever ('spawn-failed').
+  // The offline engine literally never spawned a single PowerShell process
+  // in production. v3.15 shipped a working call; the v3.16 refactor dropped it.
+  spawnFn: (cmd, args, opts2) => spawn(cmd, args, opts2),
+  onPhrase: (text, conf) => { handleVoicePhrase(text, conf, 'sapi'); },
   onDown: err => xlog('sys', 'voice-down', `SAPI listener exited (${err || 'unknown'}) — respawning`),
   onStatus: st => { xlog('main', 'voice', `SAPI engine: ${st.engine || ''} ${st.culture || ''}`.trim()); broadcastVoiceState(); },
+  onError: err => xlog('main', 'voice', `offline engine reports: ${err}`),
 });
 
 function voiceStatus() {
+  const webUp = !!(voiceWindow && !voiceWindow.isDestroyed());
+  const sapiUp = voiceListener.running;
   return {
     enabled: !!store.get('voiceCommands'),
-    running: (voiceEngine === 'web' && !!(voiceWindow && !voiceWindow.isDestroyed())) || voiceListener.running,
-    engine: voiceEngine,                       // v3.16: 'web' | 'sapi' | null
-    error: voiceEngine === 'sapi' ? voiceListener.lastError : voiceWebError,
+    running: sapiUp || (webUp && webHealthy()),
+    engine: webUp && sapiUp ? 'web+sapi' : sapiUp ? 'sapi' : webUp ? 'web' : null,
+    error: voiceWebError || (sapiUp ? '' : voiceListener.lastError),
     sapiInfo: voiceListener.engineInfo,        // recognizer id + culture
-    available: true,                           // the web engine works everywhere
+    available: true,                           // the offline engine needs no network
   };
 }
 function broadcastVoiceState() {
@@ -856,67 +836,35 @@ function broadcastVoiceState() {
 }
 function applyVoiceFlag() {
   if (store.get('voiceCommands')) {
-    startWebVoice();        // v3.16: web engine first…
-    if (process.platform === 'win32' && voiceEngine === 'sapi') voiceListener.start();   // …fallback persists if it already engaged
+    startWebVoice();        // the web engine arms (its phrases win IF it ever listens)…
+    // v3.17: …and the offline SAPI engine starts IN PARALLEL, immediately —
+    // it is the workhorse, not a fallback that waits for a failure report
+    if (process.platform === 'win32') { voiceListener.start(); voiceEngine = 'web+sapi'; }
   } else {
     stopWebVoice();
     voiceListener.stop();
     voiceEngine = null;
     voiceWebError = '';
+    webLastListening = 0;
   }
   broadcastVoiceState();
 }
 
-// ---------- typing meter (global keyboard hook on Windows) ----------
-// v3.11 THE AUTO-QUIT FIX. uiohook-napi is a NATIVE module: a hard crash
-// inside its keyboard thread (secure desktop / UAC prompt / RDP / driver
-// quirks) aborts the whole Electron process — uncaughtException can never
-// catch it. That was the last un-guarded path that could make the cat vanish
-// without the user asking ("major bug: cat auto quitting"). The hook now
-// runs in an Electron utilityProcess: a native crash kills only the child,
-// the manager respawns it with backoff, and the cat never notices.
-const typingMeter = createTypingMeter({});
-const typingHook = createTypingHookManager({
-  spawnFn: () => utilityProcess.fork(path.join(__dirname, 'src', 'typing-hook-child.cjs'), [], {
-    serviceName: 'MeowCatTypingHook',
-  }),
-  onKey: () => typingMeter.key(),
-  onDown: () => logCrash('typing-hook-down', new Error('utility child exited — respawning')),
-});
+// v3.17: the typing meter + global keyboard hook (typing-hook.js) were
+// REMOVED with the Reactions features — one less native hook and one less
+// utilityProcess. (The v3.11 auto-quit hardening that surrounded it stays:
+// the quit gate, the crash journal, the resurrection loops.)
 
-function startTypingHook() {
-  if (!store.get('reactTyping')) return;
-  typingHook.start();
-}
-function stopTypingHook() {
-  typingHook.stop();
-}
-
-// ---------- idle ticker: typing pounce/nap, cursor stalking, dance party ----------
+// ---------- idle ticker: dance party (the only surviving idle feature) ----------
 let idleTimer = null;
-let cursorTimer = null;
-let lastCursor = null;
-let cursorIdleSince = 0;
-let cursorIdleSent = false;
 let lastPartyAt = 0;
-let lastNapAt = 0;
 
 function startIdleTicker() {
   if (idleTimer) return;
   idleTimer = setInterval(() => {
     try {
-      // typing bursts -> excited pounce at the keyboard
-      if (store.get('reactTyping')) {
-        const act = typingMeter.tick();
-        if (act === 'pounce') sendToCat('typing', { action: 'pounce' });
-      }
-      // system-wide idle: dance party (screensaver mode) + nap
       let idleSec = 0;
       try { idleSec = powerMonitor.getSystemIdleTime(); } catch { idleSec = 0; }
-      if (store.get('reactTyping') && idleSec > 12 * 60 && Date.now() - lastNapAt > 30 * 60_000) {
-        lastNapAt = Date.now();
-        sendToCat('typing', { action: 'nap' });
-      }
       if (store.get('dancePartyIdle') &&
           shouldDanceParty(idleSec, { lastPartyAgeSec: (Date.now() - lastPartyAt) / 1000 })) {
         lastPartyAt = Date.now();
@@ -928,91 +876,13 @@ function startIdleTicker() {
 }
 function stopIdleTicker() { if (idleTimer) { clearInterval(idleTimer); idleTimer = null; } }
 
-function startCursorWatch() {
-  if (cursorTimer || !store.get('stalkCursor')) return;
-  cursorTimer = setInterval(() => {
-    try {
-      const p = screen.getCursorScreenPoint();
-      const moved = lastCursor ? Math.hypot(p.x - lastCursor.x, p.y - lastCursor.y) : 999;
-      lastCursor = p;
-      if (moved < 4) {
-        if (!cursorIdleSince) cursorIdleSince = Date.now();
-        if (!cursorIdleSent && Date.now() - cursorIdleSince > 2500) {
-          cursorIdleSent = true;
-          sendToCat('cursor-idle', p);
-        }
-      } else if (cursorIdleSent) {
-        cursorIdleSince = 0; cursorIdleSent = false;
-        sendToCat('cursor-busy', p);
-      }
-    } catch { /* headless dev */ }
-  }, 500);
-  cursorTimer.unref?.();
-}
-function stopCursorWatch() {
-  if (cursorTimer) { clearInterval(cursorTimer); cursorTimer = null; }
-  cursorIdleSent = false; cursorIdleSince = 0;
-}
-
-// ---------- window scan results: platforms + new-window + fullscreen + apps ----------
-let lastPlatSig = '[]';
-let lastGameRoar = 0;
-
+// ---------- window scan results: platforms for window hopping ----------
 function onWindowScan(plats) {
   const clean = plats.map(p => ({ x: p.x, y: p.y, w: p.w, h: p.h, title: p.title, proc: p.proc, id: p.id }));
   sendToCat('platforms', clean);
-
-  // new app opened -> walk over and investigate
-  if (store.get('reactNewWindows')) {
-    const prevParsed = JSON.parse(lastPlatSig);
-    const added = diffWindows(prevParsed, clean);
-    if (added.length) {
-      const w = added[0];
-      sendToCat('new-window', { x: w.x + w.w / 2, y: w.y, title: w.title });
-    }
-  }
-  lastPlatSig = JSON.stringify(clean);
-
-  // v3.10: fullscreen auto-hide removed — the cat stays on stage, always.
-
-  // app-specific reactions: loaf on editors, get hyped over games
-  if (store.get('reactApps') && clean.length) {
-    const top = clean[0];             // EnumWindows is z-ordered: first ≈ foreground
-    const proc = top.proc || '';
-    if (findEditorApp([proc])) {
-      sendToCat('app-focus', { kind: 'editor', rect: { x: top.x, y: top.y, w: top.w, h: top.h }, proc });
-    } else if (Date.now() - lastGameRoar > 90_000 &&
-               /steam|epic|riot|minecraft|javaw|roblox|league|valorant|unity|unreal|game/i.test(proc)) {
-      lastGameRoar = Date.now();
-      sendToCat('app-focus', { kind: 'game', proc });
-    }
-  }
-}
-
-// ---------- build/test status file watcher ----------
-// v3.6.1: a 5s poll instead of fs.watch — watch dies on atomic replaces
-// (CI exporters rename files into place) and re-creating it on every
-// unrelated settings change was pure churn. Verdicts fire on CHANGE only.
-let statusPoller = null;
-let lastStatusVerdict = null;
-
-function applyStatusFile(on) {
-  if (statusPoller) { clearInterval(statusPoller); statusPoller = null; }
-  const p = store.get('statusFile');
-  lastStatusVerdict = null;
-  if (!on || !p) return;
-  const readIt = () => {
-    try {
-      const verdict = parseStatusFile(fs.readFileSync(p, 'utf8'));
-      if (verdict && verdict !== lastStatusVerdict) {
-        lastStatusVerdict = verdict;
-        sendToCat('system-event', { type: verdict === 'good' ? 'build-ok' : 'build-bad' });
-      }
-    } catch { /* file vanished mid-write */ }
-  };
-  statusPoller = setInterval(readIt, 5000);
-  statusPoller.unref?.();
-  readIt();
+  // v3.17: the new-window investigator and the editor-loaf/game-hype
+  // reactions were removed with the Reactions page. The scan itself stays —
+  // window hopping needs the platform list.
 }
 
 // ---------- pomodoro ----------
@@ -1084,27 +954,19 @@ function checkAndSendUnlocks() {
 }
 
 // ---------- feature flag -> poller orchestration ----------
+// v3.17: reaction flags removed — the set is what remains of the old
+// feature-flag orchestration
 const FLAG_KEYS = new Set([
-  'reactSystemSpikes', 'reactMusic',
-  'stalkCursor', 'reactTyping', 'dancePartyIdle', 'reactBuildStatus',
-  'statusFile', 'globalHotkeys', 'windowHopping', 'reactApps',
-  'reactNewWindows', 'reactLowBattery', 'voiceCommands',
+  'dancePartyIdle', 'globalHotkeys', 'windowHopping', 'voiceCommands',
 ]);
 
 function applyFeatureFlags() {
-  const needMonitor = store.get('reactSystemSpikes');
-  if (needMonitor) sysMon.start(); else { sysMon.stop(); spikeDetector.reset(); }
-  if (store.get('reactMusic')) musicWatcher.start(); else { musicWatcher.stop(); prevMusic = null; }
-  if (store.get('stalkCursor')) startCursorWatch(); else stopCursorWatch();
-  if (store.get('reactTyping') || store.get('dancePartyIdle')) { startIdleTicker(); startTypingHook(); }
-  else { stopIdleTicker(); stopTypingHook(); }
-  if (!store.get('reactTyping')) stopTypingHook();   // hook serves typing only — never keep it for the party
-  lastBatteryPushed = null;   // next sample re-pushes battery state (idempotent)
-  applyStatusFile(store.get('reactBuildStatus'));
+  // v3.17: the music watcher runs ALWAYS — it feeds the double-click meow
+  // gate ("music playing → hold the meow"), which is core behavior now
+  musicWatcher.start();
+  if (store.get('dancePartyIdle')) startIdleTicker(); else stopIdleTicker();
   applyHotkeys(store.get('globalHotkeys'));
-  const needScanner = store.get('windowHopping') || store.get('reactApps') ||
-                      store.get('reactNewWindows');
-  if (needScanner && process.platform === 'win32') ensureScanner();
+  if (store.get('windowHopping') && process.platform === 'win32') ensureScanner();
   else scanner?.stop();
   applyVoiceFlag();   // v3.15: voice commands on/off
 }
@@ -1694,24 +1556,8 @@ ipcMain.handle('skins:import', (_e, jsonText) => {
   } catch (e) { return { ok: false, reason: 'invalid json' }; }
 });
 
-// status file picker — the "Browse…" button in settings used to be a stub
-ipcMain.handle('status:browse', async () => {
-  try {
-    const r = await dialog.showOpenDialog({
-      title: 'Pick the status file the cat should watch',
-      properties: ['openFile', 'showOverwriteConfirmation'],
-    });
-    if (r.canceled || !r.filePaths?.length) return null;
-    return r.filePaths[0];
-  } catch { return null; }
-});
-
-// e2e / accessibility: synthetic keystrokes feed the same typing meter
-ipcMain.handle('keys:inject', (_e, count) => {
-  const now = Date.now();
-  for (let i = 0; i < Math.max(1, Math.min(200, count | 0)); i++) typingMeter.key(now - i * 40);
-  return true;
-});
+// v3.17: the status-file picker and the typing-meter key injector were
+// removed together with the Reactions features.
 
 // settings quick actions -> the cat
 ipcMain.handle('quick-action', (_e, act) => {
@@ -1734,9 +1580,6 @@ app.whenReady().then(() => {
   // initial pushes once the cat renderer is alive
   setTimeout(() => {
     sendToCat('no-walk-zones', store.get('noWalkZoneList'));
-    if (store.get('timeOfDayMood')) {
-      sendToCat('time-bias', timeBiasNow());
-    }
     if (store.get('achievements') && store.get('affection') >= 250) {
       sendToCat('boot-greet', {});   // affection lvl 4: the cat greets you
     }
@@ -1768,11 +1611,6 @@ app.whenReady().then(() => {
   });
   app.on('activate', () => { if (!catWin) createCatWindow(); });
 });
-
-function timeBiasNow() {
-  const h = new Date().getHours();
-  return (h >= 22 || h < 7) ? 'night' : 'day';
-}
 
 app.on('window-all-closed', () => {
   // v3.12: the cat's window never truly "stays" closed — the closed handler

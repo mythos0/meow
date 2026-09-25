@@ -5,9 +5,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSettings, DEFAULTS, BREED_PRICES } from '../src/settings-store.js';
 import { ACHIEVEMENTS, checkUnlocks, unlockedPerks } from '../src/achievements.js';
-import { parseWinStats, parseBatteryCapacity, parseBatteryStatus } from '../src/sys-monitor.js';
 import { CatBrain, mulberry32 } from '../src/cat-brain.js';
-import { batteryCrisis } from '../src/system-reactions.js';
 
 function memBackend() {
   let data = null;
@@ -99,58 +97,7 @@ describe('robustness: night_owl unlocks whenever the stat is > 0', () => {
   });
 });
 
-// ---------------------------------------------------------------- battery data
-describe('robustness: battery sampling (the low-battery feature now has data)', () => {
-  test('parseWinStats reads battery + charging', () => {
-    const r = parseWinStats('{"cpu":12,"ram":48,"battery":15,"charging":false}');
-    assert.equal(r.battery, 15);
-    assert.equal(r.charging, false);
-  });
-  test('desktops without a battery yield nulls, not zeros', () => {
-    const r = parseWinStats('{"cpu":3,"ram":9,"battery":null,"charging":null}');
-    assert.equal(r.battery, null);
-    assert.equal(r.charging, null);
-    assert.equal(parseWinStats('nonsense').battery, null);
-  });
-  test('linux sysfs parsers', () => {
-    assert.equal(parseBatteryCapacity(' 87\n'), 87);
-    assert.equal(parseBatteryCapacity('junk'), null);
-    assert.equal(parseBatteryStatus('Discharging'), false);
-    assert.equal(parseBatteryStatus('Charging'), true);
-    assert.equal(parseBatteryStatus('Full'), true);
-    assert.equal(parseBatteryStatus('Unknown'), null);
-  });
-  test('batteryCrisis still gates at 20% unplugged', () => {
-    assert.equal(batteryCrisis(0.12, false), true);
-    assert.equal(batteryCrisis(0.12, true), false);
-    assert.equal(batteryCrisis(0.9, false), false);
-    assert.equal(batteryCrisis(null, false), false);
-  });
-});
-
 // ---------------------------------------------------------------- brain
-describe('robustness: battery-crisis behaviour', () => {
-  test('cat stays curled through multiple curl cycles during the crisis', () => {
-    const b = mkBrain();
-    b.setBatteryLow(true);
-    // far beyond the first curl duration (30-50s): the old code woke up and
-    // randomly strolled around while "saving energy"
-    let sawNonCurl = false;
-    for (let i = 0; i < 4000 && !sawNonCurl; i++) { b.tick(0.03); if (b.state !== 'curl') sawNonCurl = true; }
-    assert.equal(sawNonCurl, false, 'state=' + b.state);
-    assert.equal(b._batteryLow, true);
-  });
-
-  test('plugging in wakes the cat immediately (no 30-50s residue)', () => {
-    const b = mkBrain();
-    b.setBatteryLow(true);
-    b.tick(0.02);
-    b.setBatteryLow(false);
-    assert.equal(b._batteryLow, false);
-    assert.notEqual(b.state, 'curl');
-  });
-});
-
 describe('robustness: platform-edge guards (no more floating cats)', () => {
   test('startStalk refuses while standing on a window top', () => {
     const b = mkBrain();

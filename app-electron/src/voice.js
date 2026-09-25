@@ -35,6 +35,13 @@ export function normalizePhrase(raw) {
     .trim();
 }
 
+// v3.17 ENGINE GATE — both engines run in parallel; while the web engine is
+// verifiably listening, offline (SAPI) phrases are ignored so the coarser
+// recognizer can only add mangled duplicates. Pure + exported for unit tests.
+export function acceptEnginePhrase(engine, webHealthy) {
+  return engine !== 'sapi' || !webHealthy;
+}
+
 // Levenshtein edit distance, early-exit when the gap is hopeless.
 function editDistance(a, b) {
   if (Math.abs(a.length - b.length) > 2) return 99;

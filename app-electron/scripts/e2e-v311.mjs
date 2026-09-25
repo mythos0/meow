@@ -237,10 +237,18 @@ try {
   ok('quick click = ONE natural single meow', click && click.name === 'meow_single', JSON.stringify(click));
   const dbl = await cat.evaluate(async () => {
     window.__playMeow();
-    await new Promise(r => setTimeout(r, 60));
-    return window.__lastPlayInfo();
+    // v3.17: meows QUEUE instead of canceling — the classic variant plays as
+    // soon as the single meow ahead of it finishes, so poll for it
+    const t0 = Date.now();
+    let info = null;
+    while (Date.now() - t0 < 10000) {
+      info = window.__lastPlayInfo();
+      if (info && /^meow_real/.test(info.name)) break;
+      await new Promise(r => setTimeout(r, 120));
+    }
+    return info;
   });
-  ok('double-click keeps the classic meow voice', dbl && /^meow_real/.test(dbl.name), JSON.stringify(dbl));
+  ok('double-click keeps the classic meow voice (queued, plays after the click meow finishes)', dbl && /^meow_real/.test(dbl.name), JSON.stringify(dbl));
   const amb = await cat.evaluate(async () => {
     window.__fireAmbientMeow();
     await new Promise(r => setTimeout(r, 100));
@@ -316,7 +324,9 @@ try {
   const alive2 = await fetch('http://127.0.0.1:9333/json/version').then(r => r.ok).catch(() => false);
   ok('first cat survived the second launcher', !!alive2);
 
-  // typing-hook boot survivability: reactTyping is ON by default; the app is
+  // typing-hook boot survivability: MOOT in v3.17 (the hook was removed);
+  // the equivalent guarantee is that the app boots with every default flag on
+
   // still alive N seconds later (native hook problems can only ever take the
   // disposable child, never the cat).
   ok('cat alive with the typing hook enabled (auto-quit fix)', !!alive2);

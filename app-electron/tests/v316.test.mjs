@@ -105,12 +105,13 @@ const pal = { body: 'normal', fur: '#c8b48c', dark: '#8a7350', belly: '#e8dcc4',
 const F = B.feet;
 const pose = (stateT, t = stateT) => poseForState('dance', t, 0.5, B, pal, stateT);
 
-test('dance: steps ride the upright hind-leg stand', () => {
+test('dance: steps ride the compact hind-leg stand (v3.17 short legs)', () => {
   const p = pose(4.5);                       // hands-up phase — both hind paws planted
-  assert.ok(p.bodyY <= -8, `body lifted (bodyY ${p.bodyY})`);
-  assert.ok(p.bodyRot < -0.6, `torso pitched up onto the hind legs (rot ${p.bodyRot})`);
-  assert.equal(p.legs[2].fy, -2, 'near hind paw planted');
-  assert.equal(p.legs[3].fy, -2, 'far hind paw planted');
+  assert.ok(p.bodyY >= 0 && p.bodyY <= 8, `body sits LOW and compact (bodyY ${p.bodyY})`);
+  assert.ok(p.bodyRot < -0.45, `torso pitched up onto the hind legs (rot ${p.bodyRot})`);
+  assert.ok(p.legK < 1, `stubby legs (legK ${p.legK})`);
+  assert.equal(p.legs[2].fy, -1, 'near hind paw planted under the body');
+  assert.equal(p.legs[3].fy, -1, 'far hind paw planted under the body');
 });
 
 test('dance: phase 1 STEP RIGHT swings the near hind paw out', () => {
@@ -130,10 +131,10 @@ test('dance: phase 3 HANDS UP — both paws raised high OVER the head (overlay)'
   const step = pose(0.3);
   const up = pose(4.5);
   assert.ok(Array.isArray(up.overlayPaw) && up.overlayPaw.length === 2, 'both paws ride OVER the head');
-  assert.ok(up.overlayPaw[0].fy < -140, `near paw high above the ear (fy ${up.overlayPaw[0].fy})`);
-  assert.ok(up.overlayPaw[1].fy < -132, `far paw high above the ear (fy ${up.overlayPaw[1].fy})`);
-  assert.ok(up.legs[0].fy < -40 && up.legs[0].fy > -70, `chest paws pump under the raised arms (fy ${up.legs[0].fy})`);
-  assert.ok(up.bodyRot < -0.6, 'still standing on the hind legs');
+  assert.ok(up.overlayPaw[0].fy < -104, `near paw just above the ear (fy ${up.overlayPaw[0].fy})`);
+  assert.ok(up.overlayPaw[1].fy < -98, `far paw just above the ear (fy ${up.overlayPaw[1].fy})`);
+  assert.ok(up.legs[0].fy < -30 && up.legs[0].fy > -45, `chest paws pump under the raised arms (fy ${up.legs[0].fy})`);
+  assert.ok(up.bodyRot < -0.45, 'still standing on the hind legs');
   assert.ok(step.overlayPaw === null || step.overlayPaw === undefined, 'no overlay during the steps');
 });
 
@@ -162,7 +163,7 @@ test('dance: phase 6 FINISH — happy squint, paw by the cheek, heart', () => {
   const p = pose(10.2);
   assert.equal(p.eyeState, 'happy');
   assert.ok(p.overlayPaw && !Array.isArray(p.overlayPaw), 'the cheek paw rides over the head');
-  assert.ok(p.overlayPaw.fy < -95 && p.overlayPaw.fy > -120, `paw by the cheek (fy ${p.overlayPaw.fy})`);
+  assert.ok(p.overlayPaw.fy < -70 && p.overlayPaw.fy > -92, `paw by the cheek (fy ${p.overlayPaw.fy})`);
   assert.ok(p.headRot > 0.05, 'head tilted for the finale');
   assert.equal(p.particles.kind, 'heart');
 });

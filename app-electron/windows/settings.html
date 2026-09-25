@@ -103,9 +103,7 @@
     <div class="item" data-page="store">🛍️ <span class="lab">Cat Store</span></div>
     <div class="item" data-page="look">🎨 <span class="lab">Look &amp; Feel</span></div>
     <div class="item" data-page="behavior">🐾 <span class="lab">Behavior</span></div>
-    <div class="item" data-page="reactions">🖥️ <span class="lab">Reactions</span></div>
     <div class="item" data-page="sounds">🔊 <span class="lab">Sounds</span></div>
-    <div class="item" data-page="focus">🍅 <span class="lab">Focus &amp; Reminders</span></div>
     <div class="item" data-page="hotkeys">⌨️ <span class="lab">Hotkeys &amp; Privacy</span></div>
     <div class="item" data-page="achieve">🏆 <span class="lab">Achievements</span></div>
     <div class="item" data-page="execlog" id="navExecLog" style="display:none">&gt;_ <span class="lab">Execution Log</span></div>
@@ -147,6 +145,51 @@
           <span class="hint" id="statLine"></span>
         </div>
       </div>
+    
+      <!-- v3.17: Focus & Reminders moved onto the homepage (the separate page is gone) -->
+      <div class="fl-card">
+        <div class="fl-row">
+          <div class="txt"><div class="l1" id="remindersSection">Pomodoro companion</div><div class="l2" id="pomoHint">Focus 25 min → the cat supervises. Finish a round → celebration dance.</div></div>
+          <label class="sw"><input type="checkbox" id="pomodoro"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Timer</div><div class="l2" id="pomoState">Not running.</div></div>
+          <button id="pomoFocus">▶ Focus</button>
+          <button id="pomoBreak" class="ghost">☕ Break</button>
+          <button id="pomoStop" class="ghost">⏹</button>
+        </div>
+      </div>
+      <div class="fl-card">
+        <div class="hint" style="margin-bottom:8px;">When a reminder fires, your cat dances and shows the message.</div>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="flex:0 0 74px">Message</label>
+          <input type="text" id="remLabel" placeholder="Drink water!" maxlength="80">
+        </div>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="flex:0 0 74px">When</label>
+          <input type="datetime-local" id="remWhen">
+        </div>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="flex:0 0 74px">Repeat</label>
+          <select id="remRepeat">
+            <option value="once">Once</option><option value="hourly">Every hour</option>
+            <option value="daily">Every day</option><option value="weekly">Every week</option>
+          </select>
+        </div>
+        <div class="row" style="margin-bottom:10px;">
+          <label style="flex:0 0 74px">Cat does</label>
+          <select id="remAnim">
+            <option value="dance">Dance 💃</option><option value="happy">Happy bounce 💗</option>
+            <option value="jump">Jump 🐾</option><option value="eat">Snack 🐟</option><option value="sleep">Sleep 😴</option>
+          </select>
+        </div>
+        <div class="row">
+          <label><input type="checkbox" id="remSound" checked> Play a meow</label>
+          <span style="flex:1"></span>
+          <button id="addBtn">Add reminder</button>
+        </div>
+      </div>
+      <div class="fl-card" id="remList"><div class="empty">No reminders yet.</div></div>
     </section>
 
     <!-- ============ CAT STORE ============ -->
@@ -235,47 +278,7 @@
     </section>
 
     <!-- ============ REACTIONS ============ -->
-    <section class="page" id="page-reactions">
-      <h1 class="fl-h1">Reactions</h1>
-      <div class="fl-sub">The cat watches your machine. Everything here can be switched off.</div>
-
-      <div class="fl-card">
-        <div class="fl-row">
-          <div class="txt"><div class="l1">CPU / RAM spikes</div><div class="l2">Heavy load startles the cat — it knows when you compile.</div></div>
-          <label class="sw"><input type="checkbox" id="reactSystemSpikes"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Low battery</div><div class="l2">Under 20% and unplugged, the cat curls up "to save energy". Obviously.</div></div>
-          <label class="sw"><input type="checkbox" id="reactLowBattery"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Time-of-day mood</div><div class="l2">Yawns and naps at night, zoomies by day.</div></div>
-          <label class="sw"><input type="checkbox" id="timeOfDayMood"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">New-window investigator</div><div class="l2">A fresh app opens → the cat strolls over and sniffs it.</div></div>
-          <label class="sw"><input type="checkbox" id="reactNewWindows"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Editor loaf &amp; game hype</div><div class="l2">Curls up on your code editor; gets extra playful over games.</div></div>
-          <label class="sw"><input type="checkbox" id="reactApps"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Typing pounce</div><div class="l2">Fast typing bursts excite the cat; long idle sends it to nap.</div></div>
-          <label class="sw"><input type="checkbox" id="reactTyping"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Cursor stalking</div><div class="l2">Leave the mouse idle near the cat… it remembers the red dot.</div></div>
-          <label class="sw"><input type="checkbox" id="stalkCursor"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Music bops</div><div class="l2">Spotify/YouTube playing → the cat sways to the beat; new track → excited hop.</div></div>
-          <label class="sw"><input type="checkbox" id="reactMusic"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ SOUNDS ============ -->
+        <!-- ============ SOUNDS ============ -->
     <section class="page" id="page-sounds">
       <h1 class="fl-h1">Sounds</h1>
       <div class="fl-sub">Recorded from real, opinionated cats.</div>
@@ -310,70 +313,7 @@
     </section>
 
     <!-- ============ FOCUS & REMINDERS ============ -->
-    <section class="page" id="page-focus">
-      <h1 class="fl-h1" id="remindersSection">Focus &amp; Reminders</h1>
-      <div class="fl-sub">The cat believes in you. Statistically.</div>
-
-      <div class="fl-card">
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Pomodoro companion</div><div class="l2" id="pomoHint">Focus 25 min → the cat supervises. Finish a round → celebration dance.</div></div>
-          <label class="sw"><input type="checkbox" id="pomodoro"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Timer</div><div class="l2" id="pomoState">Not running.</div></div>
-          <button id="pomoFocus">▶ Focus</button>
-          <button id="pomoBreak" class="ghost">☕ Break</button>
-          <button id="pomoStop" class="ghost">⏹</button>
-        </div>
-      </div>
-
-      <div class="fl-card">
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Build / test reactions</div>
-            <div class="l2">Watch a status file — green text → happy dance, red text → moping. Works with CI exporters.</div></div>
-          <label class="sw"><input type="checkbox" id="reactBuildStatus"><span class="tr"><span class="kn"></span></span></label>
-        </div>
-        <div class="fl-row">
-          <div class="txt"><div class="l1">Status file</div></div>
-          <input type="text" id="statusFile" placeholder="C:\path\to\status.txt" style="flex:1; min-width:120px;">
-          <button id="statusBrowse" class="ghost small">Browse…</button>
-        </div>
-      </div>
-
-      <div class="fl-card">
-        <div class="hint" style="margin-bottom:8px;">When a reminder fires, your cat dances and shows the message.</div>
-        <div class="row" style="margin-bottom:8px;">
-          <label style="flex:0 0 74px">Message</label>
-          <input type="text" id="remLabel" placeholder="Drink water!" maxlength="80">
-        </div>
-        <div class="row" style="margin-bottom:8px;">
-          <label style="flex:0 0 74px">When</label>
-          <input type="datetime-local" id="remWhen">
-        </div>
-        <div class="row" style="margin-bottom:8px;">
-          <label style="flex:0 0 74px">Repeat</label>
-          <select id="remRepeat">
-            <option value="once">Once</option><option value="hourly">Every hour</option>
-            <option value="daily">Every day</option><option value="weekly">Every week</option>
-          </select>
-        </div>
-        <div class="row" style="margin-bottom:10px;">
-          <label style="flex:0 0 74px">Cat does</label>
-          <select id="remAnim">
-            <option value="dance">Dance 💃</option><option value="happy">Happy bounce 💗</option>
-            <option value="jump">Jump 🐾</option><option value="eat">Snack 🐟</option><option value="sleep">Sleep 😴</option>
-          </select>
-        </div>
-        <div class="row">
-          <label><input type="checkbox" id="remSound" checked> Play a meow</label>
-          <span style="flex:1"></span>
-          <button id="addBtn">Add reminder</button>
-        </div>
-      </div>
-      <div class="fl-card" id="remList"><div class="empty">No reminders yet.</div></div>
-    </section>
-
-    <!-- ============ HOTKEYS & PRIVACY ============ -->
+        <!-- ============ HOTKEYS & PRIVACY ============ -->
     <section class="page" id="page-hotkeys">
       <h1 class="fl-h1">Hotkeys &amp; Privacy</h1>
       <div class="fl-sub">Summon. Dismiss. Appear innocuous.</div>
@@ -475,7 +415,6 @@
         </div>
       </div>
       <div class="row" style="margin-top:10px">
-        <button class="ghost" id="gotoReminders">⏰ Reminders…</button>
         <span style="flex:1"></span>
         <button class="ghost" id="closeBtn">Close</button>
       </div>
@@ -688,16 +627,8 @@ $('pomoFocus').onclick = async () => { renderPomo(await window.meow.startPomodor
 $('pomoBreak').onclick = async () => { renderPomo(await window.meow.startPomodoro('break')); };
 $('pomoStop').onclick = async () => { await window.meow.stopPomodoro(); renderPomo(null); };
 window.meow.on('pomodoro', renderPomo);
-
-// ---------------- status file browse ----------------
-// v3.6.1: a real Electron file dialog (the old button just focused the input)
-$('statusBrowse').onclick = async () => {
-  try {
-    const picked = await window.meow.browseStatusFile();
-    if (picked) { $('statusFile').value = picked; save({ statusFile: picked }); toast('Cat will watch ' + picked); }
-  } catch { toast('Could not open a file dialog', false); }
-};
-$('statusFile').onchange = () => save({ statusFile: $('statusFile').value.trim() });
+// v3.17: the build-status file watcher and its file picker were REMOVED
+// together with the Reactions features.
 
 // ---------------- quick actions ----------------
 $('qaDance').onclick = () => window.meow.openWindow && window.meow.quickAction?.('dance');
@@ -716,21 +647,12 @@ bindSwitch('autoStart', 'autoStart', v => toast(v ? 'Will start with Windows' : 
 bindSwitch('noWalkZones', 'noWalkZones');
 bindSwitch('seasonalSkins', 'seasonalSkins');
 bindSwitch('companionCat', 'companionCat', v => toast(v ? 'A friend has arrived 🐾' : 'Companion dismissed'));
-bindSwitch('reactSystemSpikes', 'reactSystemSpikes');
-bindSwitch('reactLowBattery', 'reactLowBattery');
-bindSwitch('timeOfDayMood', 'timeOfDayMood');
-bindSwitch('reactNewWindows', 'reactNewWindows');
-bindSwitch('reactApps', 'reactApps');
-bindSwitch('reactTyping', 'reactTyping');
-bindSwitch('stalkCursor', 'stalkCursor');
-bindSwitch('reactMusic', 'reactMusic');
 bindSwitch('contextualSounds', 'contextualSounds');
 bindSwitch('randomMeows', 'randomMeows');
 bindSwitch('soundClickMeow', 'soundClickMeow');
 bindSwitch('soundDblClickMeow', 'soundDblClickMeow');
 bindSwitch('soundReminders', 'soundReminders');
 bindSwitch('pomodoro', 'pomodoro');
-bindSwitch('reactBuildStatus', 'reactBuildStatus');
 bindSwitch('globalHotkeys', 'globalHotkeys');
 bindSwitch('photoMode', 'photoMode');
 bindSwitch('achievements', 'achievements');
@@ -745,10 +667,16 @@ function renderVoiceStatus(st) {
   if (hint) hint.style.display = (micBlocked && st.enabled) ? 'block' : 'none';
   if (!st || st.available === false) { el.textContent = '● unavailable'; el.style.color = '#b3591f'; return; }
   if (!st.enabled) { el.textContent = '● off'; el.style.color = '#8a8a8a'; return; }
-  const eng = st.engine === 'sapi' ? (st.sapiInfo ? `offline · ${st.sapiInfo}` : 'offline engine') : 'Chromium speech';
+  // v3.17: BOTH engines arm in parallel. In the desktop app Chromium's
+  // speech engine has no Google API key (its log shows 'network'), so the
+  // offline Windows recognizer is the workhorse — the status says which
+  // recognizer is actually listening.
+  const eng = (st.engine === 'web+sapi' || st.engine === 'sapi')
+    ? (st.sapiInfo ? `offline · ${st.sapiInfo}` : 'offline Windows engine')
+    : 'Chromium speech';
   if (st.running) { el.textContent = `● listening — ${eng} — say “hey cat …”`; el.style.color = '#1a7f37'; }
-  else if (micBlocked) { el.textContent = '● microphone blocked (' + st.error + ')'; el.style.color = '#b3261e'; }
-  else if (st.error === 'grammar-failed' || st.error === 'no-recognizer' || st.error === 'no-sapi') { el.textContent = '● offline engine unavailable (' + st.error + ') — needs internet for the main engine'; el.style.color = '#b3261e'; }
+  else if (micBlocked) { el.textContent = '● microphone blocked (' + st.error + ') — allow desktop apps in Windows mic privacy settings'; el.style.color = '#b3261e'; }
+  else if (st.error === 'grammar-failed' || st.error === 'no-recognizer' || st.error === 'no-sapi') { el.textContent = '● offline engine unavailable (' + st.error + ')'; el.style.color = '#b3261e'; }
   else { el.textContent = '● starting…'; el.style.color = '#8a6d1a'; }
 }
 window.meow.voiceGet?.().then?.(renderVoiceStatus);
@@ -762,18 +690,13 @@ function syncControls() {
     ['sounds', 'sounds'], ['topmost', 'topmost'], ['hopToggle', 'windowHopping'],
     ['autoStart', 'autoStart'],
     ['noWalkZones', 'noWalkZones'], ['seasonalSkins', 'seasonalSkins'],
-    ['companionCat', 'companionCat'], ['reactSystemSpikes', 'reactSystemSpikes'],
-    ['reactLowBattery', 'reactLowBattery'], ['timeOfDayMood', 'timeOfDayMood'],
-    ['reactNewWindows', 'reactNewWindows'], ['reactApps', 'reactApps'],
-    ['reactTyping', 'reactTyping'], ['stalkCursor', 'stalkCursor'],
-    ['reactMusic', 'reactMusic'], ['contextualSounds', 'contextualSounds'],
+    ['companionCat', 'companionCat'], ['contextualSounds', 'contextualSounds'],
     ['randomMeows', 'randomMeows'], ['soundClickMeow', 'soundClickMeow'],
     ['soundDblClickMeow', 'soundDblClickMeow'], ['soundReminders', 'soundReminders'],
-    ['pomodoro', 'pomodoro'], ['reactBuildStatus', 'reactBuildStatus'],
+    ['pomodoro', 'pomodoro'],
     ['globalHotkeys', 'globalHotkeys'], ['photoMode', 'photoMode'], ['achievements', 'achievements'],
     ['voiceCommands', 'voiceCommands'],
   ]) $(id).checked = S[key] !== undefined ? !!S[key] : false;
-  $('statusFile').value = S.statusFile || '';
   $('coins').textContent = '🪙 ' + (S.coins ?? 0);
   $('coins2').textContent = '🪙 ' + (S.coins ?? 0);
   $('shopHint').textContent = S.unlimitedCoins
@@ -818,12 +741,6 @@ $('size').oninput = e => { S.size = +e.target.value; $('sizeV').textContent = Ma
 $('opacity').oninput = e => { S.opacity = +e.target.value; $('opV').textContent = Math.round(S.opacity * 100) + '%'; saveDebounced({ opacity: S.opacity }); };
 $('speed').oninput = e => { S.speed = +e.target.value; $('spV').textContent = S.speed + ' px/s'; saveDebounced({ speed: S.speed }); };
 
-$('gotoReminders').onclick = () => {
-  document.querySelectorAll('#nav .item').forEach(x => x.classList.remove('on'));
-  document.querySelector('[data-page="focus"]').classList.add('on');
-  document.querySelectorAll('section.page').forEach(p => p.classList.remove('on'));
-  $('page-focus').classList.add('on');
-};
 $('closeBtn').onclick = () => window.meow.closeWindow('settings');
 
 // ---------------- reminders ----------------
@@ -877,10 +794,11 @@ $('addBtn').onclick = async () => {
 };
 
 function focusReminders() {
+  // v3.17: Focus & Reminders live on the homepage now
   document.querySelectorAll('#nav .item').forEach(x => x.classList.remove('on'));
-  document.querySelector('[data-page="focus"]').classList.add('on');
+  document.querySelector('[data-page="home"]').classList.add('on');
   document.querySelectorAll('section.page').forEach(p => p.classList.remove('on'));
-  $('page-focus').classList.add('on');
+  $('page-home').classList.add('on');
 }
 window.meow.on('focus-reminders', focusReminders);
 $('remWhen').value = defaultWhen();

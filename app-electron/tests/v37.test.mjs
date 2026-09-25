@@ -1,7 +1,5 @@
 // v37.test.mjs — regression tests for the v3.7 robustness/perf pass:
 //   * region slide hop-flap fix (TOPSLACK) + companion leash math
-//   * sys-monitor streaming sampler (win32): lines -> samples, watchdog
-//     restart, fallback to one-shot after repeated failures, clean stop
 //   * topmost enforcer skips redundant native pokes
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +7,6 @@ import { EventEmitter } from 'events';
 import {
   computeRegionSize, slideIfNeeded, companionLeash,
 } from '../src/region.js';
-import { createSysMonitor, parseWinStats, winStatsStreamScript } from '../src/sys-monitor.js';
 import { createTopmostEnforcer } from '../src/topmost.js';
 
 const WA = { x: 0, y: 0, width: 1600, height: 1000 };
@@ -89,123 +86,6 @@ function fakeSpawn() {
   p.kill = () => { p.killed = true; p.emit('close', 0); };
   return p;
 }
-
-describe('v3.7 sys-monitor streaming sampler (win32)', () => {
-  test('stream script loops with the requested interval', () => {
-    const s = winStatsStreamScript(8);
-    assert.ok(s.includes('$interval = 8'), 'interval baked in');
-    assert.ok(s.includes('while ($true)'), 'streams forever');
-    assert.ok(s.includes('Start-Sleep -Seconds $interval'));
-  });
-
-  test('emitted JSON lines become samples (spawn + parse pipeline)', async () => {
-    const samples = [];
-    const spawned = [];
-    const mon = createSysMonitor({
-      spawnFn: (cmd, args) => {
-        spawned.push({ cmd, args });
-        const p = fakeSpawn();
-        queueMicrotask(() => {
-          p.stdout.emit('data', Buffer.from('{"cpu":42,"ram":61,"battery":88,"charging":true}\n'));
-        });
-        return p;
-      },
-      platform: 'win32',
-      intervalMs: 1000,
-      onSample: s => samples.push(s),
-    });
-    mon.start();
-    await new Promise(r => setTimeout(r, 60));
-    assert.ok(spawned.length >= 1, 'spawns the streamer');
-    assert.ok(spawned[0].args.join(' ').includes('while ($true)'), 'uses the STREAM script');
-    assert.equal(samples.length, 1);
-    assert.deepEqual(samples[0], { cpu: 42, ram: 61, battery: 88, charging: true });
-    assert.equal(mon.__streamAlive(), true, 'stream process is alive');
-    mon.stop();
-    assert.equal(mon.__streamAlive(), false, 'stream killed on stop');
-  });
-
-  test('dead streamer restarts with backoff, then falls back to the timer', async () => {
-    const procs = [];
-    const mon = createSysMonitor({
-      // tag each fake process: the streamer's command line contains the loop
-      spawnFn: (_cmd, args) => {
-        const p = fakeSpawn();
-        p.__stream = args.join(' ').includes('while ($true)');
-        procs.push(p);
-        return p;
-      },
-      platform: 'win32',
-      intervalMs: 1000,
-      onSample: () => {},
-    });
-    try {
-      mon.start();
-      await new Promise(r => setTimeout(r, 20));
-      const stream0 = procs.find(p => p.__stream);
-      assert.ok(stream0, 'a streamer was spawned');
-      // the streamer emits nothing and we kill it -> 'close' -> restart (2s backoff)
-      stream0.kill();
-      await new Promise(r => setTimeout(r, 2600));
-      assert.ok(mon.__streamFails() >= 1, 'failure counted');
-      const spawnsNow = procs.filter(p => p.__stream).length;
-      assert.ok(spawnsNow >= 2, `respawned a streamer (${spawnsNow})`);
-      // keep killing streamers -> crosses the 4-fail line -> one-shot timer takes over
-      for (let i = 0; i < 6 && mon.__streamFails() < 4; i++) {
-        const alive = [...procs].reverse().find(p => p.__stream && !p.killed);
-        if (alive) alive.kill();
-        await new Promise(r => setTimeout(r, 2600));
-      }
-      assert.ok(mon.__streamFails() >= 4, `fails accumulated (${mon.__streamFails()})`);
-      assert.ok(mon.running, 'sampler still alive on the fallback path');
-    } finally {
-      mon.stop();
-      for (const p of procs) { try { p.kill(); } catch {} }
-    }
-  });
-
-  test('hung streamer (no output) is killed by the watchdog and replaced', async () => {
-    let spawnCount = 0;
-    const mon = createSysMonitor({
-      spawnFn: () => { spawnCount++; return fakeSpawn(); },
-      platform: 'win32',
-      intervalMs: 250,   // watchdog = 250*2.5+1500 ≈ 2.1s
-      onSample: () => {},
-    });
-    mon.start();
-    // generous headroom for loaded CI sandboxes (timers lag under load; the
-    // mechanism is timer-driven, so the wall-clock budget must be too)
-    for (let i = 0; i < 40 && spawnCount < 2; i++) {
-      await new Promise(r => setTimeout(r, 250));
-    }
-    assert.ok(spawnCount >= 2, `watchdog respawned the silent streamer (${spawnCount})`);
-    mon.stop();
-  });
-
-  test('linux path unchanged: /proc sampling via timer, zero subprocesses', async () => {
-    let spawnCalled = 0;
-    const mon = createSysMonitor({
-      spawnFn: () => { spawnCalled++; return fakeSpawn(); },
-      readFn: p => (p === '/proc/stat' ? 'cpu  100 0 100 700 0 0 0 0 0 0' : null),
-      platform: 'linux',
-      intervalMs: 1000,
-      onSample: () => {},
-    });
-    mon.start();
-    await new Promise(r => setTimeout(r, 30));
-    assert.equal(mon.__streamAlive(), false, 'no streamer on linux');
-    // v3.10: the ps process list is gone with call detection — the sampler
-    // spawns NOTHING on linux.
-    assert.equal(spawnCalled, 0, 'no subprocess at all on linux');
-    mon.stop();
-  });
-
-  test('parseWinStats still tolerant (regression guard)', () => {
-    assert.deepEqual(parseWinStats('{"cpu":12,"ram":48,"battery":87,"charging":true}'),
-      { cpu: 12, ram: 48, battery: 87, charging: true });
-    assert.equal(parseWinStats('garbage').cpu, null);
-  });
-});
 
 // ------------------------------------------------------------------ topmost
 describe('v3.7 topmost enforcer skips redundant pokes', () => {

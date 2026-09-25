@@ -92,11 +92,10 @@ try {
   const tog = await cat.evaluate(async () => {
     // v3.10: hideDuringCalls / duckDuringCalls / hideInFullscreen are REMOVED
     // from the app — they must round-trip NO more.
-    const keys = ['reactSystemSpikes', 'reactLowBattery', 'timeOfDayMood', 'reactNewWindows',
-      'reactMusic', 'reactApps', 'reactTyping',
-      'stalkCursor', 'affectionSystem', 'photoMode', 'contextualSounds', 'pomodoro',
+    // v3.17: all reaction toggles were REMOVED with the Reactions page
+    const keys = ['affectionSystem', 'photoMode', 'contextualSounds', 'pomodoro',
       'dancePartyIdle', 'seasonalSkins', 'achievements', 'globalHotkeys', 'noWalkZones',
-      'companionCat', 'reactBuildStatus'];
+      'companionCat'];
     const removed = ['hideDuringCalls', 'duckDuringCalls', 'hideInFullscreen'];
     // flip all off, verify, flip back to defaults
     const offs = {}; for (const k of keys) offs[k] = false;
@@ -104,190 +103,21 @@ try {
     const s1 = await window.meow.getSettings();
     const allOff = keys.every(k => s1[k] === false);
     const goneForGood = removed.every(k => !(k in s1));
-    const ons = {}; for (const k of keys) ons[k] = (k === 'companionCat' || k === 'reactBuildStatus' || k === 'seasonalSkins') ? false : true;
+    const ons = {}; for (const k of keys) ons[k] = (k === 'companionCat' || k === 'seasonalSkins') ? false : true;
     await window.meow.setSettings(ons);
     const s2 = await window.meow.getSettings();
     return { allOff, goneForGood, restored: keys.every(k => s2[k] === ons[k]) };
   });
-  ok('all 19 feature toggles round-trip through IPC + hide toggles stay deleted',
+  ok('all 10 feature toggles round-trip through IPC + hide toggles stay deleted',
     tog.allOff && tog.restored && tog.goneForGood, JSON.stringify(tog));
 
-  // ================= 2. CPU/RAM spike -> startle (real sampler) =================
-  await calm();
-  // burn CPU on every core so the REAL sampler fires (linux /proc polling)
-  const ncpu = os.cpus().length;
-  const hogs = [];
-  for (let i = 0; i < ncpu; i++) hogs.push(spawn('sh', ['-c', 'while :; do :; done'], { stdio: 'ignore' }));
-  let stressSeen = false;
-  const tStress = Date.now();
-  while (Date.now() - tStress < 25000) {
-    const ev = await cat.evaluate(() => {
-      const b = window.__brain();
-      return { state: b.state, stressed: b.stressed };
-    });
-    if (ev.stressed) { stressSeen = true; break; }
-    await sleep(400);
-  }
-  for (const h of hogs) h.kill('SIGKILL');
-  ok('live: CPU spike triggers the stress reaction (real /proc sampler)', stressSeen,
-    stressSeen ? 'stress pulse observed' : 'no stress within 25s');
-  await cat.evaluate(() => window.__brain().setStress(false, 1));
+  // ================= 3. (v3.17: music bop reaction removed with the Reactions page) =================
 
-  // ================= 3. music -> bop =================
-  await calm();
-  await cat.evaluate(() => window.__testEvent('music', { action: 'bop' }));
-  await sleep(200);
-  let st = await cat.evaluate(() => window.__brain().state);
-  ok('music playing -> cat bops', st === 'bop', st);
-  await cat.screenshot({ path: path.join(OUT, 'v36_bop.png') });
-  // bop sustains
-  await sleep(3400);
-  st = await cat.evaluate(() => window.__brain().state);
-  ok('bop sustains while music keeps playing', st === 'bop', st);
-  await cat.evaluate(() => window.__testEvent('music', { action: 'stop' }));
-  await sleep(3300);
-  st = await cat.evaluate(() => window.__brain().state);
-  ok('music stopped -> bop ends', st !== 'bop', st);
+  // ================= 5. (v3.17: cursor stalking removed with the Reactions page) =================
 
-  // ================= 4. typing pounce via the real typing meter =================
-  await calm();
-  const burst = await cat.evaluate(async () => {
-    await window.meow.injectKeys(40);          // 40 keys @ ~25ms apart = ~480 wpm
-    return true;
-  });
-  ok('typing burst injected into the real typing meter', !!burst);
-  // v3.8: retry bursts for the window — the idle ticker only samples the meter
-  // every 3s, and a single pounce verdict lands whenever the cat happens to be
-  // mid-jump/eat (startStalk is declined then). The FEATURE under test is the
-  // full pipeline keys->meter->ticker->renderer->stalk, not a timing lottery.
-  let pounceViaTyping = false;
-  const tTyp = Date.now();
-  while (Date.now() - tTyp < 12000) {
-    await cat.evaluate(() => window.meow.injectKeys(25));
-    for (let i = 0; i < 8; i++) {
-      const b = await cat.evaluate(() => window.__brain());
-      if (b.state === 'stalk' && b.stalk) { pounceViaTyping = true; break; }
-      await sleep(300);
-    }
-    if (pounceViaTyping) break;
-  }
-  ok('live: fast typing -> cat pounces toward the keyboard', pounceViaTyping);
-  await cat.evaluate(() => window.__brain().stopStalk());
-
-  // ================= 5. cursor stalking =================
-  await calm();
-  const stalk = await cat.evaluate(async () => {
-    const b = window.__brain();
-    const p = { x: b.x + 120, y: b.baseY - 10 };
-    window.__testEvent('cursor-idle', p);
-    window.__setCursor(p.x, p.y);
-    const t0 = Date.now();
-    while (Date.now() - t0 < 3000) {
-      if (b.state === 'stalk') return { ok: true, from: b.state };
-      await new Promise(r => setTimeout(r, 50));
-    }
-    return { ok: b.state === 'stalk', state: b.state };
-  });
-  ok('idle cursor near the cat -> stalk begins', stalk.ok, JSON.stringify(stalk));
-  await cat.screenshot({ path: path.join(OUT, 'v36_stalk.png') });
-  // pounce lands -> "caught" -> happy + affection
-  const caught = await cat.evaluate(async () => {
-    const b = window.__brain();
-    const a0 = (await window.meow.getSettings()).affection || 0;
-    const t0 = Date.now();
-    while (Date.now() - t0 < 11000) {
-      if (b.state !== 'stalk' && b.state !== 'pounce') break;
-      await new Promise(r => setTimeout(r, 50));
-    }
-    const a1 = (await window.meow.getSettings()).affection || 0;
-    return { resolved: !b.stalk, affectionDelta: a1 - a0, state: b.state };
-  });
-  ok('stalk ends in a caught-cursor pounce (+affection)', caught.resolved && caught.affectionDelta >= 1,
-    JSON.stringify(caught));
-  // cursor moves -> interest lost
-  await calm();
-  const lost = await cat.evaluate(async () => {
-    const b = window.__brain();
-    window.__testEvent('cursor-idle', { x: b.x + 150, y: b.baseY - 10 });
-    await new Promise(r => setTimeout(r, 300));
-    const was = b.state === 'stalk';
-    window.__testEvent('cursor-busy', { x: b.x + 400, y: b.baseY - 300 });
-    await new Promise(r => setTimeout(r, 300));
-    return { was, cleared: !b.stalk };
-  });
-  ok('moving cursor aborts the stalk (cat loses interest)', lost.was && lost.cleared, JSON.stringify(lost));
-
-  // ================= 6. new-window investigator =================
-  await calm();
-  const inv = await cat.evaluate(async () => {
-    const b = window.__brain();
-    b.x = 300;
-    window.__testEvent('new-window', { x: 950, y: 700, title: 'New App' });
-    const t0 = Date.now();
-    while (Date.now() - t0 < 16000) {
-      if (b.state === 'sniff') return { ok: true, x: Math.round(b.x) };
-      if (b.state !== 'investigate' && b.state !== 'sniff' && Date.now() - t0 > 2000) break;
-      await new Promise(r => setTimeout(r, 80));
-    }
-    return { ok: false, state: b.state, x: Math.round(b.x) };
-  });
-  ok('new window opens -> cat walks over and sniffs it', inv.ok && Math.abs(inv.x - 950) < 60,
-    JSON.stringify(inv));
-
-  // ================= 7. editor nap: cat curls up on the editor =================
-  await calm();
-  const editor = await cat.evaluate(async () => {
-    const b = window.__brain();
-    window.__setPlatforms([{ title: 'editor', x: 600, y: 600, w: 700, h: 320 }]);
-    b.x = 300; b.baseY = b.groundY; b.onPlatform = null; b._jump = null;
-    window.__testEvent('app-focus', { kind: 'editor', rect: { x: 600, y: 600, w: 700, h: 320 }, proc: 'Code' });
-    const t0 = Date.now();
-    while (Date.now() - t0 < 7000) {
-      if (b.onPlatform && ['loaf', 'sit', 'knead', 'groom'].includes(b.state)) {
-        return { ok: true, state: b.state, y: Math.round(b.baseY) };
-      }
-      await new Promise(r => setTimeout(r, 80));
-    }
-    return { ok: false, state: b.state, onPlat: !!b.onPlatform, y: Math.round(b.baseY) };
-  });
-  ok('editor focused -> cat jumps up and loafs on it', editor.ok, JSON.stringify(editor));
-  await cat.evaluate(() => { window.__setPlatforms([]); window.__brain().napRequested = false; });
   await cat.screenshot({ path: path.join(OUT, 'v36_editor_nap.png') });
 
-  // ================= 8. build status reactions =================
-  await calm();
-  const buildOk = await cat.evaluate(() => {
-    window.__testEvent('system-event', { type: 'build-ok' });
-    return window.__brain().state;
-  });
-  ok('green build -> celebration (happy + star)', buildOk === 'happy', buildOk);
-  await sleep(2800);
-  await calm();
-  const buildBad = await cat.evaluate(() => {
-    window.__testEvent('system-event', { type: 'build-bad' });
-    return window.__brain().state;
-  });
-  ok('red build -> moping', buildBad === 'mope', buildBad);
-  await cat.screenshot({ path: path.join(OUT, 'v36_mope.png') });
-
-  // ================= 9. battery curl (injected battery) =================
-  await calm();
-  const bat = await cat.evaluate(async () => {
-    window.__setBattery(0.12, false);
-    window.__pollBattery();
-    await new Promise(r => setTimeout(r, 400));
-    return { state: window.__brain().state };
-  });
-  ok('low battery (12%, unplugged) -> curls up to save energy', bat.state === 'curl', bat.state);
-  await cat.screenshot({ path: path.join(OUT, 'v36_battery_curl.png') });
-  const charged = await cat.evaluate(async () => {
-    window.__setBattery(0.9, true);
-    window.__pollBattery();
-    await new Promise(r => setTimeout(r, 400));
-    const b = window.__brain();
-    return { low: b._batteryLow };
-  });
-  ok('plugged in -> battery crisis cleared', charged.low === false, JSON.stringify(charged));
+  // ================= 8. (v3.17: build-status + battery reactions removed) =================
 
   // ================= 10. companion cat: nuzzle + play-fight =================
   const comp = await cat.evaluate(async () => {
@@ -449,17 +279,6 @@ try {
   ok('seasonal toggle applies the current-month hat (or none in September)',
     season.hatWithToggleOn === season.seasonField && season.hatNow === null, JSON.stringify(season));
 
-  // ================= 19. time-of-day mood wiring =================
-  const tod = await cat.evaluate(async () => {
-    const b = window.__brain();
-    await window.meow.setSettings({ timeOfDayMood: true });
-    window.__testEvent('time-bias', 'night');
-    const night = b.timeBiasMode;
-    window.__testEvent('time-bias', 'day');
-    return { night, day: b.timeBiasMode };
-  });
-  ok('time-of-day bias reaches the brain', tod.night === 'night' && tod.day === 'day', JSON.stringify(tod));
-
   // ================= 20. settings app: Win11 Fluent UI =================
   await cat.evaluate(() => window.meow.openWindow('settings'));
   const set = await findPage('settings.html');
@@ -472,14 +291,15 @@ try {
       switches: document.querySelectorAll('.sw input').length,
       fluentCards: document.querySelectorAll('.fl-card').length,
     }));
-    ok('Win11 nav pane with 10 sections', nav.items === 10, JSON.stringify(nav));
-    ok('every feature has a toggle switch (21 after the 3 hide toggles were removed in v3.10)',
-      nav.switches >= 21, String(nav.switches));
+    ok('Win11 nav pane with 9 sections (v3.17: Reactions + Focus pages removed)', nav.items === 9, JSON.stringify(nav));
+    ok('every feature has a toggle switch (12 after the reaction toggles were removed in v3.17)',
+      nav.switches >= 12, String(nav.switches));
     ok('Fluent cards render', nav.fluentCards >= 14, String(nav.fluentCards));
     // navigate sections via the nav
     const navWorks = await set.evaluate(() => {
-      document.querySelector('[data-page="reactions"]').click();
-      const vis = document.getElementById('page-reactions').classList.contains('on');
+      // v3.17: the Reactions page no longer exists — navigate Behavior instead
+      document.querySelector('[data-page="behavior"]').click();
+      const vis = document.getElementById('page-behavior').classList.contains('on');
       document.querySelector('[data-page="achieve"]').click();
       const ach = document.getElementById('page-achieve').classList.contains('on');
       const achCards = document.querySelectorAll('.ach').length;
@@ -506,8 +326,8 @@ try {
     });
     ok('imported community skin appears in the Cat Store', custom.hasCustom, JSON.stringify(custom));
     await set.screenshot({ path: path.join(OUT, 'settings_v36_home.png') });
-    // page screenshots for docs
-    for (const p of ['reactions', 'focus', 'hotkeys']) {
+    // page screenshots for docs (v3.17: reactions/focus pages are gone)
+    for (const p of ['behavior', 'sounds', 'hotkeys']) {
       await set.evaluate(pg => {
         document.querySelectorAll('#nav .item').forEach(x => x.classList.remove('on'));
         document.querySelector(`[data-page="${pg}"]`).classList.add('on');

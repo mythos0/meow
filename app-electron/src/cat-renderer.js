@@ -344,6 +344,9 @@ export function drawCat(ctx, opts) {
   ctx.globalAlpha = opts.alpha ?? 1;
 
   const P = poseFor(state, t, jumpP, B, pal, opts.stateT || 0);
+  // v3.17 DANCE SIDE-STEPS: the whole sprite (shadow included) shifts inside
+  // the window — step right / step left now TRAVEL, they don't just rock
+  if (P.bodyX) ctx.translate(P.bodyX, 0);
   const bodyY = B.standY + P.bodyY + P.bobY;
   const sqx = 1 + P.sqx, sqy = 1 + P.sqy;
 
@@ -381,8 +384,8 @@ export function drawCat(ctx, opts) {
 
   // ---------------- FAR legs (slightly darker; skipped when tucked)
   if (!P.hideLegs) {
-    drawLeg(ctx, shoulder.x, shoulder.y, P.legs[1], pal, farFill, -1, pal.dark, B);
-    drawLeg(ctx, hip.x, hip.y, P.legs[3], pal, farFill, -1, pal.dark, B);
+    drawLeg(ctx, shoulder.x, shoulder.y, P.legs[1], pal, farFill, -1, pal.dark, B, P.legK);
+    drawLeg(ctx, hip.x, hip.y, P.legs[3], pal, farFill, -1, pal.dark, B, P.legK);
   }
 
   // ---------------- body (tail drawn INSIDE this transform so it stays
@@ -489,8 +492,8 @@ export function drawCat(ctx, opts) {
     ell(ctx, B.rx * 0.12, bodyY + B.ry * 0.48, 7.5, 5, 0.35);
     ctx.fill();
   } else {
-    drawLeg(ctx, shoulder.x, shoulder.y, P.legs[0], pal, nearFill, 1, pal.dark, B);
-    drawLeg(ctx, hip.x, hip.y, P.legs[2], pal, nearFill, 1, pal.dark, B);
+    drawLeg(ctx, shoulder.x, shoulder.y, P.legs[0], pal, nearFill, 1, pal.dark, B, P.legK);
+    drawLeg(ctx, hip.x, hip.y, P.legs[2], pal, nearFill, 1, pal.dark, B, P.legK);
   }
 
   // ---------------- held / ground props (panda bamboo, cat fish)
@@ -508,7 +511,7 @@ export function drawCat(ctx, opts) {
   if (P.overlayPaw) {
     const paws = Array.isArray(P.overlayPaw) ? P.overlayPaw : [P.overlayPaw];
     for (const paw of paws) {
-      drawLeg(ctx, shoulder.x, shoulder.y, paw, pal, nearFill, 1, pal.dark, B);
+      drawLeg(ctx, shoulder.x, shoulder.y, paw, pal, nearFill, 1, pal.dark, B, P.legK);
       // v3.16: a soft rim so a raised paw reads against the face
       ctx.strokeStyle = 'rgba(255,255,255,0.55)';
       ctx.lineWidth = 1.6;
@@ -652,6 +655,7 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
   const P = {
     bodyY: 0, bobY: 0, bodyRot: 0, sqx: 0, sqy: 0, shadowK: 1,
     headX: 0, headY: 0, headRot: 0, wholeRot: 0, hideLegs: false, prop: null, overlayPaw: null,
+    bodyX: 0, legK: 1,           // v3.17: dance side-steps (whole-sprite x shift) + stubby dance legs
     earFlat: 0, noFace: false,   // v3.16: the Turn Around dance step shows the back of the head
     legs: [
       { fx: B.feet[0], fy: 0 }, { fx: B.feet[1], fy: 0 },   // front near/far
@@ -732,104 +736,113 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
       break;
     }
     case 'dance': {
-      // v3.16 THE SIX-STEP ROUTINE — rebuilt to match the user's reference
-      // sheet (a kitten dancing ON ITS HIND LEGS the whole time):
+      // v3.17 THE SIX-STEP ROUTINE — matched to the reference sheet STEP BY
+      // STEP and rebuilt on the user's notes: the legs are STUBBY now
+      // (legK 0.74 — short thick kitten legs, not stretched stilts), the
+      // body sits LOW and round, and steps 1-2 really TRAVEL (bodyX shifts
+      // the whole sprite +-13px instead of rocking in place — "moving both
+      // sides but stuck at one place"). Every oscillator completes whole
+      // half-cycles per phase, so sin(...) is 0 at every boundary: no more
+      // frame-zero pose snaps (the v3.16 flicker).
       //   1 Step Right · 2 Step Left · 3 Hands Up · 4 Turn Around ·
       //   5 Shake Tail · 6 Finish! (happy squint, paw by the cheek)
-      // The old four-phase routine kept the cat on all fours — it read as
-      // paw-waving, not dancing. Ambient dances still cut the routine
-      // short; user-triggered dance()/dance-party runs all 11.4s of it.
       const st = stateT || 0;
       P.particles = { kind: 'sparkle', f: 5 };
-      // shared upright stand: torso pitched up onto the haunches, hind paws
-      // planted, head lifted CLEAR of the chest (the reference kitten's pose)
+      const smooth = q => { const c = Math.min(1, Math.max(0, q)); return c * c * (3 - 2 * c); };
+      // shared compact stand: torso pitched up onto SHORT folded hind legs,
+      // feet tucked under the haunch, round chubby silhouette
       const stand = lean => {
-        P.bodyY = -12;
-        P.bodyRot = -0.70 + lean;
-        P.sqx = -0.04; P.sqy = 0.05;
-        P.legs[2].fx = F[2] - 2; P.legs[2].fy = -2;
-        P.legs[3].fx = F[3] - 2; P.legs[3].fy = -2;
-        P.headY = -6; P.headX = 8;
+        P.bodyY = 4;
+        P.bodyRot = -0.52 + lean;
+        P.sqx = 0.05; P.sqy = -0.06;
+        P.legK = 0.74;                                    // stubby legs
+        P.legs[2].fx = F[2] + 7; P.legs[2].fy = -1;       // feet tucked UNDER the body
+        P.legs[3].fx = F[3] + 7; P.legs[3].fy = -1;
+        P.headY = -4; P.headX = 6;
       };
       if (st < 1.7) {
-        // 1 STEP RIGHT: the near hind paw (drawn in front of the body, so
-        // always visible) swings out to the right on the beat, the body
-        // leans into the step, front paws pump in front of the chest
-        const f = 5.4, w = Math.sin(st * f);
-        stand(0.10 + w * 0.05);
-        P.bobY = -Math.abs(Math.sin(st * f)) * 3;
-        P.legs[2].fx = F[2] - 2 + Math.max(0, w) * 20;
-        P.legs[2].fy = -2 - Math.max(0, w) * 16;
-        P.legs[3].fy = -2 - Math.max(0, -w) * 10;
-        P.legs[0].fx = F[0] + 14 + w * 3; P.legs[0].fy = -50 - Math.max(0, w) * 8;
-        P.legs[1].fx = F[1] + 8 - w * 3; P.legs[1].fy = -46 - Math.max(0, -w) * 8;
-        P.headRot = 0.10 + w * 0.05;
+        // 1 STEP RIGHT: one full bounce; the sprite actually GLIDES right
+        // 13px while the near hind paw kicks out on the beat
+        const f = 2 * Math.PI / 1.7, w = Math.sin(st * f);
+        stand(0.09 * w);
+        P.bodyX = 13 * smooth(st / 1.7);
+        P.bobY = -Math.abs(w) * 3.2;
+        P.legs[2].fx = F[2] + 7 + Math.max(0, w) * 18;
+        P.legs[2].fy = -1 - Math.max(0, w) * 11;
+        P.legs[3].fy = -1 - Math.max(0, -w) * 7;
+        P.legs[0].fx = F[0] + 12 + w * 3; P.legs[0].fy = -33 - Math.max(0, w) * 6;
+        P.legs[1].fx = F[1] + 7 - w * 3; P.legs[1].fy = -29 - Math.max(0, -w) * 6;
+        P.headRot = 0.09 * w;
         P.tailMode = 'sway'; P.eyeState = 'happy';
       } else if (st < 3.4) {
-        // 2 STEP LEFT: mirror — the near hind paw swings BACK, the body
-        // leans the other way, the far hind paw taps behind
-        const st2 = st - 1.7, f = 5.4, w = Math.sin(st2 * f);
-        stand(-0.10 - w * 0.05);
-        P.bobY = -Math.abs(Math.sin(st2 * f)) * 3;
-        P.legs[2].fx = F[2] - 2 - Math.max(0, w) * 18;
-        P.legs[2].fy = -2 - Math.max(0, w) * 14;
-        P.legs[3].fy = -2 - Math.max(0, -w) * 10;
-        P.legs[0].fx = F[0] + 14 + w * 3; P.legs[0].fy = -46 - Math.max(0, w) * 8;
-        P.legs[1].fx = F[1] + 8 - w * 3; P.legs[1].fy = -50 - Math.max(0, -w) * 8;
-        P.headRot = -0.10 - w * 0.05;
+        // 2 STEP LEFT: mirror — glide from +13 through 0 to -13 while the
+        // near hind paw swings BACK and the far paw taps behind
+        const st2 = st - 1.7, f = 2 * Math.PI / 1.7, w = Math.sin(st2 * f);
+        stand(-0.09 * w);
+        P.bodyX = 13 - 26 * smooth(st2 / 1.7);
+        P.bobY = -Math.abs(w) * 3.2;
+        P.legs[2].fx = F[2] + 7 - Math.max(0, w) * 24;
+        P.legs[2].fy = -1 - Math.max(0, w) * 12;
+        P.legs[3].fy = -1 - Math.max(0, -w) * 7;
+        P.legs[0].fx = F[0] + 12 + w * 3; P.legs[0].fy = -33 - Math.max(0, -w) * 6;
+        P.legs[1].fx = F[1] + 7 - w * 3; P.legs[1].fy = -29 - Math.max(0, w) * 6;
+        P.headRot = -0.09 * w;
         P.tailMode = 'sway'; P.eyeState = 'happy';
       } else if (st < 5.6) {
-        // 3 HANDS UP: both front paws raised HIGH above the ears (drawn OVER
-        // the head via overlayPaw so they never vanish behind the face),
-        // body lifted on the beat, chin up — the reference sheet's peak pose
-        const st3 = st - 3.4, f = 4.2, w = Math.sin(st3 * f);
+        // 3 HANDS UP: glide back to center, then both paws rise to just
+        // OVER the ears (overlayPaw rides above the head), bouncing on the
+        // beat — the reference sheet's peak pose
+        const st3 = st - 3.4, f = 4 * Math.PI / 2.2, w = Math.sin(st3 * f);
         stand(0);
-        P.bobY = -Math.abs(Math.sin(st3 * f)) * 7;
-        P.legs[0].fx = F[0] + 16 + w * 3; P.legs[0].fy = -52 - Math.max(0, w) * 6;
-        P.legs[1].fx = F[1] + 8 - w * 3; P.legs[1].fy = -48 - Math.max(0, -w) * 6;
+        P.bodyX = -13 * (1 - smooth(st3 / 0.6));
+        P.bobY = -Math.abs(w) * 6.5;
+        P.legs[0].fx = F[0] + 12 + w * 3; P.legs[0].fy = -33 - Math.max(0, w) * 6;
+        P.legs[1].fx = F[1] + 7 - w * 3; P.legs[1].fy = -29 - Math.max(0, -w) * 6;
         P.overlayPaw = [
-          { fx: F[0] - 28 + w * 3, fy: -152 - Math.max(0, w) * 6 },   // near paw high above the ear
-          { fx: F[1] + 14 - w * 3, fy: -146 - Math.max(0, -w) * 6 },  // far paw above the other ear
+          { fx: -2 + w * 3, fy: -112 - Math.max(0, w) * 5 },    // near paw over the ear
+          { fx: 40 - w * 3, fy: -106 - Math.max(0, -w) * 5 },   // far paw over the other ear
         ];
-        P.headY = -8; P.headRot = w * 0.04;
+        P.headY = -6; P.headRot = w * 0.04;
         P.tailMode = 'spiral'; P.eyeState = 'open';
       } else if (st < 7.6) {
         // 4 TURN AROUND: one quick full spin on the toes, then the BACK is
-        // held to the viewer (no face — ears and the back of the head only)
+        // held to the viewer (noFace — ears and the back of the head only)
         const st4 = st - 5.6;
         stand(0);
         if (st4 < 0.95) {
           const q = st4 / 0.95;
           const e = q < 0.5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2;
           P.wholeRot = e * Math.PI * 2;
-          P.bodyY = -12 - 5 * Math.sin(q * Math.PI);
-          P.legs[0].fx = F[0] + 6; P.legs[0].fy = -30;
-          P.legs[1].fx = F[1] + 4; P.legs[1].fy = -28;
+          P.bodyY = 4 - 5 * Math.sin(q * Math.PI);
+          P.legs[0].fx = F[0] + 12; P.legs[0].fy = -33 + q * 3;
+          P.legs[1].fx = F[1] + 7; P.legs[1].fy = -29 + q * 3;
           P.tailMode = 'stream'; P.eyeState = 'open';
         } else {
           P.noFace = true;
           P.bobY = -Math.abs(Math.sin((st4 - 0.95) * 4.6)) * 2;
+          P.legs[0].fx = F[0] + 12; P.legs[0].fy = -30;
+          P.legs[1].fx = F[1] + 7; P.legs[1].fy = -26;
           P.tailMode = 'wrap'; P.eyeState = 'open';
         }
       } else if (st < 9.4) {
-        // 5 SHAKE TAIL: the tail whips in big fast arcs overhead; the face
-        // comes back around halfway through the turn
-        const st5 = st - 7.6;
-        stand(0.04);
+        // 5 SHAKE TAIL: the tail whips in big fast arcs; the face comes
+        // back around part-way through
+        const st5 = st - 7.6, f = 4 * Math.PI / 1.8, w = Math.sin(st5 * f);
+        stand(0.04 * w);
         P.noFace = st5 < 0.8;
         P.tailMode = 'whip';
-        P.legs[0].fx = F[0] + 14; P.legs[0].fy = -44 + Math.sin(st5 * 9) * 6;
-        P.legs[1].fx = F[1] + 8; P.legs[1].fy = -40 - Math.sin(st5 * 9) * 6;
+        P.legs[0].fx = F[0] + 12; P.legs[0].fy = -30 + w * 5;
+        P.legs[1].fx = F[1] + 7; P.legs[1].fy = -26 - w * 5;
         P.eyeState = st5 < 0.8 ? 'open' : 'happy';
       } else {
-        // 6 FINISH!: happy squint, near paw resting BY THE CHEEK (overlay —
-        // drawn over the head), head tilt, a heart — the sheet's final pose
+        // 6 FINISH!: happy squint, near paw resting BY THE CHEEK, head
+        // tilt easing in, a heart — the sheet's final pose
         const st6 = st - 9.4;
-        stand(-0.06);
-        P.legs[0].fx = F[0] + 16; P.legs[0].fy = -52;
-        P.legs[1].fx = F[1] + 8; P.legs[1].fy = -44;
-        P.overlayPaw = { fx: F[0] + 3, fy: -108 + Math.sin(st6 * 8) * 3 };
-        P.headRot = 0.14; P.headX = 8; P.headY = -5;
+        stand(-0.06 * Math.min(1, st6 / 0.5));
+        P.legs[0].fx = F[0] + 12; P.legs[0].fy = -30;
+        P.legs[1].fx = F[1] + 7; P.legs[1].fy = -26;
+        P.overlayPaw = { fx: F[0] + 1, fy: -78 + Math.sin(st6 * 8) * 3 };
+        P.headRot = 0.14 * Math.min(1, st6 / 0.5);
         P.tailMode = 'spiral'; P.eyeState = 'happy';
         P.particles = { kind: 'heart', f: 3 };
       }
@@ -1283,13 +1296,16 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
 }
 
 // ---------------------------------------------------------------- legs
-function drawLeg(ctx, ax, ay, foot, pal, fill, near, lineCol, B) {
+function drawLeg(ctx, ax, ay, foot, pal, fill, near, lineCol, B, legK = 1) {
   B = B || BODIES.normal;
+  // v3.17: legK < 1 draws STUBBY legs — shorter limbs pull the feet toward
+  // the hip, and the strokes fatten so they read as thick kitten legs
+  const wf = 1 + (1 - legK) * 1.05;
   const l1 = B.legL1, l2 = B.legL2;
   const { kx, ky } = solveIK(ax, ay, foot.fx, foot.fy, l1, l2, -1);
-  limb(ctx, ax, ay, kx, ky, 8.5, 6, fill);
-  limb(ctx, kx, ky, foot.fx, foot.fy - 4, 6, 5, fill);
-  ell(ctx, foot.fx + 2, foot.fy - 4, 6.5, 5);
+  limb(ctx, ax, ay, kx, ky, 8.5 * wf, 6 * wf, fill);
+  limb(ctx, kx, ky, foot.fx, foot.fy - 4, 6 * wf, 5 * wf, fill);
+  ell(ctx, foot.fx + 2, foot.fy - 4, 6.5 * (1 + (1 - legK) * 0.4), 5 * (1 + (1 - legK) * 0.4));
   ctx.fillStyle = fill; ctx.fill();
   // toe hint
   const ga = ctx.globalAlpha;

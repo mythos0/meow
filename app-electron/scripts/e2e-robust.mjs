@@ -227,43 +227,8 @@ try {
 
   // ============ 7. build-status poller: REAL file + verdict-change gating ==
   await calm();
-  const statusFile = '/tmp/meow-e2e-status.txt';
-  writeFileSync(statusFile, 'all tests pass ✓\n');
-  await cat.evaluate(sf => window.meow.setSettings({ reactBuildStatus: true, statusFile: sf }), statusFile);
-  let buildHappy = null;
-  const tB = Date.now();
-  while (Date.now() - tB < 4000) {
-    const st = await cat.evaluate(() => window.__brain().state);
-    if (st === 'happy') { buildHappy = { atMs: Date.now() - tB }; break; }
-    await sleep(300);
-  }
-  ok('live: green status file -> celebration (real 5s poller)', !!buildHappy, JSON.stringify(buildHappy));
-  writeFileSync(statusFile, 'tests FAILED, 3 errors\n');
-  let buildMope = null;
-  const tM = Date.now();
-  while (Date.now() - tM < 9000) {
-    const st = await cat.evaluate(() => window.__brain().state);
-    if (st === 'mope') { buildMope = { atMs: Date.now() - tM }; break; }
-    await sleep(400);
-  }
-  ok('live: red status file -> moping (verdict change only)', !!buildMope, JSON.stringify(buildMope));
-  await cat.evaluate(() => window.meow.setSettings({ reactBuildStatus: false, statusFile: '' }));
-  await cat.screenshot({ path: path.join(OUT, 'robust_build_mope.png') }).catch(() => {});
-
-  // ============ 8. battery event shape from main (renderer reaction) ========
-  await calm();
-  const batE2 = await cat.evaluate(async () => {
-    window.__testEvent('system-event', { type: 'battery', level: 0.1, charging: false });
-    await new Promise(r => setTimeout(r, 300));
-    const low = { state: window.__brain().state, low: window.__brain()._batteryLow,
-      battery: window.__battery() };
-    window.__testEvent('system-event', { type: 'battery', level: 0.9, charging: true });
-    await new Promise(r => setTimeout(r, 300));
-    return { low, high: { low: window.__brain()._batteryLow, battery: window.__battery() } };
-  });
-  ok('battery events from main drive the curl reaction (both directions)',
-    batE2.low.state === 'curl' && batE2.low.low === true && batE2.high.low === false,
-    JSON.stringify(batE2));
+  // ============ 7/8. (v3.17: build-status file + battery reactions were
+  // REMOVED with the Reactions page — their live checks went with them) ========
 
   // ============ 9. app still healthy ============
   const alive = await cat.evaluate(() => ({

@@ -269,8 +269,7 @@ try {
 
   // ================= 3. REAR-SWAT CATCH, proven in pixels =================
   {
-    await cat.evaluate(() => window.meow.setSettings({ stalkCursor: false }));   // keep the idle cursor from competing for the cat's attention
-    await sleep(300);
+        await sleep(300);
     await park(800);
     // pin the butterfly exactly at the paw point → the first swat MUST catch
     const pin = await cat.evaluate(() => {
@@ -349,8 +348,7 @@ try {
 
   // ================= 4. DODGE + RE-HUNT =================
   {
-    await cat.evaluate(() => window.meow.setSettings({ stalkCursor: false }));
-    await sleep(300);
+        await sleep(300);
     await park(800);
     // pin FAR above the paw (260px above feet; paw reaches ~104±66) → miss.
     // Pin + hunt in ONE evaluate using the cat's own coords (no tick race).

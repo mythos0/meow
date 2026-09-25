@@ -39,9 +39,8 @@ contextBridge.exposeInMainWorld('meow', {
   devForceQuit: () => ipcRenderer.invoke('dev:force-quit'),       // v3.12 e2e-only: must be BLOCKED by the quit gate
   heartbeatPong: info => ipcRenderer.invoke('heartbeat:pong', info),   // v3.12 liveness
   importSkin: jsonText => ipcRenderer.invoke('skins:import', jsonText),
-  injectKeys: n => ipcRenderer.invoke('keys:inject', n),
+  injectKeys: null,   // v3.17: typing meter removed
   quickAction: act => ipcRenderer.invoke('quick-action', act),
-  browseStatusFile: () => ipcRenderer.invoke('status:browse'),
   // v3.14 the hidden execution log (unlocked via feedback "1234")
   submitFeedback: payload => ipcRenderer.invoke('feedback:submit', payload),
   execLogGet: () => ipcRenderer.invoke('exec-log:get'),
@@ -58,9 +57,11 @@ contextBridge.exposeInMainWorld('meow', {
       'do-action', 'reminder-fired', 'settings-changed', 'workarea-changed',
       'platforms', 'focus-reminders', 'laser-start',
       // v3.6 living-machine channels
-      'system-event', 'music', 'typing', 'cursor-idle', 'cursor-busy',
-      'new-window', 'app-focus', 'duck', 'pomodoro', 'achievement',
-      'no-walk-zones', 'photo-mode', 'dance-party', 'time-bias', 'boot-greet',
+      // v3.17: system-event / music / typing / cursor-idle / cursor-busy /
+      // new-window / app-focus / duck / time-bias were REMOVED with the
+      // Reactions features
+      'pomodoro', 'achievement',
+      'no-walk-zones', 'photo-mode', 'dance-party', 'boot-greet',
       'cat-visible',   // v3.7: pause the render loop while the cat is hidden
       'platform-rect', // v3.9: live rect of the tracked platform window
       'zone-config',   // v3.11: union bounds for the zone-selection overlay

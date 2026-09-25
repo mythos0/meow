@@ -25,15 +25,11 @@ export const DEFAULTS = {
   version: 1,
 
   // ---- v3.6 feature pack — every feature ships with an on/off toggle ----
-  // system-aware reactions
-  reactSystemSpikes: true,   // CPU/RAM spike -> startled, prowls faster
-  reactLowBattery: true,     // low battery -> curls up "to save energy"
-  timeOfDayMood: true,       // yawns & naps at night, playful by day
-  reactNewWindows: true,     // new app opens -> walks over & investigates
-  reactMusic: true,          // music playing -> bops along
-  reactApps: true,           // loafs on your editor, gets playful over games
-  reactTyping: true,         // fast typing burst -> pounce; long idle -> nap
-  stalkCursor: true,         // cursor idle nearby -> stalk & pounce it
+  // v3.17: ALL system-reaction flags (reactSystemSpikes / reactLowBattery /
+  // timeOfDayMood / reactNewWindows / reactMusic / reactApps / reactTyping /
+  // stalkCursor / reactBuildStatus / statusFile) were REMOVED at the user's
+  // request, together with the Reactions settings page. sanitize() drops
+  // them from old persisted files automatically.
   voiceCommands: true,       // v3.15: "hey cat, play music …" + transport controls
                              // (SAPI runs locally on the device; nothing is uploaded)
   // v3.10: hideDuringCalls / duckDuringCalls / hideInFullscreen were REMOVED —
@@ -47,8 +43,6 @@ export const DEFAULTS = {
   // dev extras
   pomodoro: true,            // focus-timer companion + celebration dance
   dancePartyIdle: true,      // long idle -> mini dance party (screensaver mode)
-  reactBuildStatus: false,   // watch a status file -> happy dance / mope
-  statusFile: '',            // file watched when reactBuildStatus is on
   // customization & community
   seasonalSkins: false,      // pumpkin hat in October, santa hat in December...
   achievements: true,        // unlockables tied to interaction

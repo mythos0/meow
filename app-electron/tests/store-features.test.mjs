@@ -14,12 +14,11 @@ function mkStore(initial = {}) {
 describe('v3.6 feature toggles', () => {
   test('all feature toggles exist in DEFAULTS', () => {
     const toggles = [
-      'reactSystemSpikes', 'reactLowBattery', 'timeOfDayMood', 'reactNewWindows',
-      'reactMusic', 'reactApps', 'reactTyping',
-      'stalkCursor', 'affectionSystem', 'companionCat',
+      // v3.17: all reaction toggles were removed with the Reactions page
+      'affectionSystem', 'companionCat',
       'photoMode', 'contextualSounds', 'pomodoro', 'dancePartyIdle',
-      'reactBuildStatus', 'seasonalSkins', 'achievements', 'communitySkins',
-      'globalHotkeys', 'noWalkZones',
+      'seasonalSkins', 'achievements', 'communitySkins',
+      'globalHotkeys', 'noWalkZones', 'voiceCommands',
     ];
     for (const t of toggles) {
       assert.ok(t in DEFAULTS, `missing toggle ${t}`);
@@ -45,10 +44,13 @@ describe('v3.6 feature toggles', () => {
     const b = createSettings(a.export ? { read: () => a.export(), write: () => {} } : undefined);
     assert.equal(b.get('breed'), 'grey_tabby');
   });
-  test('set/get round-trip for new keys', () => {
-    const s = mkStore();
-    s.set('statusFile', 'C:/tmp/status.txt');
-    assert.equal(s.get('statusFile'), 'C:/tmp/status.txt');
+  test('v3.17: removed reaction keys are dropped from legacy saves', () => {
+    const s = mkStore({ reactTyping: true, stalkCursor: true, statusFile: 'x', reactMusic: true });
+    for (const k of ['reactTyping', 'stalkCursor', 'statusFile', 'reactMusic', 'reactApps',
+                     'reactNewWindows', 'reactLowBattery', 'reactSystemSpikes', 'timeOfDayMood',
+                     'reactBuildStatus']) {
+      assert.ok(!(k in s.all), `${k} must not survive a v3.17 load`);
+    }
   });
 });
 

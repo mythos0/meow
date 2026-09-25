@@ -240,7 +240,7 @@ try {
   // ---------------- 6. growl_real finally audible ----------------
   await cat.evaluate(() => { window.__lastPlay = null; });
   const growl = await cat.evaluate(() => {
-    window.__testEvent('system-event', { type: 'build-bad' });
+    window.__playSfx('growl_real');   // v3.17: build-bad event is gone; test the sound itself
     return window.__lastPlayInfo();
   });
   ok('growl_real loads and plays (was a silent no-op before v3.8)',

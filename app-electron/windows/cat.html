@@ -28,7 +28,6 @@
 import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAnchor, CAT_BBOX, registerSkin } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
 import { computeRegionSize, initialOrigin, slideIfNeeded, companionLeash, chaseStep, clampOrigin, CHASE_V, DRAG_CHASE_V, dragChaseTarget, dragWindowTarget, laneHopTarget, unionWorkAreas } from '../src/region.js';
-import { batteryCrisis } from '../src/system-reactions.js';
 import { unlockedPerks } from '../src/achievements.js';
 import { zonesToScreen } from '../src/no-walk.js';
 import { spawnButterfly as bflySpawn, tickButterfly as bflyTick, butterflyCatchable, startleButterfly, swatCatchable, dodgeButterfly, HUNT_RADIUS as BFLY_HUNT_RADIUS } from '../src/butterfly.js';
@@ -69,7 +68,9 @@ let lastCursor = null;
 let pomoState = null;         // {mode, remaining, ...}
 // v3.6 battery: prefer main-process samples (sysfs/Win32_Battery), fall back
 // to navigator.getBattery; test hooks can inject too.
-let battery = null;
+// v3.17: system reactions (battery/stress/build/typing/cursor-stalk/music
+// bops/new-window/app-focus/time-of-day) were REMOVED at the user's request —
+// the cat just lives on the desktop and reacts to YOU, not to your machine.
 // v3.6 perks (from achievements) — v3.6.1: actually computed from S.unlocked
 let perks = { rainbowPet: false, sparkleLand: false, heartRain: false, dotSlayer: false };
 // v3.3 region window state
@@ -109,22 +110,57 @@ function play(name, vol = 0.9) {
   } catch {}
 }
 
-// v3.12 SOUND ARCHITECTURE — three independent voices, ZERO cancellation.
-// The old design played random/ambient meows through the SAME exclusive
-// element as the classic voice and switched its src mid-playback: every new
-// meow aborted the previous one ("the double click sound tries to play and
-// cancels 2-3 times, and then playing — it is messy"). Now:
-//   · CLICK voice        — the natural single meow, dedicated element
-//   · DOUBLE-CLICK voice — the classic variants, one element per variant
-//   · AMBIENT voice      — a 3-slot rotating pool of natural meows
-// Mutual exclusion (user rule): while a click/double-click meow is sounding,
-// ambient meows are SKIPPED — never stacked, never cut. A user click first
-// silences the ambient voice, so the two can never fight.
+// v3.17 MEOW QUEUE — meows play ONE AFTER ANOTHER, never cancel each other
+// (user rule: "in continue 3-4 meow, they are playing like canceling each
+// other, but they should play when one is complete"). The old v3.12 design
+// rotated a 3-slot ambient pool, so a burst of 4 notes re-used a slot that
+// was STILL PLAYING and reset it mid-meow — and rapid double-clicks
+// re-triggered their element with currentTime=0. Both were cancellations.
+// Now every meow request flows through ONE sequential queue:
+//   · nothing playing -> starts immediately
+//   · something playing -> the request WAITS (max 3 queued, then dropped)
+//   · user meows (click / double-click) always queue behind each other
+//   · ambient notes queue behind ambient notes, but are SKIPPED while a
+//     user meow is sounding (the v3.12 priority rule, kept)
+const MEOW_QUEUE_MAX = 3;
+const meowQueue = [];          // pending requests { el, name, vol, kind }
+let meowCur = null;            // { el, name, kind, done }
+
+function startMeowEl(req) {
+  meowCur = req; req.done = false;
+  try { req.el.pause(); } catch {}
+  try { req.el.currentTime = 0; } catch {}
+  req.el.volume = Math.max(0, Math.min(1, req.vol));
+  const finished = () => {
+    if (req.done) return;
+    req.done = true;
+    if (meowCur === req) meowCur = null;
+    const nxt = meowQueue.shift();
+    if (nxt) startMeowEl(nxt);
+  };
+  req.el.play().then(() => { req.el.addEventListener('ended', finished, { once: true }); }).catch(() => finished());
+  // if the element was already playing/ended before .then ran, ended still fires
+  if (req.el.ended) finished();
+  window.__lastPlay = { name: req.name, t: performance.now() / 1000, exclusive: req.kind === 'ambient' ? 'ambient' : 'meow' };   // e2e instrumentation
+}
+
+// enqueue (or start) one meow; kind: 'click' | 'dbl' | 'ambient'
+function requestMeow(el, name, vol, kind) {
+  if (!el) return;
+  if (meowCur) {
+    if (kind === 'ambient' && meowCur.kind !== 'ambient') return;   // ambient never delays a user meow (skipped)
+    if (meowQueue.length >= MEOW_QUEUE_MAX) return;                 // never pile up
+    meowQueue.push({ el, name, vol, kind });
+    return;
+  }
+  startMeowEl({ el, name, vol, kind });
+}
+
 const CLICK_KEY = 'meow_single';
 const DBL_KEYS = ['meow_real', 'meow_real2', 'meow_real3'];
 let voiceClick = null;
 let voiceDbl = [];          // one element per classic variant
-let ambientPool = [];       // 3 rotating natural-meow clones
+let ambientPool = [];       // dedicated ambient elements (queued, not rotated into playing each other)
 let ambientIdx = 0;
 const activeVoices = new Set();   // every voice element currently audible
 
@@ -142,57 +178,51 @@ function buildVoices() {
 }
 
 const elPlaying = el => !!el && !el.paused && !el.ended;
-// a USER meow (click / double-click) is sounding right now
-function meowBusy() { return elPlaying(voiceClick) || voiceDbl.some(elPlaying); }
+// a USER meow (click / double-click) is sounding or waiting right now
+function meowUserBusy() {
+  return !!(meowCur && meowCur.kind !== 'ambient') || meowQueue.some(r => r.kind !== 'ambient');
+}
+// anything meowing at all
+function meowBusy() { return !!meowCur || meowQueue.length > 0; }
 
-function stopAmbient() { for (const el of ambientPool) { try { el.pause(); } catch {} } }
+function stopAmbient() {
+  // v3.17: a user click silences ambient COMPLETELY — playing note AND any
+  // queued ambient notes (the v3.12 priority rule, kept)
+  for (let i = meowQueue.length - 1; i >= 0; i--) if (meowQueue[i].kind === 'ambient') meowQueue.splice(i, 1);
+  if (meowCur && meowCur.kind === 'ambient') { try { meowCur.el.pause(); } catch {} meowCur = null; }
+  for (const el of ambientPool) { try { el.pause(); } catch {} }
+}
 
 // v3.11 kept: ONE natural single meow per quick tap (meow_single.wav).
-// v3.12: dedicated element + its own toggle + it stops ambient meows first.
 function playMeowSingle(vol = 0.95) {
   if (!S.sounds || !S.soundClickMeow || !voiceClick) return;
   try {
     stopAmbient();
-    voiceClick.volume = Math.max(0, Math.min(1, vol));
-    try { voiceClick.currentTime = 0; } catch {}
-    voiceClick.play().catch(() => {});
-    window.__lastPlay = { name: 'meow_single', t: performance.now() / 1000, exclusive: 'meow' };
+    requestMeow(voiceClick, 'meow_single', vol, 'click');
   } catch {}
 }
 function stopMeowSingle() {
+  try { if (meowCur && meowCur.el === voiceClick) { meowCur.el.pause(); meowCur = null; } } catch {}
   try { if (voiceClick) { voiceClick.pause(); try { voiceClick.currentTime = 0; } catch {} } } catch {}
 }
 
-// The DOUBLE-CLICK voice — the classic v3.8 variant rotation, kept exactly
-// as it sounded (user request), now with dedicated elements: rapid restarts
-// replace each other cleanly instead of aborting a pending src load.
+// The DOUBLE-CLICK voice — the classic v3.8 variant rotation. v3.17: rapid
+// double-clicks QUEUE instead of resetting a playing variant mid-meow.
 function playMeow(vol = 0.95) {
   if (!S.sounds || !S.soundDblClickMeow || !voiceDbl.length) return;
   try {
-    stopMeowSingle();
     stopAmbient();
     const idx = Math.floor(Math.random() * voiceDbl.length);
-    const el = voiceDbl[idx];
-    for (const other of voiceDbl) if (other !== el) { try { other.pause(); } catch {} }
-    el.volume = Math.max(0, Math.min(1, vol));
-    try { el.currentTime = 0; } catch {}
-    el.play().catch(() => {});
-    window.__lastPlay = { name: DBL_KEYS[idx], t: performance.now() / 1000, exclusive: 'meow' };
+    requestMeow(voiceDbl[idx], DBL_KEYS[idx], vol, 'dbl');
   } catch {}
 }
 
-// AMBIENT voice — one natural meow from the rotating pool. A note never
-// cancels another (no src switching, no shared element), which is what made
-// random meows sound broken before.
+// AMBIENT voice — one natural meow. v3.17: burst notes QUEUE and play one
+// after another instead of fighting over the same pool slot.
 function ambientNote(vol = 0.75) {
   if (!ambientPool.length) return;
   const el = ambientPool[ambientIdx++ % ambientPool.length];
-  try {
-    el.volume = Math.max(0, Math.min(1, vol));
-    try { el.currentTime = 0; } catch {}
-    el.play().catch(() => {});
-    window.__lastPlay = { name: 'meow_single', t: performance.now() / 1000, exclusive: 'ambient' };
-  } catch {}
+  requestMeow(el, 'meow_single', vol, 'ambient');
 }
 
 // v3.11 kept: AMBIENT MEOWS at random times — usually one natural meow,
@@ -207,13 +237,14 @@ function scheduleAmbientMeow() {
 }
 function fireAmbientMeow() {
   try {
-    if (S.sounds && S.randomMeows && brain && !frozen && !['sleep', 'curl'].includes(brain.state) && !meowBusy()) {
+    if (S.sounds && S.randomMeows && brain && !frozen && !['sleep', 'curl'].includes(brain.state) && !meowUserBusy()) {
       if (Math.random() < 0.3) {
-        // continuous meowing: a short burst at random spacing
+        // continuous meowing: a short burst at random spacing — v3.17: the
+        // notes QUEUE and play sequentially (they used to fight over slots)
         const n = 2 + Math.floor(Math.random() * 3);   // 2–4
         let t = 0;
         for (let i = 0; i < n; i++) {
-          setTimeout(() => { if (S.sounds && S.randomMeows && !meowBusy()) ambientNote(0.8); }, t);
+          setTimeout(() => { if (S.sounds && S.randomMeows && !meowUserBusy()) ambientNote(0.8); }, t);
           t += 340 + Math.random() * 320;
         }
       } else {
@@ -274,8 +305,6 @@ async function init() {
   // scan interval and then snapping (the other half of the "rendering jump").
   window.meow.on('platform-rect', r => { if (brain) brain.updateTrackedPlatform(r); });
   // ---------------- v3.6 living-on-your-machine channels ----------------
-  window.meow.on('system-event', onSystemEvent);
-  window.meow.on('music', onMusic);
   // v3.16: system-wide "music is playing" flag — a double-click holds the
   // meow while a song is actually on (user: "when double click music is
   // playing, that time shouldn't play single meow sound"). The flag lives at
@@ -284,11 +313,6 @@ async function init() {
   window.meow.on('music-state', d => { musicPlaying = !!(d && d.playing); });
   window.meow.on('voice-bubble', d => { if (d && d.text) showBubble(d.text, 3800); });   // v3.15 voice feedback
   window.meow.on('voice-salute', () => { if (brain) brain.saluteNow?.(); });   // v3.15: paw to the brow when a command is heard
-  window.meow.on('typing', onTyping);
-  window.meow.on('cursor-idle', onCursorIdle);
-  window.meow.on('cursor-busy', onCursorBusy);
-  window.meow.on('new-window', onNewWindow);
-  window.meow.on('app-focus', onAppFocus);
   window.meow.on('pomodoro', onPomodoro);
   window.meow.on('achievement', showAchievement);
   window.meow.on('no-walk-zones', zones => {
@@ -298,7 +322,6 @@ async function init() {
   });
   window.meow.on('photo-mode', () => photoMode());
   window.meow.on('dance-party', startDanceParty);
-  window.meow.on('time-bias', mode => { if (!S.timeOfDayMood) return; brain?.setTimeBias(mode); });
   window.meow.on('boot-greet', () => brain?.greet());
   window.meow.on('workarea-changed', async () => {
     const s2 = await window.meow.getSettings();
@@ -312,10 +335,7 @@ async function init() {
   });
   applyHat();
   applyCompanion(S.companionCat);
-  applyTimeBias();
   refreshPerks();
-  setInterval(applyTimeBias, 60_000);
-  pollBattery();
   scheduleButterfly();
   // v3.7: stop painting entirely while the cat is hidden — and since v3.10 the
   // ONLY thing that can hide it is an explicit user action (tray / Ctrl+Alt+C).
@@ -339,7 +359,6 @@ async function init() {
       });
     } catch { /* never die on the watchdog */ }
   });
-  if (S.timeOfDayMood) brain.setTimeBias((new Date().getHours() >= 22 || new Date().getHours() < 7) ? 'night' : 'day');
   rafId = requestAnimationFrame(loop);
 }
 
@@ -372,124 +391,10 @@ function applyHat() {
   if (companion) companion.hat = hat;
 }
 
-// ---------------------------------------------------------- time of day
-function applyTimeBias() {
-  if (!brain) return;
-  if (!S.timeOfDayMood) { brain.setTimeBias('day'); return; }
-  const h = new Date().getHours();
-  brain.setTimeBias((h >= 22 || h < 7) ? 'night' : 'day');
-}
-
-// ---------------------------------------------------------- battery
-async function pollBattery() {
-  try {
-    if (navigator.getBattery && (!battery || battery.source !== 'test')) {
-      const b = await navigator.getBattery();
-      if (b) {
-        // v3.6.1: read fresh values every poll (the old code snapshotted once,
-        // so unplugging the charger was never noticed). Never clobber an
-        // injected/test value.
-        if (!battery || battery.source !== 'nav') battery = { level: b.level, charging: b.charging, source: 'nav' };
-        else { battery.level = b.level; battery.charging = b.charging; }
-      }
-    }
-  } catch { /* no battery API — desktop PC */ }
-  applyBatteryCrisis();
-  setTimeout(pollBattery, 45_000);
-}
-
-// ---------------------------------------------------------- v3.6 events
-function onSystemEvent(ev) {
-  if (!brain) return;
-  if (ev.type === 'stress') {
-    brain.setStress(true, 12_000);
-    brain.emote = { kind: 'exclaim', t0: brain.t };
-  } else if (ev.type === 'build-ok') {
-    brain.celebrate();
-    sfx('chirp', 0.6);
-    showBubble('✅ build green — the cat approves', 3600);
-  } else if (ev.type === 'build-bad') {
-    brain.mopeNow();
-    sfx('growl_real', 0.18);
-    showBubble('❌ build red — the cat is not amused', 3600);
-  } else if (ev.type === 'battery') {
-    // v3.6.1: real battery samples from main (sysfs / Win32_Battery)
-    battery = { level: ev.level, charging: ev.charging };
-    applyBatteryCrisis();
-  }
-}
-
-// central battery reaction — used by both main pushes and the navigator poll
-function applyBatteryCrisis() {
-  if (!brain || !battery) return;
-  if (!S.reactLowBattery) {
-    if (brain.state === 'curl' && brain._batteryLow) { brain.setBatteryLow(false); brain.emote = { kind: 'star', t0: brain.t }; }
-    return;
-  }
-  const crisis = batteryCrisis(battery.level, battery.charging);
-  if (crisis && !brain._batteryLow) {
-    brain.curlUp();
-    brain.emote = { kind: 'battery', t0: brain.t };
-    showBubble('🔋 Low battery — saving energy with you', 4000);
-  } else if (!crisis && brain._batteryLow) {
-    brain.setBatteryLow(false);
-    brain.emote = { kind: 'star', t0: brain.t };
-  }
-}
-
-function onMusic(m) {
-  if (!brain) return;
-  if (m.action === 'bop') { brain.setMusic(true); sfx('dance_loop', 0.18); }
-  else if (m.action === 'excited') { brain.emote = { kind: 'star', t0: brain.t }; }
-  else if (m.action === 'stop') { brain.setMusic(false); }
-}
-
-function onTyping(t) {
-  if (!brain) return;
-  if (t.action === 'pounce') {
-    if (brain.stalk && brain.stalk.kind === 'butterfly') return;   // v3.13: mid butterfly-hunt
-    // pounce toward the "keyboard" — the middle of the CURRENT lane (v3.13:
-    // used to be the primary's center, half a screen away on monitor 2)
-    const kx = O.x + REGION.w / 2 + (Math.random() - 0.5) * 200;
-    const ky = brain.groundY - 30;
-    if (['idle', 'sit', 'loaf', 'groom', 'walk'].includes(brain.state)) {
-      if (brain.startStalk(kx, ky)) stalkWasCursor = true;   // v3.6.1: only when the stalk actually started
-    }
-  } else if (t.action === 'nap') {
-    if (['idle', 'sit', 'loaf'].includes(brain.state)) brain.sleepNow();
-  }
-}
-
-function onCursorIdle(p) {
-  lastCursor = p;
-  if (!brain || !S.stalkCursor) return;
-  if (brain.stalk && brain.stalk.kind === 'butterfly') return;   // v3.13: never steal a butterfly hunt
-  const d = Math.hypot(p.x - brain.x, p.y - brain.baseY);
-  if (d < 340 && ['idle', 'sit', 'loaf', 'groom', 'walk'].includes(brain.state)) {
-    if (brain.startStalk(p.x, p.y)) stalkWasCursor = true;   // v3.6.1: platform cats decline
-  }
-}
-function onCursorBusy(p) {
-  lastCursor = p;
-  if (brain && brain.state === 'stalk' && brain.stalk && brain.stalk.kind !== 'butterfly') brain.stopStalk();   // "it moved!"
-}
-
-function onNewWindow(w) {
-  if (brain && S.reactNewWindows) brain.investigate(w.x);
-}
-
-function onAppFocus(ev) {
-  if (!brain || !S.reactApps) return;
-  if (ev.kind === 'editor') {
-    // curl up on top of the editor while you code
-    if (['walk', 'idle', 'sit', 'loaf'].includes(brain.state)) {
-      brain.goToPlatform(ev.rect);
-    }
-  } else if (ev.kind === 'game') {
-    brain.celebrate();
-    setTimeout(() => { if (brain) { brain._enter('zoomies', 2); } }, 1800);
-  }
-}
+// v3.17: the v3.6 system-reaction handlers (stress, build verdicts, battery
+// crisis, music bops, typing pounce/nap, cursor stalk, new-window and
+// app-focus investigations) were REMOVED at the user's request — together
+// with the Reactions settings page and every poller that fed them.
 
 function onPomodoro(p) {
   pomoState = p;
@@ -711,9 +616,7 @@ function applySettings(kv) {
     applyHat();
   }
   if (kv.companionCat !== undefined) applyCompanion(!!kv.companionCat);
-  if (kv.timeOfDayMood !== undefined) applyTimeBias();
   if (kv.unlocked !== undefined || kv.achievements !== undefined) refreshPerks();
-  if (kv.reactLowBattery !== undefined) applyBatteryCrisis();   // v3.6.1: re-check on toggle
   if ((kv.noWalkZoneList !== undefined || kv.noWalkZones !== undefined) && brain) {
     const zones = S.noWalkZones === false ? [] : (S.noWalkZoneList || []);
     brain.setNoWalkZones(zonesToScreen(zones, brain.bounds));
@@ -1425,9 +1328,7 @@ window.__dragState = () => ({ dragging, mainDragActive, downOnCat, dragMoved, ha
 window.__stopButterfly = () => { clearTimeout(butterflyTimer); butterflyTimer = null; return true; };   // e2e: pin spawns to manual (deterministic suites)
 window.__pinButterfly = (x, y) => { bflyPin = (Number.isFinite(x) && Number.isFinite(y)) ? { x, y } : null; return !!bflyPin; };
 // ---------------- v3.6 test hooks ----------------
-window.__setBattery = (level, charging) => { battery = { level, charging, source: 'test' }; };
-window.__battery = () => battery;
-window.__pollBattery = () => pollBattery();
+// v3.17: battery seams REMOVED with the battery reaction.
 window.__setCursor = (x, y) => { lastCursor = { x, y }; };
 window.__companion = () => companion && { x: companion.brain.x, state: companion.brain.state };
 window.__companionBrain = () => companion && companion.brain;
@@ -1454,9 +1355,6 @@ window.__clampBox = (el, x, y) => clampBox(el, x, y);
 // e2e: dispatch a main-process event through the real handlers
 window.__testEvent = (channel, data) => {
   const map = {
-    'system-event': onSystemEvent, 'music': onMusic, 'typing': onTyping,
-    'cursor-idle': onCursorIdle, 'cursor-busy': onCursorBusy,
-    'new-window': onNewWindow, 'app-focus': onAppFocus,
     'pomodoro': onPomodoro, 'achievement': showAchievement,
     'no-walk-zones': zones => {
       if (!brain) return;
@@ -1466,13 +1364,20 @@ window.__testEvent = (channel, data) => {
     'photo-mode': () => photoMode(), 'dance-party': startDanceParty,
     'reminder-fired': showReminder,
     'platform-rect': r => { if (brain) brain.updateTrackedPlatform(r); },   // v3.9 e2e
-    'time-bias': mode => { if (!S.timeOfDayMood) return; brain?.setTimeBias(mode); },
     'boot-greet': () => brain?.greet(),
   };
   const fn = map[channel];
   if (fn) { fn(data); return true; }
   return false;
 };
+// v3.17 e2e: pump N meow requests through the REAL queue (sequential, never
+// canceling — the burst path is exactly what this exercises)
+window.__testMeow = (n = 3) => {
+  for (let i = 0; i < Math.max(1, Math.min(6, n | 0)); i++) ambientNote(0.6);
+  return { queued: meowQueue.length, cur: !!meowCur };
+};
+window.__meowQueueState = () => ({ cur: !!meowCur, queued: meowQueue.length });
+window.__playSfx = name => play(name, 0.3);   // v3.17 e2e: contextual sounds without the removed system events
 </script>
 </body>
 </html>

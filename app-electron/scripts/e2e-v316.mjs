@@ -227,7 +227,14 @@ try {
     await cat.evaluate(() => window.meow.voiceTestMusic(false));
     await sleep(500);
     await dblclick();
-    const r1 = await lastPlay();
+    // v3.17: meows QUEUE behind a still-playing one, so poll for the NEW play
+    let r1 = null;
+    const tGate = Date.now();
+    while (Date.now() - tGate < 9000) {
+      const cur = await lastPlay();
+      if (cur && (!m0 || cur.t > m0.t)) { r1 = cur; break; }
+      await sleep(150);
+    }
     ok('MEOW GATE: when the music stops, the meow comes back',
       !!r1 && !!m0 && r1.t > m0.t, JSON.stringify({ m0, r1 }));
   }
@@ -246,7 +253,13 @@ try {
         const g = ctx.getImageData(0, 0, 300, 240).data;
         const alphaAt = (x, y) => g[(y * 300 + x) * 4 + 3];
         const rgbAt = (x, y) => { const i = (y * 300 + x) * 4; return [g[i], g[i + 1], g[i + 2]]; };
-        let top = -1;
+        let top = -1, left = -1, right = -1;
+        for (let x = 0; x < 300; x++) {
+          for (let y = 0; y < 240; y++) if (alphaAt(x, y) > 40) {
+            if (left < 0) left = x;
+            right = x; break;
+          }
+        }
         for (let y = 0; y < 240 && top < 0; y++) {
           for (let x = 0; x < 300; x++) if (alphaAt(x, y) > 40) { top = y; break; }
         }
@@ -256,10 +269,12 @@ try {
           const [r, gr, b] = rgbAt(x, y);
           if (gr > r + 18 && gr > b + 18 && gr > 90) greenEyes++;
         }
-        return { top, greenEyes };
+        return { top, left, right, center: (left + right) / 2, greenEyes };
       };
       return {
-        step: mk(0.5),          // phase 1 — step right
+        step: mk(1.7),          // phase 1 boundary — swing 0, glided right (bodyX +13)
+        stepLate: mk(1.7),      // (alias kept for the old name)
+        leftEnd: mk(3.4),       // phase 2 boundary — swing 0, glided left (bodyX -13)
         handsUp: mk(4.5),       // phase 3 — hands up
         back: mk(6.9),          // phase 4 — turn around (back held)
         face: mk(4.5),          // face frame for the eye comparison
@@ -267,8 +282,11 @@ try {
         finish: mk(10.2),       // phase 6 — finish!
       };
     });
-    ok('DANCE: hands-up reaches clearly HIGHER than the step frame',
-      dance.handsUp.top >= 0 && dance.handsUp.top < dance.step.top - 18,
+    ok('DANCE: the steps really TRAVEL — sprite center shifts ~26px between the right/left boundary frames (bodyX)',
+      Math.abs(dance.leftEnd.center - dance.step.center) > 12,
+      JSON.stringify({ right: dance.step.center, left: dance.leftEnd.center }));
+    ok('DANCE: the hands-up peak is COMPACT (v3.17 short legs — no 18px stilt tower)',
+      dance.handsUp.top >= 0 && Math.abs(dance.handsUp.top - dance.step.top) <= 10,
       JSON.stringify({ stepTop: dance.step.top, handsUpTop: dance.handsUp.top }));
     ok('DANCE: the turn-around frame hides the face (green eye pixels vanish)',
       dance.back.greenEyes <= 2 && dance.face.greenEyes > 6,

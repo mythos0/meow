@@ -328,8 +328,7 @@ try {
 
   // ================= 4. REAL-HUNT GEOMETRY: dip cycle =================
   {
-    await cat.evaluate(() => window.meow.setSettings({ stalkCursor: false }));
-    await sleep(300);
+        await sleep(300);
     // park the cat and pin a butterfly at the DIP FLOOR (~124px up): the
     // hunt must end in a real catch through the full stalk→rear→swat path
     const park = x => cat.evaluate(x0 => {

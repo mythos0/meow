@@ -8,7 +8,7 @@
 
 'use strict';
 
-import { resolveMove, filterPlatforms as _fp, rectsIntersect } from './no-walk.js';
+import { resolveMove, blockedAt, filterPlatforms as _fp, rectsIntersect } from './no-walk.js';
 const filterPlatforms = _fp;
 
 export function mulberry32(seed) {
@@ -144,6 +144,8 @@ export class CatBrain {
     this._batteryLow = false;     // low battery -> curl up to save energy
     this._zones = [];             // no-walk zones (screen coords)
     this._scale = 1;
+    this._escaping = false;       // v3.17: trapped-in-zone escape in progress
+    this._lastFlip = null;        // v3.17: blocked-turn cooldown (anti-flicker)
   }
 
   // ---------- v3.6 tuning API (called by cat.html via IPC events) ----------
@@ -661,19 +663,62 @@ export class CatBrain {
 
   // zone-aware horizontal move: returns true when the move was blocked and
   // the cat turned around (used by ground strolls)
+  // v3.17 FLICKER FIX — "the cat is moving both sides, stuck at same place,
+  // flickering so much": when the cat stands INSIDE a no-walk zone (a zone
+  // drawn over it, or zones pinching both sides), resolveMove refuses EVERY
+  // direction and this used to flip dir on every single tick — a 60Hz
+  // left/right flicker pinned to one spot. Now:
+  //   · trapped inside a zone -> ESCAPE: walk (zones ignored) toward the
+  //     nearest outside point, keeping the direction stable
+  //   · ordinary blocked steps -> turn with a 0.45s cooldown, never per-tick
   _moveX(dx) {
+    // escaping: zones are ignored until the cat rect is clear of them
+    if (this._escaping && this._zones.length) {
+      if (!blockedAt(this._zones, this.x, this.baseY, this._scale)) {
+        this._escaping = false;
+      } else {
+        this.x = this.x + this.dir * Math.abs(dx);   // v3.17: step TOWARD the escape target
+        return false;
+      }
+    }
     const nx = this.x + dx;
     let fx = null;
     if (this._zones.length) {
       fx = resolveMove(this._zones, this.x, nx, this.baseY, this._scale);
     }
     if (fx != null) {
+      if (fx === this.x) {
+        // fully trapped — resolveMove refuses every direction
+        const esc = this._nearestEscapeX();
+        if (esc != null && esc !== this.x) {
+          this.dir = esc > this.x ? 1 : -1;
+          this._escaping = true;
+          this.x = this.x + this.dir * Math.abs(dx);   // first escape step
+          return false;
+        }
+      }
       this.x = Math.max(this.minX + 20, Math.min(this.maxX - 20, fx));
-      this.dir *= -1;
+      const now = this.t;
+      if (this._lastFlip == null || now - this._lastFlip >= 0.45) {
+        this.dir *= -1;
+        this._lastFlip = now;
+      }
       return true;
     }
     this.x = nx;
     return false;
+  }
+
+  // nearest x that clears every zone at the cat's feet level (escape target)
+  _nearestEscapeX() {
+    const buf = 52 * (this._scale || 1) + 12;   // cat body half-width + fur + margin
+    let best = null;
+    for (const z of this._zones) {
+      const L = z.x - buf, R = z.x + z.w + buf;
+      if (L >= this.minX && (best == null || Math.abs(L - this.x) < Math.abs(best - this.x))) best = L;
+      if (R <= this.maxX && (best == null || Math.abs(R - this.x) < Math.abs(best - this.x))) best = R;
+    }
+    return best;
   }
 
   // ------------------------------------------------------------ tick

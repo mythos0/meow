@@ -331,3 +331,33 @@ lands on), plus the existing reminders, auto-start, topmost enforcement and warm
   displays (`MEOWCAT_FAKE_DISPLAYS`) and a deterministic cursor (`MEOWCAT_FAKE_CURSOR`) and
   proves the drag across the seam, the auto-walk hop, the zone base, the sound toggles + mutual
   exclusion, the silent walk, and the quit gate — 29 checks.
+
+---
+
+## 13. v3.17.0 — the "the cat finally hears you, the exact dance" release
+
+**VOICE — the real root cause.** The user's exec log showed `web speech error: network`. Two hard facts: (1) Chromium's Web Speech API can never work in a stock Electron build (Electron ships no Google speech API key — 'network' is its permanent verdict), and (2) the v3.16 refactor of `main.js` called `createVoiceListener()` **without a `spawnFn`**, so the moment the offline engine engaged, the manager called `null(...)`, caught its own TypeError and respawned into the same wall forever (`spawn-failed`) — the PowerShell listener never spawned once in production. Dead primary + dead fallback = "voice cmd not works at all". The fix:
+
+- `main.js` passes a real `spawnFn`; `voice-listener.js` additionally guards a missing one as a named, reported `no-spawn-fn` condition (never a silent loop).
+- **Both engines arm IN PARALLEL** the moment voice commands are enabled. The offline Windows SAPI listener (v3.16-hardened: recognizers enumerated, en-US preferred, grammar culture = picked culture, UTF-8 stdout, failures reported) is the workhorse; it needs no network and no API keys.
+- The hidden `voice.html` web engine still starts — on builds where Chromium speech works its phrases **win** via the `webHealthy()` gate (pure `acceptEnginePhrase(engine, webHealthy)`); it reports its status on **every** `onstart` plus a **5s heartbeat**, so health is never stale. Its `network` errors are journaled, not fatal.
+- Engine errors (`no-recognizer`, `grammar-failed`, `no-mic`, …) stream to the exec log via the new `onError` hook; the Settings Voice card shows which recognizer is actually listening.
+
+**DANCE — matched to the reference sheet, step by step.** The user: "the leg is too long… render and draw the movement exact steps like the image". The routine keeps the six reference steps (Step Right → Step Left → Hands Up → Turn Around → Shake Tail → Finish) but the geometry is rebuilt:
+
+- **`legK` channel**: the dance draws **stubby legs** (legK 0.74) — shorter limbs with fattened strokes and bigger paws — on a **low compact body** (bodyY 4, rot −0.52, rounder squash). No more stretched stilts.
+- **`bodyX` channel**: steps 1–2 really **TRAVEL** — the whole sprite (shadow included) glides +13px right, then −13px left, instead of rocking in place.
+- **Boundary continuity**: every oscillator completes whole half-cycles per phase, so `sin` is 0 at each phase seam; lean/head/paw baselines match hand-to-hand. The v3.16 frame-zero pose snaps (bodyRot jumped ~12° at every boundary) are gone — `poseFor` is verified continuous within 0.03 rad / 1.5 px across every boundary.
+
+**FLICKER — "moving both sides, stuck at same place".** Two roots, both fixed:
+
+- The dance snaps above (the visible one the user saw constantly).
+- A real brain bug: a cat standing **inside a no-walk zone** got `resolveMove() === x` for every direction and flipped `dir` **every tick** — a 60 Hz left/right vibration pinned to one spot. Now `_moveX` detects the trap, picks the **nearest outside point** (`_nearestEscapeX`) and walks out with zones ignored (`_escaping`), direction held; ordinary blocked turns have a **0.45 s flip cooldown**.
+
+**MEOW QUEUE — "they are canceling each other".** The v3.12 design rotated a 3-slot ambient pool (a 4-note burst reset a still-playing slot) and rapid double-clicks re-triggered their element with `currentTime = 0` — both cancellations. Every meow now flows through **one sequential FIFO queue** (`requestMeow`/`startMeowEl`): user meows always queue (max 3 pending, then drop); ambient notes queue behind ambient notes and are still skipped (not delayed) while a *user* meow sounds; a user click silences ambient completely (playing + queued). The double-click meow gate (hold the meow while SMTC reports real music) keeps its own always-on `music-watcher` feed.
+
+**POMODORO — realtime countdown.** The heartbeat broadcast fired every **5th** second (`++pomoTickN % 5`), so the 🍅 badge and the Settings timer jumped 5s at a time. It now broadcasts **every second**.
+
+**SETTINGS — Reactions removed; Focus & Reminders moved home.** At the user's request the entire Reactions feature set is gone: CPU/RAM spikes, low battery, time-of-day mood, new-window investigator, editor loaf & game hype, typing pounce + global keyboard hook, cursor stalking, music bops, build-status file watcher — `src/sys-monitor.js`, `src/typing-hook.js`, `typing-hook-child.cjs` deleted; `system-reactions.js` shrinks to `shouldDanceParty` (dance party is a Behavior toggle, not a reaction); the preload channel whitelist, renderer handlers and every poller are removed; `sanitize()` drops the legacy keys from persisted files. The settings nav loses "Reactions" and "Focus & Reminders" (9 pages); the **Pomodoro card and the Reminders editor now live on the homepage**.
+
+**Tests.** +19 unit (`tests/v317.test.mjs`: no-spawn-fn guard, real spawnFn + parallel arming pins, engine gate, dance legK/bodyX/continuity, zone-trap escape + flip cooldown, reactions-removed contract, legacy-key sanitize, 1s pomodoro cadence); v316 dance assertions retuned to the compact geometry; reaction suites pruned with the feature (`features.test.mjs` keeps the dance-party describe; sys-monitor/typing-hook suites deleted with their sources); e2e suites updated for the new reality (2 renderers at rest: cat + hidden voice engine). **777 checks green**: 357 unit + 89×2 visual + 331 e2e (linux 44, robust 17, dual 29, v36 27, v37 9, v38 11, v39 6, v311 30, v313 21, v314 31, v315 31, v316 21, v317 23).

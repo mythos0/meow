@@ -115,6 +115,7 @@ export function createVoiceListener(opts = {}) {
   const onPhrase = opts.onPhrase || (() => {});
   const onDown = opts.onDown || (() => {});
   const onStatus = opts.onStatus || (() => {});
+  const onError = opts.onError || (() => {});   // v3.17: engine failures reach the exec log
   const minConfidence = Number.isFinite(opts.minConfidence) ? opts.minConfidence : 0.45;
   let child = null;
   let wanted = false;
@@ -136,6 +137,15 @@ export function createVoiceListener(opts = {}) {
 
   function spawnChild() {
     if (!wanted || child || platform !== 'win32') return;
+    // v3.17 GUARD: a missing spawnFn used to throw inside the try below,
+    // get caught as 'spawn-failed' and respawn into the same wall forever —
+    // the silent death of the whole voice feature in v3.16. Now it is a
+    // named, reported condition.
+    if (typeof spawnFn !== 'function') {
+      lastError = 'no-spawn-fn';
+      try { onError('no-spawn-fn'); } catch { }
+      return;
+    }
     try {
       child = spawnFn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', VOICE_SCRIPT],
         { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -156,7 +166,7 @@ export function createVoiceListener(opts = {}) {
         if (!parsed) continue;
         if (parsed.ready) { attempt = 0; lastError = ''; continue; }
         if (parsed.status) { engineInfo = parsed.engine ? `${parsed.engine} (${parsed.culture})` : 'sapi'; try { onStatus(parsed); } catch { } continue; }
-        if (parsed.error) { lastError = parsed.error; continue; }
+        if (parsed.error) { lastError = parsed.error; try { onError(parsed.error); } catch { } continue; }
         if (parsed.text && parsed.confidence >= minConfidence) {
           try { onPhrase(parsed.text, parsed.confidence); } catch { /* never breaks us */ }
         }
