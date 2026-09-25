@@ -328,7 +328,7 @@ export function drawCat(ctx, opts) {
   // v3.18: a store DRESS covers the torso — drawn inside the body transform
   // so it rotates/squashes with the cat, before the near legs (which stay in
   // front of the skirt, like a real dress over legs).
-  if (opts.dress) drawDress(ctx, opts.dress, B, P);
+  if (opts.dress && DRESSES.includes(opts.dress)) drawDress(ctx, opts.dress, B, P);   // v3.18 hard: unknown ids ignored (used to fall back to red)
 
   // rim light top
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';

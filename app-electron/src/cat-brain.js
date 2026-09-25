@@ -791,6 +791,10 @@ export class CatBrain {
           // v3.13: stalkBoost lets a butterfly hunt creep faster than the
           // sleepy cursor-stalk (a butterfly will not wait all day)
           this._moveX(Math.sign(dxs) * Math.min(Math.abs(dxs), this.speed * 0.55 * (this.stalkBoost || 1) * sf * dt));
+          // v3.18 hard: the cursor can sit past the roam edge — the stalk
+          // creep must NOT walk the cat out of its lane (walk/run clamp via
+          // _clampAndTurn; the stalk used to bypass it and x escaped maxX)
+          this._clampAndTurn();
           this.jumpY = -Math.abs(Math.sin(this.t * 8)) * 1.5;   // slinky low bob
         } else if (this.stalk.kind === 'butterfly') {
           // v3.14 THE REAL-CAT CATCH: in paw reach — the cat rears up onto
@@ -868,6 +872,9 @@ export class CatBrain {
         const sp = this.runSpeed * 0.85;
         if (dist > 46) {
           this.x += Math.sign(dx) * Math.min(Math.abs(dx), sp * dt);
+          // v3.18 hard: the dot can sit past the roam edge — clamp like the
+          // other movers so a laser chase never drags the cat out of its lane
+          this._clampAndTurn();
           if (Math.abs(dy) > 90) {
             this.baseY += Math.sign(dy) * Math.min(Math.abs(dy), sp * 0.6 * dt);
             this.baseY = Math.max(this.bounds.y + 120, Math.min(this.groundY, this.baseY));

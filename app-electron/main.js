@@ -1,6 +1,6 @@
 // main.js — MeowCat Electron main process (ESM)
 'use strict';
-import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell, globalShortcut, powerMonitor, dialog, utilityProcess, net, session } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell, globalShortcut, powerMonitor, dialog } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -952,7 +952,6 @@ ipcMain.handle('close-window', (_e, name) => {
   // v3.18 process diet: closing Settings DESTROYS the window instead of
   // keeping a hidden renderer warm — one less process the moment the user
   // closes it (reopening costs ~150ms, the pool recreates on demand).
-  console.log('[meowcat] close-window IPC', name, new Error().stack.split('\n')[2]);
   try { fastWins.closeAll(); } catch { /* ignore */ }
 });
 
