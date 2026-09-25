@@ -62,7 +62,7 @@ describe('v3.6 brain: music bop', () => {
     b.setMusic(true);
     b.dance();                     // manual dance interrupts
     assert.equal(b.state, 'dance');
-    for (let i = 0; i < 400; i++) b.tick(0.02);
+    for (let i = 0; i < 500; i++) b.tick(0.02);   // 10s — past the v3.15 8.6s full routine
     assert.equal(b.state, 'bop', 'returns to bop after the dance');
   });
 });

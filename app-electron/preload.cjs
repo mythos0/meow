@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('meow', {
   submitFeedback: payload => ipcRenderer.invoke('feedback:submit', payload),
   execLogGet: () => ipcRenderer.invoke('exec-log:get'),
   execLogPush: entry => ipcRenderer.send('exec-log:push', entry),
+  // v3.15 voice commands
+  voiceGet: () => ipcRenderer.invoke('voice:get'),
+  voiceSet: on => ipcRenderer.invoke('voice:set', on),
+  voiceInject: text => ipcRenderer.invoke('voice:inject', text),   // MEOWCAT_TEST only
+  voiceState: () => ipcRenderer.invoke('voice:state'),             // MEOWCAT_TEST only
   on: (channel, fn) => {
     const allowed = [
       'do-action', 'reminder-fired', 'settings-changed', 'workarea-changed',
@@ -60,6 +65,9 @@ contextBridge.exposeInMainWorld('meow', {
       'drag-pos',      // v3.12: main-driven drag cursor stream
       'heartbeat',     // v3.12: liveness ping from main
       'exec-log:entry',// v3.14: real-time execution-log stream
+      'voice-bubble',  // v3.15: spoken-command feedback on the cat
+      'voice-salute',  // v3.15: the salute pose when a command is heard
+      'voice-state',   // v3.15: voice listener status for the settings page
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));

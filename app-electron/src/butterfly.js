@@ -25,8 +25,11 @@ export const CATCH_DX = 95;
 export const CATCH_DY = 180;
 // v3.14 the rearing swat: paw-point reach (px) — the cat stands on its hind
 // legs and a swat catches the butterfly when it is within this radius of the
-// striking paw (which hovers ~105px above the feet, just over the head)
-export const SWAT_RADIUS = 66;
+// striking paw (which hovers ~105px above the feet, just over the head).
+// v3.15: tightened 66 → 54 — at 66 the first apex connected almost every
+// time (the user saw the cat "just eat" the butterfly: no stalk drama, no
+// dodges). 54 makes a high butterfly a genuine MISS.
+export const SWAT_RADIUS = 54;
 
 const HUES = [28, 96, 200, 320, 48];
 
@@ -76,11 +79,22 @@ export function tickButterfly(bf, { dt, now, lane, groundY, catX, rand = Math.ra
     if (now >= bf.fleeUntil) {
       bf.state = 'cruise';
       bf.vx = Math.sign(bf.vx || 1) * (48 + rand() * 26);
+      // v3.15: the hunter is still right there — go straight back to the
+      // hunted hover (with its dips) instead of calmly cruising out of
+      // reach. Without this the cat burned its 3 swats at a butterfly that
+      // had settled high in the air and the hunt always ended in escape.
+      if (Number.isFinite(catX) && Math.abs(bf.x - catX) < 340) bf.state = 'hunted';
     }
   } else if (bf.state === 'hunted') {
-    // nervous hover near the hunter: forward speed decays to a wobble and
-    // the butterfly DIPS toward pounce reach — the tempting target a real
-    // pounce can actually catch
+    // nervous hover near the hunter. v3.15 THE REAL-HUNT ALTITUDE: the
+    // butterfly hovers HIGH — above the rearing paw's reach — and only
+    // periodically DIPS into it. The dip cycle is deterministic (driven by
+    // wob) so tests can pin it: over every 3.4s the butterfly spends ~1.3s
+    // descending into paw reach (bottom ≈ 78–118px above the ground, the
+    // paw strikes at ~104). A swat that connects is therefore EARNED — the
+    // cat must rear while the prey is dipping; every other swat misses and
+    // the butterfly dodges (cat.html), exactly the stalk → rear → swat →
+    // dodge → chase → rear loop the hunt is supposed to be.
     bf.vx = bf.vx * Math.max(0, 1 - 2.4 * dt) + Math.sin(wob * 1.7) * 16 * dt;
     bf.x += bf.vx * dt;
     // flutter around the hunter instead of drifting off
@@ -88,8 +102,20 @@ export function tickButterfly(bf, { dt, now, lane, groundY, catX, rand = Math.ra
       const dx = bf.x - catX;
       if (Math.abs(dx) > 210) bf.vx -= Math.sign(dx) * 260 * dt;
     }
-    const dip = g - 88 + Math.sin(wob) * 34;          // 54..122 above the ground
-    bf.y += (dip - bf.y) * Math.min(1, 1.8 * dt);
+    const DIP_T = 3.4, DIP_LEN = 1.3;
+    const ph = (wob % DIP_T) / DIP_T;                       // 0..1 cycle
+    const dipT = DIP_LEN / DIP_T;
+    let dipWin = 0;
+    if (ph < dipT) {
+      // trapezoid: sink ~0.39s, HOLD at the bottom ~0.5s, rise ~0.39s — the
+      // hold lets the eased position actually REACH the dip floor (a plain
+      // sine window lags ~40px above it and the paw could never connect)
+      const ph2 = ph / dipT;
+      dipWin = Math.min(ph2 / 0.3, (1 - ph2) / 0.3, 1);
+    }
+    const base = g - 192 + Math.sin(wob * 0.9) * 24;         // 168..216 up: OUT of reach
+    const dip = base + ((g - 88) - base) * dipWin;           // sink toward ~88px up
+    bf.y += (dip + Math.cos(wob * 2.3) * 7 - bf.y) * Math.min(1, 2.2 * dt);
     const lo = g - 260, hi = g - 40;
     if (bf.y < lo) bf.y = lo;
     if (bf.y > hi) bf.y = hi;

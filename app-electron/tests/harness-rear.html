@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html><body style="background:#111">
+<script type="module">
+import { drawCat } from '../src/cat-renderer.js';
+window.render = () => {
+  const mk = (state, stateT) => {
+    const cv = document.createElement('canvas');
+    cv.width = 300; cv.height = 260;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#1c2b1a'; ctx.fillRect(0, 0, 300, 260);
+    ctx.strokeStyle = '#ff00ff'; ctx.beginPath(); ctx.moveTo(0, 210); ctx.lineTo(300, 210); ctx.stroke();
+    ctx.save(); ctx.translate(80, 210);
+    drawCat(ctx, { t: stateT, state, stateT, dir: 1, breed: 'ginger_kitten', scale: 1, jumpP: 0 });
+    ctx.restore();
+    return cv.toDataURL('image/png');
+  };
+  return {
+    salute: mk('salute', 0.9),
+    danceA: mk('dance', 0.5),
+    danceB: mk('dance', 2.8),
+    danceC: mk('dance', 4.6),
+    danceD: mk('dance', 6.6),
+  };
+};
+window.render();
+</script></body></html>

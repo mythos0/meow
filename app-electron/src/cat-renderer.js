@@ -364,8 +364,16 @@ export function drawCat(ctx, opts) {
 
   const shoulder = { x: B.sh[0], y: bodyY - B.sh[1] };
   const hip = { x: B.hp[0], y: bodyY - B.hp[1] };
+  // v3.15 HEAD-ATTACH FIX: the head anchor lives in BODY space, so it must
+  // ride the same rotate+scale transform the torso gets (translate(0,bodyY)
+  // → rotate(bodyRot) → scale(sqx,sqy)). It used to be pinned in screen
+  // space, so the first pose with a real pitch — the v3.14 rearing swat
+  // (bodyRot −0.52) — left the head hanging ~24px behind the chest: "the
+  // cat's head got separated when it tried to grab the butterfly".
+  const bcos = Math.cos(P.bodyRot || 0), bsin = Math.sin(P.bodyRot || 0);
   const headC = {
-    x: B.head[0] + P.headX, y: bodyY + B.head[1] + P.headY + Math.sin(t * 2.1) * 1.2,
+    x: sqx * (B.head[0] * bcos - B.head[1] * bsin) + P.headX,
+    y: bodyY + sqy * (B.head[0] * bsin + B.head[1] * bcos) + P.headY + Math.sin(t * 2.1) * 1.2,
     r: B.headR, rot: P.headRot,
   };
   const nearFill = pal.limbCol || pal.fur;
@@ -492,6 +500,12 @@ export function drawCat(ctx, opts) {
 
   // ---------------- head
   drawHead(ctx, headC, P, pal, t, state, B);
+
+  // v3.15: the salute paw rides OVER the head (drawn last) so the pose reads
+  // as a paw pressed to the brow instead of vanishing behind the face
+  if (P.overlayPaw) {
+    drawLeg(ctx, shoulder.x, shoulder.y, P.overlayPaw, pal, nearFill, 1, pal.dark, B);
+  }
 
   // v3.6: seasonal / skin hat, drawn in head-local space so it follows
   // head rotation and bob
@@ -623,7 +637,7 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
   const panda = !!(pal && pal.pandaFace);
   const P = {
     bodyY: 0, bobY: 0, bodyRot: 0, sqx: 0, sqy: 0, shadowK: 1,
-    headX: 0, headY: 0, headRot: 0, wholeRot: 0, hideLegs: false, prop: null,
+    headX: 0, headY: 0, headRot: 0, wholeRot: 0, hideLegs: false, prop: null, overlayPaw: null,
     earFlat: 0,
     legs: [
       { fx: B.feet[0], fy: 0 }, { fx: B.feet[1], fy: 0 },   // front near/far
@@ -704,18 +718,57 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
       break;
     }
     case 'dance': {
-      const f = 6.2;
-      P.bodyY = -2;
-      P.bobY = -Math.abs(W(f, 0)) * 9;
-      P.bodyRot = W(f * 0.5, 0) * 0.10;
-      P.sqx = W(f, 0) * 0.05; P.sqy = -P.sqx;
-      P.legs[0].fx = F[0] + W(f, 0) * 4; P.legs[0].fy = -Math.max(0, W(f, 0.8)) * 16;
-      P.legs[1].fx = F[1]; P.legs[1].fy = -Math.max(0, W(f, 0.8 + Math.PI)) * 16;
-      P.legs[2].fx = F[2] + W(f, Math.PI) * 3; P.legs[2].fy = -Math.max(0, W(f, Math.PI + 0.8)) * 10;
-      P.headRot = W(f * 0.5, 0.4) * 0.14;
-      P.tailMode = 'spiral';
-      P.eyeState = 'happy';
+      // v3.15 THE FULL ROUTINE — four readable steps instead of a plain
+      // bounce: A) disco point & hips · B) the twirl · C) side-shuffle ·
+      // D) paw-wave finale. Ambient dances cut the routine short; the
+      // user-triggered dance()/dance-party runs all 8.6s of it.
+      const st = stateT || 0;
       P.particles = { kind: 'sparkle', f: 5 };
+      if (st < 2.0) {
+        // A: disco point — hips swing, near paw pumps the beat up-diagonal
+        const f = 5.2, w = Math.sin(st * f);
+        const beat = Math.sin(st * f * 0.5);
+        P.bodyY = -2; P.bobY = -Math.abs(w) * 6;
+        P.bodyRot = beat * 0.12;
+        P.sqx = w * 0.06; P.sqy = -w * 0.06;
+        P.legs[0].fx = F[0] + 8 + Math.max(0, beat) * 7; P.legs[0].fy = -18 - Math.max(0, beat) * 36;
+        P.legs[1].fx = F[1] - 2; P.legs[1].fy = -Math.max(0, -beat) * 12;
+        P.legs[2].fx = F[2] + w * 3; P.legs[3].fx = F[3] - w * 3;
+        P.headRot = -0.10 + w * 0.06; P.headX = w * 1.5;
+        P.tailMode = 'spiral'; P.eyeState = 'happy';
+      } else if (st < 3.6) {
+        // B: the twirl — a full 360° on a little hop, legs tucked in
+        const q = (st - 2.0) / 1.6;
+        const e = q < 0.5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2;
+        P.wholeRot = e * Math.PI * 2;
+        P.bodyY = -2 - 6 * Math.sin(q * Math.PI);
+        P.legs[0].fx = F[0] + 8; P.legs[0].fy = -26;
+        P.legs[1].fx = F[1] - 2; P.legs[1].fy = -24;
+        P.legs[2].fx = F[2] + 6; P.legs[2].fy = -10;
+        P.legs[3].fx = F[3] - 2; P.legs[3].fy = -10;
+        P.tailMode = 'stream'; P.eyeState = 'open';
+      } else if (st < 5.6) {
+        // C: the side-shuffle — paws slide out and back, hips low and loose
+        const f = 6.8, w = Math.sin(st * f);
+        P.bodyY = 2; P.bobY = -Math.abs(w) * 5;
+        P.bodyRot = -w * 0.05;
+        P.legs[0].fx = F[0] + w * 7; P.legs[0].fy = -Math.abs(w) * 9;
+        P.legs[1].fx = F[1] - w * 7; P.legs[1].fy = -Math.abs(Math.sin(st * f + Math.PI)) * 9;
+        P.legs[2].fx = F[2] - w * 5; P.legs[2].fy = -Math.max(0, -w) * 7;
+        P.legs[3].fx = F[3] + w * 5; P.legs[3].fy = -Math.max(0, w) * 7;
+        P.sqx = 0.03; P.headRot = 0.06 + Math.sin(st * f * 0.5) * 0.10;
+        P.tailMode = 'sway'; P.eyeState = 'happy';
+      } else {
+        // D: the finale — both paws up, waving to the crowd
+        const wv = Math.sin(st * 9);
+        P.bodyY = -3; P.bobY = -Math.abs(Math.sin(st * 4.6)) * 4;
+        P.bodyRot = -0.04;
+        P.legs[0].fx = F[0] + 8; P.legs[0].fy = -56 + wv * 5;
+        P.legs[1].fx = F[1] + 6; P.legs[1].fy = -52 - wv * 5;
+        P.legs[2].fx = F[2] + 6; P.legs[3].fx = F[3] + 8;
+        P.headRot = -0.08 + wv * 0.03; P.headX = 1;
+        P.tailMode = 'spiral'; P.eyeState = 'happy';
+      }
       break;
     }
     case 'scratch': {
@@ -989,7 +1042,11 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
       P.bodyY = -10 * up;                            // stands tall
       P.bodyRot = -0.52 * up;                        // torso pitches up
       P.sqx = -0.05 * up; P.sqy = 0.04 * up;
-      P.headY = -15 * up; P.headX = 2 * up; P.headRot = -0.24 * up;   // eyes on the prey
+      // v3.15: the anchor now rides the pitched torso (head-attach fix), so
+      // the offsets are small nudges — the head sits ON the raised chest,
+      // gazing up at the prey (was: headY −15 to fake a rotation that never
+      // moved the anchor, leaving a 24px gap at the neck).
+      P.headY = -3 * up; P.headX = 4 * up; P.headRot = -0.40 * up;   // eyes on the prey
       P.legs[2].fx = F[2] - 2 * up; P.legs[3].fx = F[3] - 2 * up;     // hind paws planted
       P.tailMode = up > 0.5 ? 'stream' : 'spiral';   // tail out for balance
       P.eyeState = 'open';
@@ -1014,12 +1071,34 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
         const q = Math.min(1, (T - DROP) / 0.4);
         const d = 1 - q * q;
         P.bodyY = -10 * d; P.bodyRot = -0.52 * d;
-        P.headY = -15 * d; P.headX = 2 * d; P.headRot = -0.24 * d;
+        P.headY = -3 * d; P.headX = 4 * d; P.headRot = -0.40 * d;
         P.sqx = -0.05 * d; P.sqy = 0.04 * d;
         P.legs[0].fx = F[0] + 6 * d; P.legs[0].fy = -52 * d;
         P.legs[1].fx = F[1] + 5 * d; P.legs[1].fy = -48 * d;
         P.tailMode = 'sway';
       }
+      break;
+    }
+    case 'salute': {   // v3.15: a spoken command was heard — the proud
+                       // one-paw salute (sit base, near paw pressed to the brow)
+      const T = stateT || 0;
+      const RISE = 0.28, END = 1.34;
+      const k = T < RISE ? T / RISE : T > END ? Math.max(0, 1 - (T - END) / 0.34) : 1;
+      const up = k * k * (3 - 2 * k);              // smoothstep up, hold, back down
+      P.bodyY = 4; P.bodyRot = 0.10 + 0.02 * up;   // sit base, chest out a touch
+      P.sqx = -0.04; P.sqy = 0.05;
+      P.legs[2].fx = F[2] + 8; P.legs[2].fy = -2;
+      P.legs[3].fx = F[3] + 10; P.legs[3].fy = -2;
+      P.legs[1].fx = F[1] + 1;                     // far front paw planted
+      P.legs[0].fx = F[0] + 2;                     // near paw stays planted…
+      // …and its COPY is drawn over the head (overlayPaw), rising to the
+      // brow and pressing it, trembling with pride
+      const tremble = up > 0.9 ? Math.sin(T * 26) * 0.9 : 0;
+      P.overlayPaw = { fx: F[0] + 1 + 5 * up, fy: -80 * up + tremble };
+      P.headY = -1 * up; P.headX = 1 * up; P.headRot = -0.06 * up;
+      P.eyeState = 'open';
+      P.tailMode = 'spiral';
+      P.bobY = Math.sin(t * 1.7) * 0.7;
       break;
     }
     case 'bop': {       // music playing: sway to the beat

@@ -12,9 +12,13 @@
 
   /* ---------------- v3.14 the hidden execution-log terminal ---------------- */
   #page-execlog { color-scheme: dark; }
-  #page-execlog.on { display: flex; flex-direction: column; }
+  /* v3.15 FOLLOW FIX: the section must OWN the viewport height. It used to
+     be an auto-height block inside .fl-content's scroll, so .term-body never
+     actually overflowed — scrollTop was a no-op and every new line landed
+     below the fold ("i have to scroll down every time"). */
+  #page-execlog.on { display: flex; flex-direction: column; height: calc(100vh - 52px); }
   .term {
-    flex: 1; min-height: 340px; display: flex; flex-direction: column;
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
     background: #030805; border: 1px solid #123a22; border-radius: 10px;
     box-shadow: 0 0 0 1px rgba(0,255,136,0.06), 0 0 34px rgba(0,255,136,0.07) inset;
     font-family: "Cascadia Mono", "Fira Code", Consolas, Menlo, monospace;
@@ -48,8 +52,9 @@
   .term-toolbar .tbtn:hover { background: #0a2415; color: #8dffc0; }
   .term-toolbar .tbtn.on { color: #0b1f12; background: #00ff88; border-color: #00ff88; font-weight: 700; }
   .term-body {
-    flex: 1; overflow-y: auto; padding: 8px 12px 10px; font-size: 12.5px; line-height: 1.5;
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 12px 10px; font-size: 12.5px; line-height: 1.5;
     color: #49d68f; scrollbar-color: #14532d #050d08; scrollbar-width: thin;
+    scroll-behavior: auto; overscroll-behavior: contain;
   }
   .term-body::-webkit-scrollbar { width: 9px; }
   .term-body::-webkit-scrollbar-thumb { background: #14532d; border-radius: 5px; }
@@ -382,6 +387,18 @@
         <div class="fl-row">
           <div class="txt"><div class="l1">Photo mode</div><div class="l2">Freezes the cat mid-pose and saves a transparent PNG to your Pictures folder.</div></div>
           <label class="sw"><input type="checkbox" id="photoMode"><span class="tr"><span class="kn"></span></span></label>
+        </div>
+        <div class="fl-row">
+          <div class="txt"><div class="l1">Voice commands</div>
+            <div class="l2">Say <b>“hey cat”</b> and the cat listens. Runs locally on your device (Windows speech engine) — nothing is recorded or uploaded.
+              <span id="voiceStatus" style="display:block;margin-top:4px;font-weight:600"></span></div>
+            <div class="l2" style="margin-top:8px;font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.7;color:var(--txt2,#555)">
+              hey cat play music &lt;name&gt; → Brave → YouTube → plays the first result<br>
+              hey cat pause · resume · stop the music · next song · previous song<br>
+              hey cat volume up / volume down · mute · unmute · stop listening
+            </div>
+          </div>
+          <label class="sw"><input type="checkbox" id="voiceCommands"><span class="tr"><span class="kn"></span></span></label>
         </div>
       </div>
     </section>
@@ -716,6 +733,20 @@ bindSwitch('reactBuildStatus', 'reactBuildStatus');
 bindSwitch('globalHotkeys', 'globalHotkeys');
 bindSwitch('photoMode', 'photoMode');
 bindSwitch('achievements', 'achievements');
+bindSwitch('voiceCommands', 'voiceCommands');
+
+// v3.15: live voice-listener status under the Voice commands toggle
+function renderVoiceStatus(st) {
+  const el = $('voiceStatus');
+  if (!el) return;
+  if (!st || !st.available) { el.textContent = '● unavailable — Windows only'; el.style.color = '#b3591f'; return; }
+  if (!st.enabled) { el.textContent = '● off'; el.style.color = '#8a8a8a'; return; }
+  if (st.running) { el.textContent = '● listening — say “hey cat …”'; el.style.color = '#1a7f37'; }
+  else if (st.error === 'no-mic') { el.textContent = '● no microphone found'; el.style.color = '#b3261e'; }
+  else { el.textContent = '● starting…'; el.style.color = '#8a6d1a'; }
+}
+window.meow.voiceGet?.().then?.(renderVoiceStatus);
+window.meow.on('voice-state', renderVoiceStatus);
 
 function syncControls() {
   $('size').value = S.size; $('sizeV').textContent = Math.round(S.size * 100) + '%';
@@ -734,6 +765,7 @@ function syncControls() {
     ['soundDblClickMeow', 'soundDblClickMeow'], ['soundReminders', 'soundReminders'],
     ['pomodoro', 'pomodoro'], ['reactBuildStatus', 'reactBuildStatus'],
     ['globalHotkeys', 'globalHotkeys'], ['photoMode', 'photoMode'], ['achievements', 'achievements'],
+    ['voiceCommands', 'voiceCommands'],
   ]) $(id).checked = S[key] !== undefined ? !!S[key] : false;
   $('statusFile').value = S.statusFile || '';
   $('coins').textContent = '🪙 ' + (S.coins ?? 0);
@@ -930,9 +962,18 @@ function termPasses(e) {
 }
 function termAppend(e) {
   const body = $('termBody');
-  const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
   body.insertAdjacentHTML('beforeend', entryLine(e));
-  if (termFollow && (nearBottom || termFollow)) body.scrollTop = body.scrollHeight;
+  // v3.15: follow is now a real auto-scroll — .term-body owns the overflow
+  // (CSS fix), so this actually sticks the newest line to the bottom edge
+  if (termFollow) body.scrollTop = body.scrollHeight;
+}
+// v3.15: scrolling up = “I want to read” → follow unlatches; returning to
+// the bottom latches it back on. The button stays a manual override.
+function termWatchScroll() {
+  const b = $('termBody');
+  const atBottom = b.scrollHeight - b.scrollTop - b.clientHeight < 48;
+  if (termFollow && !atBottom) { termFollow = false; $('termFollow').classList.remove('on'); }
+  else if (!termFollow && atBottom) { termFollow = true; $('termFollow').classList.add('on'); }
 }
 function termRefreshCount() {
   const shown = $('termBody').childElementCount;
@@ -992,6 +1033,7 @@ async function startExecLog() {
   window.meow.on('exec-log:entry', e => ingest(e));
 }
 $('navExecLog').addEventListener('click', () => { if (termStarted) termRenderAll(); });
+$('termBody').addEventListener('scroll', termWatchScroll);
 $('termGrep').addEventListener('input', termRenderAll);
 $('termFollow').onclick = () => { termFollow = !termFollow; $('termFollow').classList.toggle('on', termFollow); if (termFollow) $('termBody').scrollTop = $('termBody').scrollHeight; };
 $('termPause').onclick = () => { termPaused = !termPaused; $('termPause').classList.toggle('on', termPaused); $('termPause').textContent = termPaused ? '▶ resume' : '⏸ pause'; };

@@ -32,6 +32,9 @@ export const ACTIONS = [
   // v3.14 the real-cat butterfly catch: rears onto the hind legs and swats
   // up with the front paws (never randomly selected — hunt-driven only)
   'rear',
+  // v3.15 voice-command acknowledgment: the proud one-paw salute
+  // (never randomly selected — fired when a spoken command is heard)
+  'salute',
 ];
 
 // v3.8: is platform `b` (from the newest scan) the same physical window as
@@ -62,7 +65,7 @@ export const EMOTE_ON = {
   zoomies: 'exclaim', hairball: 'sweat', loaf: 'bread',
   // v3.6
   bop: 'note', investigate: 'question', sniff: 'question', nuzzle: 'heart',
-  curl: 'zzz', mope: 'sad', stalk: null, rear: null,
+  curl: 'zzz', mope: 'sad', stalk: null, rear: null, salute: null,
 };
 
 const CAT_WEIGHTS = {
@@ -342,7 +345,7 @@ export class CatBrain {
       case 'idle': this._enter('idle', 1.2 + this.rand() * 2.5); break;
       case 'sit': this._enter('sit', 4 + this.rand() * 5); break;
       case 'scratch': this._enter('scratch', 2.2 + this.rand() * 1.5); break;
-      case 'dance': this._enter('dance', 2.6 + this.rand() * 2); break;
+      case 'dance': this._enter('dance', 2.6 + this.rand() * 2); break;   // ambient: the routine gets cut short — fine
       case 'eat': this._enter('eat', 4.9); break;   // 3 bite+chew cycles (1.4s each) + gulp
       case 'sleep': this._enter('sleep', 7 + this.rand() * 6); break;
       case 'jump': if (this.onPlatform) this._borderHop(); else this._enter('jump', 0.75); break;
@@ -375,7 +378,15 @@ export class CatBrain {
   }
   poke() { this._enter('startle', 0.7); this.onEvent('poke'); }
   feed() { this._enter(this.breed === 'panda' ? 'bamboo' : 'eat', this.breed === 'panda' ? 5.5 : 4.9); this.onEvent('feed'); }
-  dance() { this._enter('dance', 4); this.onEvent('dance'); }
+  dance() { this._enter('dance', 8.6); this.onEvent('dance'); }   // v3.15: full choreography
+  // v3.15: a spoken command was heard — snap to the salute (unless the cat
+  // is mid-hunt/mid-air; then the bubbles alone carry the acknowledgment)
+  saluteNow() {
+    if (['rear', 'stalk', 'laser', 'pounce', 'jump', 'startle'].includes(this.state)) return false;
+    this._enter('salute', 1.7);
+    this.onEvent('salute');
+    return true;
+  }
   sleepNow() { this._enter('sleep', 10); }
 
   // v3.5: laser-pointer toy. cat.html owns the red dot (spawns it, drifts it,
@@ -795,7 +806,7 @@ export class CatBrain {
         }
         break;
       }
-      case 'sniff': case 'mope': case 'nuzzle': case 'curl':
+      case 'sniff': case 'mope': case 'nuzzle': case 'curl': case 'salute':
         // stationary poses — renderer does the work
         break;
       case 'laser': {

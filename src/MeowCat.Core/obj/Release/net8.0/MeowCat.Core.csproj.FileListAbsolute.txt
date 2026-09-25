@@ -1,0 +1,12 @@
+/home/z/my-project/meow/src/MeowCat.Core/bin/Release/net8.0/MeowCat.Core.deps.json
+/home/z/my-project/meow/src/MeowCat.Core/bin/Release/net8.0/MeowCat.Core.dll
+/home/z/my-project/meow/src/MeowCat.Core/bin/Release/net8.0/MeowCat.Core.pdb
+/home/z/my-project/meow/src/MeowCat.Core/obj/Release/net8.0/MeowCat.Core.GeneratedMSBuildEditorConfig.editorconfig
+/home/z/my-project/meow/src/MeowCat.Core/obj/Release/net8.0/MeowCat.Core.AssemblyInfoInputs.cache
+/home/z/my-project/meow/src/MeowCat.Core/obj/Release/net8.0/MeowCat.Core.AssemblyInfo.cs
+/home/z/my-project/meow/src/MeowCat.Core/obj/Release/net8.0/MeowCat.Core.csproj.CoreCompileInputs.cache
+/home/z/my-project/meow/src/MeowCat.Core/obj/Release/net8.0/MeowCat.Core.sourcelink.json
+/home/z/my-project/meow/src/MeowCat.Core/obj/Release/net8.0/MeowCat.Core.dll
+/home/z/my-project/meow/src/MeowCat.Core/obj/Release/net8.0/refint/MeowCat.Core.dll
+/home/z/my-project/meow/src/MeowCat.Core/obj/Release/net8.0/MeowCat.Core.pdb
+/home/z/my-project/meow/src/MeowCat.Core/obj/Release/net8.0/ref/MeowCat.Core.dll

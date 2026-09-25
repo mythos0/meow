@@ -229,8 +229,17 @@ async function park(x) {
     hunted = await cat.evaluate(() => window.__bflyHuntState().hunting === true || null);
   }
   ok('the cat NOTICES the nearby butterfly and starts stalking it', !!hunted);
+  // v3.15: the wild butterfly now hovers HIGH above paw reach and only DIPS
+  // every 3.4s — the organic wait is nondeterministic across runs. Pin it at
+  // the dip floor so the catch itself stays deterministic (stalk → rear →
+  // swat → catch); misses/dodges have their own suites (v314/v315).
+  await cat.evaluate(() => {
+    const b = window.__brain();
+    if (window.__pinButterfly) window.__pinButterfly(b.x + 26, b.baseY - 120);
+    return true;
+  });
   let caught = null;
-  for (let i = 0; i < 60 && !caught; i++) {   // up to ~12s
+  for (let i = 0; i < 120 && !caught; i++) {   // up to ~24s: reach the rear, catch at an apex
     await sleep(200);
     caught = await cat.evaluate(() => {
       const st = window.__bflyHuntState();
@@ -239,7 +248,7 @@ async function park(x) {
       return null;
     });
   }
-  ok('the cat POUNCES and CATCHES it (butterfly gone, no failed attempts)', !!caught,
+  ok('the cat REARS, SWATS and CATCHES it (butterfly gone, no failed attempts)', !!caught,
     JSON.stringify({ hunt: caught, bf: await cat.evaluate(() => window.__bfly()) }));
   const stat = await cat.evaluate(async () => {
     for (let i = 0; i < 25; i++) {           // reward lands when the pounce lands
@@ -251,6 +260,7 @@ async function park(x) {
     return { n: s.stats.butterflies || 0, coins: s.coins };
   });
   ok('the butterfly catch is counted in the real store (stats.butterflies)', stat.n >= 1, JSON.stringify(stat));
+  await cat.evaluate(() => { window.__pinButterfly && window.__pinButterfly(null); return true; });   // v3.15: release the pin for the later sections
 }
 
 // ------------------------------------------------ 6. MISS startles the butterfly

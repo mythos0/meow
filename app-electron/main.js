@@ -1,6 +1,6 @@
 // main.js — MeowCat Electron main process (ESM)
 'use strict';
-import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell, globalShortcut, powerMonitor, dialog, utilityProcess } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell, globalShortcut, powerMonitor, dialog, utilityProcess, net } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -25,6 +25,10 @@ import { seasonHat, validateSkinDef } from './src/cat-renderer.js';
 import { toRelativeZone, validZone } from './src/no-walk.js';
 import { createTypingHookManager } from './src/typing-hook.js';
 import { createExecLog } from './src/exec-log.js';
+// v3.15 voice commands + the music launcher
+import { parseVoiceCommand } from './src/voice.js';
+import { createMusicLauncher } from './src/music-launcher.js';
+import { createVoiceListener } from './src/voice-listener.js';
 
 // ------------------------------------------------------------------ v3.2/v3.4 memory & process diet
 app.disableHardwareAcceleration();                         // no GPU process (API)
@@ -175,6 +179,7 @@ function onExplicitShutdown() {
   try { platTracker?.stop(); } catch {}   // v3.9: no orphan PowerShell
   try { sysMon.stop(); } catch {}
   try { musicWatcher.stop(); } catch {}
+  try { voiceListener.stop(); } catch {}   // v3.15: no orphan SAPI listener
   stopIdleTicker();
   stopCursorWatch();
   stopTypingHook();
@@ -594,6 +599,142 @@ const musicWatcher = createMusicWatcher({
   },
 });
 
+// ---------- v3.15 voice commands: "hey cat, play music …" ----------
+// The cat listens for spoken commands. Music titles are searched on YouTube
+// and the FIRST result opens in Brave (preferred; falls back to the default
+// browser) as a new window — watch pages autoplay, so the song really starts.
+// Transport (pause/next/volume…) rides the OS media keys, which Brave/YouTube
+// already honors through the Windows media session.
+const MEOW_TEST = !!process.env.MEOWCAT_TEST;
+const __voiceTest = { launches: [], mediaKeys: [], phrases: [] };
+
+const MEDIA_KEY_VK = { play_pause: 179, next: 176, prev: 177, stop: 178, mute: 173, volup: 175, voldown: 174 };
+function sendMediaKey(kind) {
+  const vk = MEDIA_KEY_VK[kind];
+  if (!vk) return false;
+  __voiceTest.mediaKeys.push(kind);
+  xlog('main', 'voice', `media key: ${kind}`);
+  if (MEOW_TEST) return true;   // the sandbox has no media shell — record and move on
+  try {
+    const taps = (kind === 'volup' || kind === 'voldown') ? 6 : 1;
+    const script = `$w = New-Object -ComObject WScript.Shell; ` +
+      Array.from({ length: taps }, () => `$w.SendKeys([char]${vk}); `).join('');
+    const p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+      { windowsHide: true, stdio: 'ignore', detached: true });
+    if (typeof p.unref === 'function') p.unref();
+  } catch { /* cosmetic */ }
+  return true;
+}
+
+const musicLauncher = createMusicLauncher({
+  platform: (MEOW_TEST && process.env.MEOWCAT_FAKE_PLATFORM) || process.platform,
+  // deterministic browser resolution in the test sandbox; real fs in production
+  existsFn: (MEOW_TEST && process.env.MEOWCAT_FAKE_BRAVE)
+    ? () => true
+    : (p => { try { return fs.existsSync(p); } catch { return false; } }),
+  // the fake-win32 sandbox has no REAL %LOCALAPPDATA% — hand the resolver a
+  // representative Windows env so the true Brave path logic runs
+  env: (MEOW_TEST && process.env.MEOWCAT_FAKE_PLATFORM === 'win32')
+    ? { LOCALAPPDATA: 'C:/Users/me/AppData/Local', ProgramFiles: 'C:/Program Files', 'ProgramFiles(x86)': 'C:/Program Files (x86)' }
+    : process.env,
+  // deterministic search in the test sandbox; real fetch in production
+  fetchFn: (MEOW_TEST && process.env.MEOWCAT_FAKE_YT_HTML)
+    ? async () => ({ ok: true, text: async () => fs.readFileSync(process.env.MEOWCAT_FAKE_YT_HTML, 'utf8') })
+    : (u, o) => net.fetch(u, o),
+  spawnFn: MEOW_TEST
+    ? (cmd, args) => { __voiceTest.launches.push({ cmd, args }); }
+    : (cmd, args, opts) => {
+        try {
+          const p = spawn(cmd, args, { detached: true, windowsHide: true, ...opts });
+          if (typeof p.unref === 'function') p.unref();
+        } catch { /* cosmetic */ }
+      },
+});
+
+async function handleVoicePhrase(text, confidence) {
+  const parsed = parseVoiceCommand(text);
+  __voiceTest.phrases.push({ text, confidence, cmd: parsed && parsed.cmd });
+  if (__voiceTest.phrases.length > 40) __voiceTest.phrases.shift();
+  if (!parsed) { xlog('cat', 'voice', `ignored "${String(text).slice(0, 60)}" (no command)`, { confidence }); return; }
+  xlog('cat', 'voice', `heard "${String(text).slice(0, 80)}" → ${parsed.cmd}${parsed.query ? ' : ' + parsed.query : ''}`, { confidence });
+  // v3.15: the acknowledgment — the cat snaps to the salute while the
+  // command executes, and the bubble echoes EXACTLY what was received
+  sendToCat('voice-salute', {});
+  sendToCat('voice-bubble', { text: '▶ ' + describeVoiceCommand(parsed) });
+  switch (parsed.cmd) {
+    case 'play_music': {
+      sendToCat('voice-bubble', { text: '♪ searching: ' + parsed.query });
+      const r = await musicLauncher.play(parsed.query);
+      if (r && r.ok) {
+        sendToCat('voice-bubble', { text: (r.videoId ? '♪ now playing: ' : '♪ youtube: ') + parsed.query });
+        xlog('main', 'voice', `music via ${r.browser}${r.videoId ? ' · first result ' + r.videoId : ' · results page'} — "${parsed.query}"`, { url: r.url });
+      } else {
+        sendToCat('voice-bubble', { text: 'meow… the music would not open' });
+        xlog('main', 'voice', `music launch failed: ${r && r.reason}`);
+      }
+      break;
+    }
+    case 'pause': case 'resume': case 'stop_music': sendMediaKey('play_pause'); break;
+    case 'next': sendMediaKey('next'); break;
+    case 'previous': sendMediaKey('prev'); break;
+    case 'volume_up': sendMediaKey('volup'); break;
+    case 'volume_down': sendMediaKey('voldown'); break;
+    case 'mute': case 'unmute': sendMediaKey('mute'); break;
+    case 'stop_listening':
+      store.set('voiceCommands', false);
+      voiceListener.stop();
+      sendToCat('voice-bubble', { text: 'voice off. meow.' });
+      applyVoiceFlag();
+      break;
+    default: break;   // the ▶ echo bubble already answered wake_only/unknown
+  }
+}
+
+// v3.15: a short human-readable echo of the received command for the bubble
+function describeVoiceCommand(p) {
+  switch (p.cmd) {
+    case 'play_music': return `play music: ${p.query}`;
+    case 'pause': return 'pause';
+    case 'resume': return 'resume';
+    case 'stop_music': return 'stop the music';
+    case 'next': return 'next song';
+    case 'previous': return 'previous song';
+    case 'volume_up': return 'volume up';
+    case 'volume_down': return 'volume down';
+    case 'mute': return 'mute';
+    case 'unmute': return 'unmute';
+    case 'stop_listening': return 'stop listening';
+    case 'wake_only': return 'meow? (say: play music <name>)';
+    default: return 'unknown command';
+  }
+}
+
+const voiceListener = createVoiceListener({
+  platform: process.platform,
+  onPhrase: (text, conf) => { handleVoicePhrase(text, conf); },
+  onDown: err => xlog('sys', 'voice-down', `voice listener exited (${err || 'unknown'}) — respawning`),
+});
+
+function voiceStatus() {
+  return {
+    enabled: !!store.get('voiceCommands'),
+    running: voiceListener.running,
+    error: voiceListener.lastError,
+    available: process.platform === 'win32',
+  };
+}
+function broadcastVoiceState() {
+  try {
+    for (const w of BrowserWindow.getAllWindows()) {
+      try { if (!w.isDestroyed()) w.webContents.send('voice-state', voiceStatus()); } catch { /* gone */ }
+    }
+  } catch { /* cosmetic */ }
+}
+function applyVoiceFlag() {
+  if (store.get('voiceCommands')) voiceListener.start(); else voiceListener.stop();
+  broadcastVoiceState();
+}
+
 // ---------- typing meter (global keyboard hook on Windows) ----------
 // v3.11 THE AUTO-QUIT FIX. uiohook-napi is a NATIVE module: a hard crash
 // inside its keyboard thread (secure desktop / UAC prompt / RDP / driver
@@ -815,7 +956,7 @@ const FLAG_KEYS = new Set([
   'reactSystemSpikes', 'reactMusic',
   'stalkCursor', 'reactTyping', 'dancePartyIdle', 'reactBuildStatus',
   'statusFile', 'globalHotkeys', 'windowHopping', 'reactApps',
-  'reactNewWindows', 'reactLowBattery',
+  'reactNewWindows', 'reactLowBattery', 'voiceCommands',
 ]);
 
 function applyFeatureFlags() {
@@ -833,6 +974,7 @@ function applyFeatureFlags() {
                       store.get('reactNewWindows');
   if (needScanner && process.platform === 'win32') ensureScanner();
   else scanner?.stop();
+  applyVoiceFlag();   // v3.15: voice commands on/off
 }
 
 // ---------- global hotkeys ----------
@@ -878,6 +1020,23 @@ ipcMain.handle('settings:set', (_e, kv) => {
 });
 ipcMain.handle('coins:add', (_e, n) => store.addCoins(n));
 ipcMain.handle('coins:get', () => store.get('coins'));
+
+// ---------------- v3.15 voice commands IPC ----------------
+ipcMain.handle('voice:get', () => voiceStatus());
+ipcMain.handle('voice:set', (_e, on) => {
+  const v = !!on;
+  if (store.get('voiceCommands') !== v) {
+    store.set('voiceCommands', v);
+    xlog('main', 'voice', `voice commands ${v ? 'ON — the cat is listening' : 'OFF'}`);
+    applyVoiceFlag();
+  }
+  return voiceStatus();
+});
+if (MEOW_TEST) {
+  // test-only seams: inject a recognized phrase / read what the seams recorded
+  ipcMain.handle('voice:inject', (_e, text) => { handleVoicePhrase(String(text || ''), 0.92); return true; });
+  ipcMain.handle('voice:state', () => JSON.parse(JSON.stringify(__voiceTest)));
+}
 ipcMain.handle('store:buy', (_e, breed) => {
   const r = store.buyBreed(breed);
   xlog('main', 'store', `store:buy ${breed} → ${r && r.ok ? 'OWNED' : 'rejected'}`, r);

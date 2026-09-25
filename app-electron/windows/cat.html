@@ -276,6 +276,8 @@ async function init() {
   // ---------------- v3.6 living-on-your-machine channels ----------------
   window.meow.on('system-event', onSystemEvent);
   window.meow.on('music', onMusic);
+  window.meow.on('voice-bubble', d => { if (d && d.text) showBubble(d.text, 3800); });   // v3.15 voice feedback
+  window.meow.on('voice-salute', () => { if (brain) brain.saluteNow?.(); });   // v3.15: paw to the brow when a command is heard
   window.meow.on('typing', onTyping);
   window.meow.on('cursor-idle', onCursorIdle);
   window.meow.on('cursor-busy', onCursorBusy);
@@ -872,8 +874,9 @@ function resolveButterflyPounce() {
 function resolveButterflySwat() {
   if (!butterfly || !brain) return;
   // paw point: in front of the raised head, ~105px above the feet
-  const pawX = brain.x + brain.dir * 26;
-  const pawY = brain.baseY - 104;
+  // (v3.15: scaled by the cat size — the drawn paw tip is 110 * S.size up)
+  const pawX = brain.x + brain.dir * 26 * S.size;
+  const pawY = brain.baseY - 104 * S.size;
   if (swatCatchable(butterfly, pawX, pawY)) {
     // CAUGHT with the paws — the hunt is over; stop stalking so the rear
     // flows straight into the celebration instead of more creeping

@@ -49,11 +49,22 @@ test('a cruising butterfly crosses the lane and is culled past its far edge', ()
   assert.ok(bf.x > 800, `culled beyond the lane's right edge, got ${bf.x}`);
 });
 
-test('a hunted butterfly dips into pounce reach and flutters around the hunter', () => {
+test('a hunted butterfly hovers HIGH above paw reach and periodically DIPS into it (v3.15 real-hunt altitude)', () => {
   const bf = spawnButterfly({ lane: { x: 0, w: 1600 }, catX: 400, groundY: 1000, now: 10, rand: () => 0.1 });
   bf.x = 520; bf.y = 1000 - 200; bf.state = 'hunted';
-  step(bf, 3, { t0: 10, catX: 400 });
-  assert.ok(bf.y > 1000 - 130 && bf.y < 1000 - 50, `dipped to reach, got y=${bf.y.toFixed(0)} (ground 1000)`);
+  // sample a full dip cycle + easing settle (3.4s cycle, 1.3s dip)
+  let minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < 120; i++) {   // 6s at 50ms
+    step(bf, 0.05, { t0: 10 + i * 0.05, catX: 400 });
+    if (bf.y < minY) minY = bf.y;
+    if (bf.y > maxY) maxY = bf.y;
+  }
+  const high = 1000 - minY, low = 1000 - maxY;   // px above ground
+  // OUT of the rearing paw's reach most of the time (paw tip ~104 + radius 54)
+  assert.ok(high > 150, `hovers high (>=150px up), got ${high.toFixed(0)}`);
+  // and DIPS down into reach every cycle (bottom ~124px up; the paw's
+  // reach circle spans 50..158px above the ground)
+  assert.ok(low < 135, `dips into paw reach (<=135px up), got ${low.toFixed(0)}`);
   assert.ok(Math.abs(bf.x - 400) < 220, `stays around the hunter, got x=${bf.x.toFixed(0)}`);
 });
 

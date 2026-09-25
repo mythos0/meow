@@ -34,6 +34,8 @@ export const DEFAULTS = {
   reactApps: true,           // loafs on your editor, gets playful over games
   reactTyping: true,         // fast typing burst -> pounce; long idle -> nap
   stalkCursor: true,         // cursor idle nearby -> stalk & pounce it
+  voiceCommands: true,       // v3.15: "hey cat, play music …" + transport controls
+                             // (SAPI runs locally on the device; nothing is uploaded)
   // v3.10: hideDuringCalls / duckDuringCalls / hideInFullscreen were REMOVED —
   // the cat never hides on its own; only the user may hide or quit it.
   // interaction & progression
