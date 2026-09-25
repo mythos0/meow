@@ -114,8 +114,8 @@ try {
   // ================= 1. VOICE COMMANDS through the real app =================
   {
     const st0 = await cat.evaluate(async () => window.meow.voiceGet());
-    ok('voice status reachable (enabled by default, gracefully unavailable on this OS)',
-      st0 && st0.enabled === true && st0.available === false, JSON.stringify(st0));
+    ok('voice status reachable (v3.16: the web engine is available everywhere, engine chain present)',
+      st0 && st0.enabled === true && st0.available === true && ['web', 'sapi', null].includes(st0.engine), JSON.stringify(st0));
 
     // --- the exact user flow: hey cat + play music + <title> ---
     await cat.evaluate(() => window.meow.voiceInject('hey cat play music ghum kariya nilo sokhi'));

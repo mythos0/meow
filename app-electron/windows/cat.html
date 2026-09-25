@@ -276,6 +276,12 @@ async function init() {
   // ---------------- v3.6 living-on-your-machine channels ----------------
   window.meow.on('system-event', onSystemEvent);
   window.meow.on('music', onMusic);
+  // v3.16: system-wide "music is playing" flag — a double-click holds the
+  // meow while a song is actually on (user: "when double click music is
+  // playing, that time shouldn't play single meow sound"). The flag lives at
+  // MODULE scope (the dblclick handler below is top-level) and rides BOTH
+  // the music-state push and the periodic heartbeat.
+  window.meow.on('music-state', d => { musicPlaying = !!(d && d.playing); });
   window.meow.on('voice-bubble', d => { if (d && d.text) showBubble(d.text, 3800); });   // v3.15 voice feedback
   window.meow.on('voice-salute', () => { if (brain) brain.saluteNow?.(); });   // v3.15: paw to the brow when a command is heard
   window.meow.on('typing', onTyping);
@@ -322,7 +328,8 @@ async function init() {
   // v3.12: liveness watchdog — answer main's ping with the paint counter +
   // state so main can reload a hung/blank overlay instead of showing the user
   // a silently vanished cat.
-  window.meow.on('heartbeat', () => {
+  window.meow.on('heartbeat', h => {
+    if (h && typeof h.music === 'boolean') musicPlaying = h.music;   // v3.16: live flag rides the heartbeat
     try {
       window.meow.heartbeatPong({
         paintCount: window.__paintCount || 0,
@@ -965,7 +972,8 @@ let downX = 0, downY = 0;
 let downSX = 0, downSY = 0;   // v3.12: grab point in SCREEN coords (see mousemove)
 let pendingPet = null;
 let dragMoved = false;        // v3.12: authoritative drag-intent flag
-let downOnCat = false;   // v3.7: quick click = real meow
+let downOnCat = false;                                      // v3.7: quick click = real meow
+let musicPlaying = false;   // v3.16: the meow gate (module scope — see init's music-state listener)
 
 function toScreen(cx, cy) { return { x: cx + O.x, y: cy + O.y }; }
 
@@ -1097,6 +1105,10 @@ window.addEventListener('dblclick', e => {
   dragging = false;
   // v3.12 USER RULE: double click ONLY plays the sound — the Cat Store /
   // Settings no longer open here (they stay in the tray + context menu).
+  // v3.16 USER RULE: while music is actually playing (voice-launched YouTube
+  // or any player the system reports), the meow holds its tongue — a meow
+  // over a song is noise. The cat mouths a silent ♪ instead.
+  if (musicPlaying) { showBubble('♪', 1400); return; }
   stopMeowSingle();
   playMeow(0.95);
 });
@@ -1391,6 +1403,7 @@ init();
 window.__catBooted = true;
 xlog('cat', `renderer alive — breed ${S.breed}, size ${S.size}, pid window ready`);
 window.__pose = () => brain ? JSON.parse(JSON.stringify(brain.pose)) : null;
+window.__offset = () => ({ x: O.x, y: O.y });   // e2e: canvas→client mapping for synthetic clicks
 window.__doAction = act => doAction(act);
 window.__brain = () => brain;
 window.__setPlatforms = list => { if (brain) brain.setPlatforms(list); };

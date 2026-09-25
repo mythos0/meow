@@ -1,6 +1,6 @@
 // main.js — MeowCat Electron main process (ESM)
 'use strict';
-import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell, globalShortcut, powerMonitor, dialog, utilityProcess, net } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, Notification, shell, globalShortcut, powerMonitor, dialog, utilityProcess, net, session } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -179,6 +179,7 @@ function onExplicitShutdown() {
   try { platTracker?.stop(); } catch {}   // v3.9: no orphan PowerShell
   try { sysMon.stop(); } catch {}
   try { musicWatcher.stop(); } catch {}
+  stopWebVoice();                          // v3.16: no orphan Web Speech engine window
   try { voiceListener.stop(); } catch {}   // v3.15: no orphan SAPI listener
   stopIdleTicker();
   stopCursorWatch();
@@ -590,10 +591,21 @@ const sysMon = createSysMonitor({
 
 // ---------- music watcher (SMTC / playerctl) ----------
 let prevMusic = null;
+// v3.16: system-wide "music is playing" state (from the same SMTC session
+// YouTube/Spotify report to the volume flyout). Relayed to the cat window so
+// a double-click can hold the meow while a song is actually on — the user's
+// ask: "when double click music is playing, that time shouldn't play single
+// meow sound".
+let musicPlayingNow = false;
+function pushMusicState() {
+  sendToCat('music-state', { playing: musicPlayingNow });
+}
 const musicWatcher = createMusicWatcher({
   spawnFn: spawn,
   onMusic: parsed => {
     const action = musicReaction(prevMusic, parsed);
+    const playing = !!(parsed && parsed.status === 'playing');
+    if (playing !== musicPlayingNow) { musicPlayingNow = playing; pushMusicState(); }
     prevMusic = parsed;
     if (action && store.get('reactMusic')) sendToCat('music', { action, ...parsed });
   },
@@ -709,18 +721,130 @@ function describeVoiceCommand(p) {
   }
 }
 
+// v3.16 VOICE ENGINE CHAIN — why "voice cmd not works" happened and how it
+// is fixed. v3.15 relied on ONE engine (PowerShell SAPI). On real machines
+// it could fail silently: a non-English Windows has no en-US recognizer so
+// the grammar never loaded (and the error was swallowed); SAPI's accuracy
+// with accented English is poor; Windows mic-privacy switches are
+// undetectable from that side. The chain is now:
+//   1. WEB (primary): a hidden always-alive window (windows/voice.html)
+//      runs Chromium's Web Speech API — cloud-quality recognition, far
+//      better with accents, works on every OS, and its error events
+//      ('audio-capture', 'not-allowed', 'network', 'service-not-allowed')
+//      tell us exactly what is wrong instead of dead air.
+//   2. SAPI (offline fallback): the hardened PowerShell listener engages
+//      automatically when the web engine reports a fatal error or no
+//      network — recognizers are now enumerated explicitly and a failed
+//      grammar load is REPORTED, not swallowed.
+// Both engines feed the same pure parser (src/voice.js); phrases that look
+// like real commands do exactly what they did before.
+let voiceEngine = null;            // 'web' | 'sapi' | null
+let voiceWindow = null;            // the hidden Web Speech engine window
+let voiceWebError = '';            // last web-engine error (for Settings)
+
+function startWebVoice() {
+  if (voiceWindow && !voiceWindow.isDestroyed()) {
+    try { voiceWindow.webContents.executeJavaScript('window.__voiceStart && window.__voiceStart()', true); } catch { }
+    return;
+  }
+  try {
+    voiceWindow = new BrowserWindow({
+      show: false, skipTaskbar: true, focusable: false,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.cjs'),
+        contextIsolation: true, nodeIntegration: false,
+        backgroundThrottling: false,   // hidden windows must keep recognizing
+      },
+    });
+    voiceWindow.loadFile(path.join(__dirname, 'windows', 'voice.html'));
+    voiceWindow.webContents.on('did-finish-load', () => {
+      try { voiceWindow?.webContents.executeJavaScript('window.__voiceStart && window.__voiceStart()', true); } catch { }
+    });
+    voiceWindow.on('closed', () => { voiceWindow = null; });
+    xlog('main', 'voice', 'web speech engine window starting');
+  } catch (e) {
+    xlog('main', 'voice', `web engine window failed: ${e && e.message}`);
+    engageSapiFallback('web-window-failed');
+  }
+}
+
+function stopWebVoice() {
+  if (!voiceWindow) return;
+  const w = voiceWindow;
+  voiceWindow = null;
+  try { w.webContents.executeJavaScript('window.__voiceStop && window.__voiceStop()', true).catch(() => { }); } catch { }
+  try { w.destroy(); } catch { }
+}
+
+// v3.16: Chromium asks for mic permission on behalf of the Web Speech API.
+// Without an explicit handler Electron's default behavior varies; we grant
+// 'media' while voice commands are on (and keep every other permission
+// granted exactly as before — no behavior change for the rest of the app).
+try {
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
+    if (permission === 'media') { cb(!!store.get('voiceCommands')); return; }
+    cb(true);
+  });
+} catch { /* older Electron — ignore */ }
+
+function engageSapiFallback(reason) {
+  if (voiceEngine === 'sapi') return;
+  voiceEngine = 'sapi';
+  xlog('main', 'voice', `falling back to the offline SAPI engine (${reason})`);
+  voiceListener.start();
+  broadcastVoiceState();
+}
+
+function onVoiceEngineEvent(ev = {}) {
+  switch (ev.type) {
+    case 'phrase':
+      handleVoicePhrase(String(ev.text || ''), Number(ev.confidence) || 0.8);
+      break;
+    case 'listening':
+      voiceEngine = 'web';
+      voiceWebError = '';
+      xlog('main', 'voice', 'web speech engine is listening');
+      broadcastVoiceState();
+      break;
+    case 'net-retry':
+      voiceWebError = 'network';
+      broadcastVoiceState();
+      break;
+    case 'error':
+      voiceWebError = String(ev.error || 'unknown');
+      xlog('main', 'voice', `web speech error: ${voiceWebError}`);
+      // fatal → offline fallback; 'audio-capture'/'not-allowed' mean the mic
+      // itself is blocked (Windows privacy switches) — SAPI reports the same
+      // thing from its side, which the Settings page shows either way.
+      if (['audio-capture', 'not-allowed', 'service-not-allowed', 'language-not-supported', 'network'].includes(voiceWebError)) {
+        engageSapiFallback(voiceWebError);
+      }
+      broadcastVoiceState();
+      break;
+    case 'unavailable':
+      voiceWebError = String(ev.reason || 'unavailable');
+      engageSapiFallback(voiceWebError);
+      break;
+    default:
+      break;   // starting / stopped / booted — cosmetic
+  }
+}
+
 const voiceListener = createVoiceListener({
   platform: process.platform,
   onPhrase: (text, conf) => { handleVoicePhrase(text, conf); },
-  onDown: err => xlog('sys', 'voice-down', `voice listener exited (${err || 'unknown'}) — respawning`),
+  onDown: err => xlog('sys', 'voice-down', `SAPI listener exited (${err || 'unknown'}) — respawning`),
+  onStatus: st => { xlog('main', 'voice', `SAPI engine: ${st.engine || ''} ${st.culture || ''}`.trim()); broadcastVoiceState(); },
 });
 
 function voiceStatus() {
   return {
     enabled: !!store.get('voiceCommands'),
-    running: voiceListener.running,
-    error: voiceListener.lastError,
-    available: process.platform === 'win32',
+    running: (voiceEngine === 'web' && !!(voiceWindow && !voiceWindow.isDestroyed())) || voiceListener.running,
+    engine: voiceEngine,                       // v3.16: 'web' | 'sapi' | null
+    error: voiceEngine === 'sapi' ? voiceListener.lastError : voiceWebError,
+    sapiInfo: voiceListener.engineInfo,        // recognizer id + culture
+    available: true,                           // the web engine works everywhere
   };
 }
 function broadcastVoiceState() {
@@ -731,7 +855,15 @@ function broadcastVoiceState() {
   } catch { /* cosmetic */ }
 }
 function applyVoiceFlag() {
-  if (store.get('voiceCommands')) voiceListener.start(); else voiceListener.stop();
+  if (store.get('voiceCommands')) {
+    startWebVoice();        // v3.16: web engine first…
+    if (process.platform === 'win32' && voiceEngine === 'sapi') voiceListener.start();   // …fallback persists if it already engaged
+  } else {
+    stopWebVoice();
+    voiceListener.stop();
+    voiceEngine = null;
+    voiceWebError = '';
+  }
   broadcastVoiceState();
 }
 
@@ -1021,8 +1153,11 @@ ipcMain.handle('settings:set', (_e, kv) => {
 ipcMain.handle('coins:add', (_e, n) => store.addCoins(n));
 ipcMain.handle('coins:get', () => store.get('coins'));
 
-// ---------------- v3.15 voice commands IPC ----------------
+// ---------------- v3.15/v3.16 voice commands IPC ----------------
 ipcMain.handle('voice:get', () => voiceStatus());
+// v3.16: the hidden Web Speech engine window reports here (phrases, errors,
+// listening status) — the bridge between windows/voice.html and the chain
+ipcMain.on('voice:engine-event', (_e, ev) => { try { onVoiceEngineEvent(ev); } catch { /* never breaks us */ } });
 ipcMain.handle('voice:set', (_e, on) => {
   const v = !!on;
   if (store.get('voiceCommands') !== v) {
@@ -1036,6 +1171,7 @@ if (MEOW_TEST) {
   // test-only seams: inject a recognized phrase / read what the seams recorded
   ipcMain.handle('voice:inject', (_e, text) => { handleVoicePhrase(String(text || ''), 0.92); return true; });
   ipcMain.handle('voice:state', () => JSON.parse(JSON.stringify(__voiceTest)));
+  ipcMain.handle('voice:test-music', (_e, on) => { musicPlayingNow = !!on; pushMusicState(); return musicPlayingNow; });
 }
 ipcMain.handle('store:buy', (_e, breed) => {
   const r = store.buyBreed(breed);
@@ -1179,7 +1315,9 @@ function startHeartbeat() {
   hbTimer = setInterval(() => {
     try {
       if (!catWin || catWin.isDestroyed()) return;
-      catWin.webContents.send('heartbeat', { t: Date.now() });
+      // v3.16: the heartbeat carries the live music flag so a freshly
+      // reloaded cat window is never stuck with a stale meow-gate
+      catWin.webContents.send('heartbeat', { t: Date.now(), music: musicPlayingNow });
       if (!lastPongInfo) return;   // still booting
       const silentFor = Date.now() - lastPongAt;
       if (silentFor > 15_000) {

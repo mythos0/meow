@@ -112,6 +112,7 @@ if (q.get('sheet')) {
   const scale = parseFloat(q.get('scale') || '1');
   const jumpP = parseFloat(q.get('jumpP') || '0.5');
   const emote = q.get('emote');
+  const stateT = parseFloat(q.get('st' ) || q.get('stT') || q.get('stateT') || String(t));   // v3.16: pose-internal state time (the dance phases)
   const W = cv.width, H = cv.height;
   ctx.fillStyle = '#eceff4'; ctx.fillRect(0,0,W,H);
   for (let y = 0; y < H; y += 16)
@@ -119,7 +120,7 @@ if (q.get('sheet')) {
       if ((x/16 + y/16) % 2 === 0) { ctx.fillStyle = '#e0e4ec'; ctx.fillRect(x, y, 16, 16); }
   ctx.save();
   ctx.translate(W/2, H - 40);
-  const opts = { t, state, breed, dir, scale, jumpP };
+  const opts = { t, state, breed, dir, scale, jumpP, stateT };
   drawCat(ctx, opts);
   drawParticles(ctx, opts);
   if (emote) {

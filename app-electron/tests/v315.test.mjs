@@ -213,14 +213,14 @@ test('salute: never randomly selected — it is event-driven only', async () => 
   assert.equal(b.weights.rear, undefined, 'like the rear');
 });
 
-test('dance: the user-triggered dance runs the FULL 8.6s routine', async () => {
+test('dance: the user-triggered dance runs the FULL 11.4s six-step routine', async () => {
   const { CatBrain } = await import('../src/cat-brain.js');
   const b = new CatBrain({ rand: () => 0.5 });
   b.dance();
   assert.equal(b.state, 'dance');
-  for (let i = 0; i < 420; i++) b.tick(0.02);   // 8.4s — still dancing (phase D)
-  assert.equal(b.state, 'dance', 'the routine is still going at 8.4s');
-  for (let i = 0; i < 20; i++) b.tick(0.02);    // past 8.6s
+  for (let i = 0; i < 555; i++) b.tick(0.02);   // 11.1s — still dancing (finale)
+  assert.equal(b.state, 'dance', 'the routine is still going at 11.1s');
+  for (let i = 0; i < 25; i++) b.tick(0.02);    // past 11.4s
   assert.notEqual(b.state, 'dance', 'and ends after the finale');
 });
 

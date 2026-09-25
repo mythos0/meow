@@ -1,9 +1,22 @@
-// voice-listener.js — v3.15 always-on voice commands ("hey cat …").
+// voice-listener.js — v3.16 offline SAPI fallback engine (Windows).
 //
-// Windows: one long-lived PowerShell child runs the legacy SAPI engine
-// (System.Speech — ships with Windows, no language-pack install, no cloud,
-// no mic-permission broker beyond the classic recording device). It prints
-// ONE JSON line per recognized phrase: {"text":"…","confidence":0.87}.
+// v3.15 shipped ONE engine: this SAPI listener. On real user machines it
+// failed SILENTLY in three ways: (a) a non-English Windows has no default
+// en-US recognizer, so the en-US GrammarBuilder grammar never loaded — but
+// $ErrorActionPreference='SilentlyContinue' swallowed it and the script
+// printed ready:true while recognizing NOTHING; (b) the default
+// SpeechRecognitionEngine() constructor binds whatever recognizer the system
+// locale suggests, which can mismatch the grammar culture; (c) non-ASCII
+// transcripts were mangled by the OEM console codepage.
+//
+// v3.16 fixes all three: recognizers are ENUMERATED and an en-* one is
+// picked explicitly (grammar culture = picked culture), a failed grammar
+// load is REPORTED as {"error":"grammar-failed"} instead of being
+// swallowed, stdout is forced UTF-8, and a diagnostic
+// {"status":"listening","recognizer":…,"culture":…} line tells the
+// Settings page exactly what is running. This engine is now the FALLBACK —
+// the primary engine is Chromium's Web Speech API in windows/voice.html
+// (cloud-quality recognition, far better with accents, cross-platform).
 //
 // The grammar is deliberately command-shaped: (wake word / control phrases)
 // followed by free dictation so the song title rides along:
@@ -11,31 +24,50 @@
 // The raw text ALWAYS goes to the pure parser (voice.js) — the grammar only
 // gates what gets transcribed, the parser decides what it means.
 //
-// Linux/dev: no SAPI — the listener reports unavailable and stays quiet.
 // The manager NEVER throws: a broken mic degrades the voice feature, never
 // the app (same contract as typing-hook.js).
 
 'use strict';
 
 export const VOICE_SCRIPT = `
-$ErrorActionPreference = 'SilentlyContinue'
-Add-Type -AssemblyName System.Speech
+$ErrorActionPreference = 'Stop'
+function Emit($o) { try { [Console]::Out.WriteLine((ConvertTo-Json $o -Compress)) } catch { } }
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+try { Add-Type -AssemblyName System.Speech } catch { Emit @{error='no-sapi'}; exit 0 }
+
+# v3.16: ENUMERATE the installed recognizers and pick one explicitly.
+# SpeechRecognitionEngine() (parameterless) binds the system-locale
+# recognizer, which on a non-English Windows cannot load an en-US grammar —
+# the v3.15 silent death. Prefer en-US, then any en-*, then whatever exists.
+$pick = $null
 $rec = $null
 try {
-  $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine
+  $recognizers = [System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers()
+  if (-not $recognizers -or $recognizers.Count -eq 0) { Emit @{error='no-recognizer'}; exit 0 }
+  $pick = $recognizers | Where-Object { $_.Culture.Name -eq 'en-US' } | Select-Object -First 1
+  if (-not $pick) { $pick = $recognizers | Where-Object { $_.Culture.Name -like 'en-*' } | Select-Object -First 1 }
+  if (-not $pick) { $pick = $recognizers | Select-Object -First 1 }
+  $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine($pick.Id)
   $rec.SetInputToDefaultAudioDevice()
 } catch {
-  [Console]::Out.WriteLine('{"error":"no-mic"}')
+  Emit @{error='no-mic'}
   exit 0
 }
+Emit @{status='listening'; recognizer="$($pick.Id)"; culture="$($pick.Culture.Name)"}
 $cmds = New-Object System.Speech.Recognition.Choices
 foreach ($c in @('hey cat','hey kitty','ok cat','play music','play','put on','pause','pause the music','resume','resume the music','stop the music','stop music','stop','next song','next','skip','previous song','go back','volume up','louder','volume down','quieter','mute','unmute','stop listening')) { $null = $cmds.Add($c) }
 $gb = New-Object System.Speech.Recognition.GrammarBuilder
-$gb.Culture = [System.Globalization.CultureInfo]::GetCultureInfo('en-US')
+$gb.Culture = $pick.Culture
 $null = $gb.Append($cmds)
 $null = $gb.AppendDictation()
 $g = New-Object System.Speech.Recognition.Grammar($gb)
-$rec.LoadGrammar($g) | Out-Null
+# v3.16: a failed load is REPORTED, not swallowed (the v3.15 silent death)
+$loaded = $false
+try {
+  $rec.LoadGrammar($g)
+  $loaded = ($rec.Grammars.Count -gt 0)
+} catch { $loaded = $false }
+if (-not $loaded) { Emit @{error='grammar-failed'}; exit 0 }
 $rec.EndSilenceTimeout = [TimeSpan]::FromSeconds(0.45)
 $rec.BabbleTimeout = [TimeSpan]::FromSeconds(0)
 $rec.InitialSilenceTimeout = [TimeSpan]::FromSeconds(0)
@@ -52,10 +84,10 @@ $rec.add_SpeechRecognized($onRec)
 $rec.add_SpeechRecognitionRejected({ param($s, $e) })
 $rec.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)
 [Console]::Out.WriteLine('{"ready":true}')
-while ($true) { Start-Sleep -Milliseconds 500 }
+while ($true) { Start-Sleep -Milliseconds 400 }
 `.trim() + '\n';
 
-// stdout line → { text, confidence } | { ready:true } | { error } | null
+// stdout line → { text, confidence } | { ready:true } | { status, engine, culture } | { error } | null
 export function parseVoiceLine(raw) {
   const s = String(raw || '').trim();
   if (!s) return null;
@@ -68,6 +100,7 @@ export function parseVoiceLine(raw) {
       };
     }
     if (v.ready) return { ready: true };
+    if (v.status) return { status: true, engine: String(v.recognizer || '').slice(0, 80), culture: String(v.culture || '').slice(0, 20) };
     if (v.error) return { error: String(v.error).slice(0, 80) };
     return null;
   } catch {
@@ -81,12 +114,14 @@ export function createVoiceListener(opts = {}) {
   const platform = opts.platform || process.platform;
   const onPhrase = opts.onPhrase || (() => {});
   const onDown = opts.onDown || (() => {});
+  const onStatus = opts.onStatus || (() => {});
   const minConfidence = Number.isFinite(opts.minConfidence) ? opts.minConfidence : 0.45;
   let child = null;
   let wanted = false;
   let respawnTimer = null;
   let attempt = 0;
   let lastError = '';
+  let engineInfo = '';   // v3.16: recognizer id/culture from the status line
   const BACKOFFS = [1500, 4000, 12000, 30000];
 
   function clearTimer() { if (respawnTimer) { clearTimeout(respawnTimer); respawnTimer = null; } }
@@ -120,6 +155,7 @@ export function createVoiceListener(opts = {}) {
         const parsed = parseVoiceLine(line);
         if (!parsed) continue;
         if (parsed.ready) { attempt = 0; lastError = ''; continue; }
+        if (parsed.status) { engineInfo = parsed.engine ? `${parsed.engine} (${parsed.culture})` : 'sapi'; try { onStatus(parsed); } catch { } continue; }
         if (parsed.error) { lastError = parsed.error; continue; }
         if (parsed.text && parsed.confidence >= minConfidence) {
           try { onPhrase(parsed.text, parsed.confidence); } catch { /* never breaks us */ }
@@ -152,5 +188,6 @@ export function createVoiceListener(opts = {}) {
     },
     get running() { return wanted && !!child; },
     get lastError() { return lastError; },
+    get engineInfo() { return engineInfo; },
   };
 }

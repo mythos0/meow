@@ -51,6 +51,8 @@ contextBridge.exposeInMainWorld('meow', {
   voiceSet: on => ipcRenderer.invoke('voice:set', on),
   voiceInject: text => ipcRenderer.invoke('voice:inject', text),   // MEOWCAT_TEST only
   voiceState: () => ipcRenderer.invoke('voice:state'),             // MEOWCAT_TEST only
+  voiceEngineEvent: ev => ipcRenderer.send('voice:engine-event', ev),  // v3.16: voice.html engine → main
+  voiceTestMusic: on => ipcRenderer.invoke('voice:test-music', on),    // MEOWCAT_TEST only: force the music-playing state
   on: (channel, fn) => {
     const allowed = [
       'do-action', 'reminder-fired', 'settings-changed', 'workarea-changed',
@@ -68,6 +70,7 @@ contextBridge.exposeInMainWorld('meow', {
       'voice-bubble',  // v3.15: spoken-command feedback on the cat
       'voice-salute',  // v3.15: the salute pose when a command is heard
       'voice-state',   // v3.15: voice listener status for the settings page
+      'music-state',   // v3.16: system-wide "music is playing" flag (meow gate)
     ];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => fn(data));

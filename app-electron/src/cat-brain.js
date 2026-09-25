@@ -378,7 +378,7 @@ export class CatBrain {
   }
   poke() { this._enter('startle', 0.7); this.onEvent('poke'); }
   feed() { this._enter(this.breed === 'panda' ? 'bamboo' : 'eat', this.breed === 'panda' ? 5.5 : 4.9); this.onEvent('feed'); }
-  dance() { this._enter('dance', 8.6); this.onEvent('dance'); }   // v3.15: full choreography
+  dance() { this._enter('dance', 11.4); this.onEvent('dance'); }   // v3.16: full six-step routine (step right/left, hands up, turn around, shake tail, finish)
   // v3.15: a spoken command was heard — snap to the salute (unless the cat
   // is mid-hunt/mid-air; then the bubbles alone carry the acknowledgment)
   saluteNow() {

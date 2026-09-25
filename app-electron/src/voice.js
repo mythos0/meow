@@ -35,11 +35,48 @@ export function normalizePhrase(raw) {
     .trim();
 }
 
+// Levenshtein edit distance, early-exit when the gap is hopeless.
+function editDistance(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 99;
+  const m = a.length, n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+// v3.16 FUZZY WAKE: real speech engines mangle "hey cat" into "hey kat",
+// "hay cat", "a cat", "eh cat"… every day. The exact-prefix match above
+// never fires then and the user hears silence — the #1 "voice not working"
+// report. So: when the leading 2–3 words are within 2 edits of a wake word
+// AND the remainder actually parses as a command, treat the wake as heard.
+// Noise like "the cat sat on the mat" fuzzy-wakes ("the cat" ≈ "hey cat")
+// but "sat on the mat" is no command — it still returns null. Inertness is
+// decided by the REMAINDER, not by how the wake sounded.
+function fuzzyWake(text) {
+  const words = text.split(' ');
+  for (let take = 1; take <= Math.min(3, words.length); take++) {
+    const head = words.slice(0, take).join(' ');
+    for (const w of WAKE_WORDS) {
+      if (w.split(' ').length !== take) continue;
+      if (editDistance(head, w) <= 2) return { text: words.slice(take).join(' ').trim(), woke: true, fuzzy: true };
+    }
+  }
+  return null;
+}
+
 function stripWake(text) {
   for (const w of WAKE_WORDS) {
     if (text === w) return { text: '', woke: true };
     if (text.startsWith(w + ' ')) return { text: text.slice(w.length).trim(), woke: true };
   }
+  const fz = fuzzyWake(text);
+  if (fz) return fz;
   return { text, woke: false };
 }
 
@@ -48,7 +85,7 @@ const MUSIC_QUERY_RE = /^(?:play|put on|start playing|start)(?:\s+(?:some|the))?
 export function parseVoiceCommand(raw) {
   const norm = normalizePhrase(raw);
   if (!norm) return null;
-  const { text, woke } = stripWake(norm);
+  const { text, woke, fuzzy } = stripWake(norm);
   const rest = text.trim();
   if (!rest) return woke ? { cmd: 'wake_only', query: '', woke, text: norm } : null;
 
@@ -85,5 +122,8 @@ export function parseVoiceCommand(raw) {
   if (/^mute$/.test(rest) || /^(?:mute|silence)(?:\s+the)?(?:\s+(?:volume|music|sound))?$/.test(rest)) return { cmd: 'mute', query: '', woke, text: norm };
   if (/^unmute$/.test(rest) || /^unmute(?:\s+the)?(?:\s+(?:volume|music|sound))?$/.test(rest)) return { cmd: 'unmute', query: '', woke, text: norm };
 
+  // A fuzzy wake ("hey kat", "a cat …") must land on a REAL command — a
+  // mangled wake followed by chatter is just chatter, so it stays null.
+  if (fuzzy) return null;
   return woke ? { cmd: 'unknown', query: '', woke, text: norm } : null;
 }
