@@ -44,12 +44,20 @@ test('dance: phase 2 STEP LEFT swings the near hind paw BACK (mirrored)', () => 
   assert.ok(p.legs[2].fy < -10, 'and lifts off the ground');
 });
 
-test('dance: phase 3 HANDS UP — both paws raised high OVER the head (overlay)', () => {
+test('dance: phase 3 HANDS UP — both paws raised to the CHEEKS (overlay)', () => {
   const step = pose(0.3);
   const up = pose(4.5);
-  assert.ok(Array.isArray(up.overlayPaw) && up.overlayPaw.length === 2, 'both paws ride OVER the head');
-  assert.ok(up.overlayPaw[0].fy < -104, `near paw just above the ear (fy ${up.overlayPaw[0].fy})`);
-  assert.ok(up.overlayPaw[1].fy < -98, `far paw just above the ear (fy ${up.overlayPaw[1].fy})`);
+  assert.ok(Array.isArray(up.overlayPaw) && up.overlayPaw.length === 2, 'both paws ride up as the overlay');
+  // v3.22 NATURAL LEGS: paws rise to cheek height with a BENT elbow — the
+  // old targets (fy -104/-98, "over the ears") were 2.1x past the stubby
+  // reach and drew as straight rubber-band stilts ("upper legs gotten long")
+  const R = (B.legL1 + B.legL2) * 0.74;
+  const shY = B.standY + up.bodyY + up.bobY - B.sh[1];
+  for (const paw of up.overlayPaw) {
+    assert.ok(paw.fy < -40, `paw risen above the hand-off (fy ${paw.fy})`);
+    const d = Math.hypot(paw.fx - B.sh[0], paw.fy - shY);
+    assert.ok(d <= R * 1.02, `paw within the stubby reach (${d.toFixed(1)} <= ${R.toFixed(1)})`);
+  }
   // v3.18: the raised paws ARE the front legs — no chest-height copies below
   assert.equal(up.legs[0], null, 'near front leg is LIFTED (no chest copy — four limbs)');
   assert.equal(up.legs[1], null, 'far front leg is LIFTED (no chest copy — four limbs)');

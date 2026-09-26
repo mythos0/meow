@@ -345,7 +345,7 @@ lands on), plus the existing reminders, auto-start, topmost enforcement and warm
 
 **DANCE — matched to the reference sheet, step by step.** The user: "the leg is too long… render and draw the movement exact steps like the image". The routine keeps the six reference steps (Step Right → Step Left → Hands Up → Turn Around → Shake Tail → Finish) but the geometry is rebuilt:
 
-- **`legK` channel**: the dance draws **stubby legs** (legK 0.74) — shorter limbs with fattened strokes and bigger paws — on a **low compact body** (bodyY 4, rot −0.52, rounder squash). No more stretched stilts.
+- **`legK` channel**: the dance draws **stubby legs** (legK 0.74) — shorter limbs with fattened strokes and bigger paws — on a **low compact body** (bodyY 4, rot −0.52, rounder squash). No more stretched stilts. *(v3.22 made this literal: legK now scales the BONES, and `drawLeg` clamps every drawn paw to the reach circle, so the raised paws bend at the elbow by the cheeks — see `docs/RENDERING.md` §6.)*
 - **`bodyX` channel**: steps 1–2 really **TRAVEL** — the whole sprite (shadow included) glides +13px right, then −13px left, instead of rocking in place.
 - **Boundary continuity**: every oscillator completes whole half-cycles per phase, so `sin` is 0 at each phase seam; lean/head/paw baselines match hand-to-hand. The v3.16 frame-zero pose snaps (bodyRot jumped ~12° at every boundary) are gone — `poseFor` is verified continuous within 0.03 rad / 1.5 px across every boundary.
 

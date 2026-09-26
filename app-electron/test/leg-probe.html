@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#f4f0e6;}
+  #grid{display:block;}
+</style>
+</head>
+<body>
+<canvas id="grid"></canvas>
+<script type="module">
+// leg-probe.html — v3.22 natural-legs contact sheets. Spec via query:
+// ?spec=<uri-encoded JSON {cells:[{label,state,t,st,jumpP,breed,dir}], cols, cw, ch}>
+// Ground line is drawn per cell so paw float / leg length is judgeable.
+import { drawCat, drawParticles, PALETTES } from '../src/cat-renderer.js';
+
+const q = new URLSearchParams(location.search);
+const spec = JSON.parse(decodeURIComponent(q.get('spec')));
+const cols = spec.cols, cw = spec.cw || 220, ch = spec.ch || 200;
+const rows = Math.ceil(spec.cells.length / cols);
+const grid = document.getElementById('grid');
+grid.width = cols * cw;
+grid.height = rows * ch;
+const g = grid.getContext('2d');
+g.fillStyle = '#f4f0e6'; g.fillRect(0, 0, grid.width, grid.height);
+for (let y = 0; y < grid.height; y += 20)
+  for (let x = 0; x < grid.width; x += 20)
+    if ((x / 20 + y / 20) % 2 === 0) { g.fillStyle = '#eae4d6'; g.fillRect(x, y, 20, 20); }
+
+g.font = '12px sans-serif';
+for (let i = 0; i < spec.cells.length; i++) {
+  const c = spec.cells[i];
+  const col = i % cols, row = Math.floor(i / cols);
+  const ox = col * cw, oy = row * ch;
+  g.strokeStyle = '#c9c2b2'; g.strokeRect(ox + 0.5, oy + 0.5, cw, ch);
+  g.fillStyle = '#5a5245'; g.fillText(c.label, ox + 6, oy + 15);
+  // ground line: the cat's feet rest on y=0 -> translated to ch-34 like the harness
+  const gy = oy + ch - 34;
+  g.strokeStyle = 'rgba(180,60,40,0.55)'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(ox + 8, gy + 0.5); g.lineTo(ox + cw - 8, gy + 0.5); g.stroke();
+  g.save();
+  g.translate(ox + cw / 2, gy);
+  const opts = { t: c.t || 0, state: c.state || 'walk', breed: c.breed || 'grey_tabby',
+                 dir: c.dir || 1, scale: 1, jumpP: c.jumpP ?? 0.5, stateT: c.st || c.t || 0 };
+  drawCat(g, opts);
+  drawParticles(g, opts);
+  g.restore();
+}
+document.title = 'legprobe-ready:' + spec.name;
+window.__ready = true;
+</script>
+</body>
+</html>

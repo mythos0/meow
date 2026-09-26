@@ -120,10 +120,17 @@ describe('v3.17 dance: stubby legs, real side steps, zero boundary snaps', () =>
     assert.ok(Math.abs(f.overlayPaw.fy - e.legs[0].fy) < 1.5, 'cheek paw hands off at 9.4');
   });
 
-  test('hands-up paws sit just OVER the ears (compact — not sky-high stilts)', () => {
+  test('hands-up paws sit at CHEEK height (v3.22 natural — not sky-high stilts)', () => {
     const up = pose(4.5);
-    assert.ok(up.overlayPaw[0].fy > -125 && up.overlayPaw[0].fy < -100,
-      `near paw ${up.overlayPaw[0].fy} — head-top height, no long arms`);
+    // v3.22: the old target (fy ≈ -112, "over the ears") was 2.1x past the
+    // stubby limb reach and drew as straight rubber-band arms. The natural
+    // paw bends at the elbow and settles by the cheeks, INSIDE the reach.
+    const R = (B.legL1 + B.legL2) * 0.74;
+    const shY = B.standY + up.bodyY + up.bobY - B.sh[1];
+    const d = Math.hypot(up.overlayPaw[0].fx - B.sh[0], up.overlayPaw[0].fy - shY);
+    assert.ok(d <= R * 1.02, `near paw within stubby reach (${d.toFixed(1)} <= ${R.toFixed(1)})`);
+    assert.ok(up.overlayPaw[0].fy > -95 && up.overlayPaw[0].fy < -40,
+      `near paw ${up.overlayPaw[0].fy} — cheek height, bent elbow, no long arms`);
   });
 
   test('walk keeps full-length legs (legK only reshapes the dance)', () => {

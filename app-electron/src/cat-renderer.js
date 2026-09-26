@@ -41,11 +41,19 @@ export const PALETTES = {
 // ---------------- body types (v3.1) ----------------
 // Curated skeleton per body type. Every coordinate is in cat-local units:
 // feet on y=0, facing +x, so all values are negative above ground.
+// v3.22 HONEST LEGS: legL1+legL2 now equals the shoulder/hip height
+// (sh[1] - standY) + 1px of slack, so a grounded paw is inside the limb's
+// real reach. Previously the bones were ~30% SHORTER than the standing
+// height, so every grounded pose drew the lower segment stretched (walk
+// x1.5, run x1.6) and the dance hands-up paws stretched x2.8 — the
+// "upper legs gotten long" bug. drawLeg() also hard-clamps the drawn paw
+// to the reach circle, so legs BEND like a real cat's instead of ever
+// stretching again.
 export const BODIES = {
   normal: {
     rx: 41, ry: 25, haunch: [-22, -2, 20, 18], chest: [26, 2, 14, 15],
     sh: [20, 4], hp: [-24, 2], head: [36, -34], headR: 23,
-    legL1: 16, legL2: 18, ear: 1.0, footAmp: 9,
+    legL1: 23, legL2: 26, ear: 1.0, footAmp: 9,   // v3.22: 48px shoulder height + 1
     feet: [24, 30, -22, -28],
     tail: { base: [-36, -16], segs: 9, step: 8.2, r: 7.5 },
     standY: -44, preview: 0.62,
@@ -53,7 +61,7 @@ export const BODIES = {
   slim: {           // oriental/sleek: longer legs, narrower torso
     rx: 37, ry: 22.5, haunch: [-20, -2, 18, 16], chest: [24, 2, 12, 13],
     sh: [18, 4], hp: [-22, 2], head: [33, -32], headR: 21,
-    legL1: 17, legL2: 19, ear: 1.05, footAmp: 10,
+    legL1: 24, legL2: 27, ear: 1.05, footAmp: 10, // v3.22: 50 + 1
     feet: [22, 28, -20, -26],
     tail: { base: [-33, -15], segs: 10, step: 8.0, r: 6.6 },
     standY: -46, preview: 0.60,
@@ -61,7 +69,7 @@ export const BODIES = {
   kitten: {         // baby proportions: huge head, short legs, stubby tail
     rx: 31, ry: 22, haunch: [-16, -2, 15, 15], chest: [20, 2, 11, 12],
     sh: [15, 4], hp: [-18, 2], head: [27, -36], headR: 26,
-    legL1: 14, legL2: 15, ear: 1.25, footAmp: 7,
+    legL1: 19, legL2: 20, ear: 1.25, footAmp: 7,  // v3.22: 38 + 1
     feet: [18, 23, -15, -19],
     tail: { base: [-26, -13], segs: 6, step: 6.6, r: 5.4 },
     standY: -34, preview: 0.60,
@@ -69,7 +77,7 @@ export const BODIES = {
   chubby: {         // round and heavy: short legs, thick tail
     rx: 47, ry: 30, haunch: [-25, -2, 24, 21], chest: [29, 2, 17, 18],
     sh: [22, 5], hp: [-27, 3], head: [38, -38], headR: 25,
-    legL1: 13, legL2: 14, ear: 0.95, footAmp: 8,
+    legL1: 22, legL2: 24, ear: 0.95, footAmp: 8,  // v3.22: 45 + 1
     feet: [25, 31, -23, -29],
     tail: { base: [-40, -17], segs: 8, step: 7.8, r: 8.4 },
     standY: -40, preview: 0.55,
@@ -77,7 +85,7 @@ export const BODIES = {
   large: {          // maine coon: tall, long, bushy tail
     rx: 46, ry: 27, haunch: [-25, -2, 23, 20], chest: [29, 2, 16, 17],
     sh: [22, 4], hp: [-27, 2], head: [40, -38], headR: 26,
-    legL1: 19, legL2: 21, ear: 1.1, footAmp: 10,
+    legL1: 26, legL2: 29, ear: 1.1, footAmp: 10,  // v3.22: 54 + 1
     feet: [26, 33, -24, -31],
     tail: { base: [-40, -17], segs: 11, step: 8.8, r: 8.4 },
     standY: -50, preview: 0.55,
@@ -86,7 +94,7 @@ export const BODIES = {
                     // head, 10–15cm stub tail, short stocky legs
     rx: 50, ry: 33, haunch: [-26, -2, 27, 24], chest: [30, 2, 19, 20],
     sh: [23, 5], hp: [-28, 3], head: [37, -42], headR: 28,
-    legL1: 12, legL2: 13, ear: 0.9, footAmp: 6,
+    legL1: 23, legL2: 25, ear: 0.9, footAmp: 6,   // v3.22: 47 + 1
     feet: [26, 32, -24, -30],
     tail: { base: [-44, -16], segs: 4, step: 6.0, r: 10.0 },
     standY: -42, preview: 0.50,
@@ -94,7 +102,7 @@ export const BODIES = {
   chibi: {          // v3.2 plush-toy proportions: enormous head, tiny body
     rx: 30, ry: 21, haunch: [-15, -2, 15, 14], chest: [19, 2, 11, 12],
     sh: [14, 4], hp: [-17, 2], head: [24, -33], headR: 29,
-    legL1: 12, legL2: 13, ear: 1.3, footAmp: 6,
+    legL1: 17, legL2: 19, ear: 1.3, footAmp: 6,   // v3.22: 35 + 1
     feet: [17, 22, -14, -18],
     tail: { base: [-25, -12], segs: 6, step: 6.2, r: 6.2 },
     standY: -31, preview: 0.58,
@@ -102,7 +110,7 @@ export const BODIES = {
   munchkin: {       // v3.2 sausage body on stubby little legs
     rx: 42, ry: 24, haunch: [-23, -2, 21, 18], chest: [26, 2, 14, 15],
     sh: [20, 4], hp: [-25, 2], head: [35, -30], headR: 23,
-    legL1: 11, legL2: 10, ear: 1.0, footAmp: 5,
+    legL1: 23, legL2: 20, ear: 1.0, footAmp: 5,   // v3.22: 42 + 1
     feet: [24, 30, -22, -28],
     tail: { base: [-38, -15], segs: 9, step: 7.6, r: 7.6 },
     standY: -38, preview: 0.58,
@@ -376,12 +384,14 @@ export function drawCat(ctx, opts) {
   if (P.overlayPaw) {
     const paws = Array.isArray(P.overlayPaw) ? P.overlayPaw : [P.overlayPaw];
     for (const paw of paws) {
-      drawLeg(ctx, shoulder.x, shoulder.y, paw, pal, nearFill, 1, pal.dark, B, P.legK);
+      // v3.22: drawLeg clamps the paw to the limb's reach — the rim decorates
+      // the CLAMPED point (cp), never the raw request
+      const cp = drawLeg(ctx, shoulder.x, shoulder.y, paw, pal, nearFill, 1, pal.dark, B, P.legK);
       // v3.16: a soft rim so a raised paw reads against the face
       ctx.strokeStyle = 'rgba(255,255,255,0.55)';
       ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.ellipse(paw.fx + 2, paw.fy - 4, 6.8, 5.2, 0, 0, Math.PI * 2);
+      ctx.ellipse(cp.fx + 2, cp.fy - 4, 6.8, 5.2, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
@@ -908,6 +918,12 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
       const st = stateT || 0;
       P.particles = { kind: 'sparkle', f: 5 };
       const smooth = q => { const c = Math.min(1, Math.max(0, q)); return c * c * (3 - 2 * c); };
+      // v3.22 NATURAL RAISED PAWS: targets are relative to the SHOULDER and
+      // the stubby reach (bones × legK), so "hands up" bends the elbow at
+      // cheek height instead of stretching rubber-band legs past the ears
+      // (x2.8 stretch on the kitten before this).
+      const R = (B.legL1 + B.legL2) * 0.74;        // stubby reach, == legK
+      const shX = B.sh[0], shY = B.standY + 4 - B.sh[1];  // dance stand shoulder
       // shared compact stand: torso pitched up onto SHORT folded hind legs,
       // feet tucked under the haunch, round chubby silhouette
       const stand = lean => {
@@ -964,11 +980,16 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
                 : 1 - smooth((st3 - HOLD) / (2.2 - HOLD));
         const w = st3 > RISE && st3 < HOLD ? Math.sin(st3 * Math.PI * 3) : 0;
         P.bobY = -Math.abs(w) * 6.5;
+        // v3.22: paws rise to CHEEK height with a bent elbow — the old
+        // targets (-112/-106) were 2.1-2.8x past the limb's reach and drew
+        // as straight stilts to the ears. The paws RIDE the bob (P.bobY on
+        // both the shoulder and the paw) so the beat is one coherent hop
+        // and the paw-shoulder distance stays inside the stubby reach.
         P.overlayPaw = [
-          { fx: (F[0] + 12) + (-2 - (F[0] + 12)) * g + w * 3,           // near paw → left ear
-            fy: -33 + (-112 + 33) * g - Math.max(0, w) * 5 },
-          { fx: (F[1] + 7) + (40 - (F[1] + 7)) * g - w * 3,             // far paw → right ear
-            fy: -29 + (-106 + 29) * g - Math.max(0, -w) * 5 },
+          { fx: (F[0] + 12) + ((shX - 16) - (F[0] + 12)) * g + w * 3,   // near paw → left cheek
+            fy: -33 + ((shY - R * 0.80) - (-33)) * g + P.bobY },
+          { fx: (F[1] + 7) + ((shX + 18) - (F[1] + 7)) * g - w * 3,     // far paw → right cheek
+            fy: -29 + ((shY - R * 0.78) - (-29)) * g + P.bobY },
         ];
         P.headY = -6; P.headRot = w * 0.04;
         P.tailMode = 'spiral'; P.eyeState = 'open';
@@ -1011,9 +1032,11 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
         P.legs[1].fx = F[1] + 7; P.legs[1].fy = -26;
         P.legs[0] = null;
         const g6 = smooth(Math.min(1, st6 / 0.7));
+        // v3.22: paw settles BY THE CHEEK (shoulder-relative, bent elbow) —
+        // the old (-78) target sat at 1.9x the stubby reach
         P.overlayPaw = {
-          fx: (F[0] + 12) + (F[0] + 1 - (F[0] + 12)) * g6,
-          fy: -30 + (-78 + 30) * g6 + (st6 > 0.7 ? Math.sin(st6 * 8) * 3 : 0),
+          fx: (F[0] + 12) + ((shX + 6) - (F[0] + 12)) * g6,
+          fy: -30 + ((shY - R * 0.82) - (-30)) * g6 + (st6 > 0.7 ? Math.sin(st6 * 8) * 3 : 0),
         };
         P.headRot = 0.14 * Math.min(1, st6 / 0.5);
         P.tailMode = 'spiral'; P.eyeState = 'happy';
@@ -1448,14 +1471,28 @@ function poseFor(state, t, jumpP, B, pal, stateT) {
 // ---------------------------------------------------------------- legs
 function drawLeg(ctx, ax, ay, foot, pal, fill, near, lineCol, B, legK = 1) {
   B = B || BODIES.normal;
-  // v3.17: legK < 1 draws STUBBY legs — shorter limbs pull the feet toward
-  // the hip, and the strokes fatten so they read as thick kitten legs
+  // v3.22 NATURAL LEGS — "when cat is dancing or walking why the cat upper
+  // 2 leg gotten long?" Root cause: poses asked paws to reach points past
+  // the limb's real reach (walk x1.5, run x1.6, dance hands-up x2.8 of the
+  // bone total); solveIK bent the knee but the lower segment was still
+  // DRAWN all the way to the unreachable paw — rubber-band stilts. Fixed:
+  //   (1) honest bones — BODIES legL1+legL2 now matches the standing height;
+  //   (2) legK finally SHORTENS the bones (the v3.17 'stubby dance legs'
+  //       claim is now true — before it only fattened the strokes);
+  //   (3) the drawn paw is CLAMPED to the reach circle, so a leg can never
+  //       stretch again — past the reach it BENDS, like a real cat's leg.
+  // Returns the clamped paw so callers (overlay rim) decorate the same point.
   const wf = 1 + (1 - legK) * 1.05;
-  const l1 = B.legL1, l2 = B.legL2;
-  const { kx, ky } = solveIK(ax, ay, foot.fx, foot.fy, l1, l2, -1);
+  const l1 = B.legL1 * legK, l2 = B.legL2 * legK;
+  let fx = foot.fx, fy = foot.fy;
+  const dx = fx - ax, dy = fy - ay;
+  const d = Math.hypot(dx, dy) || 1e-6;
+  const maxR = (l1 + l2) * 0.999;
+  if (d > maxR) { fx = ax + dx / d * maxR; fy = ay + dy / d * maxR; }
+  const { kx, ky } = solveIK(ax, ay, fx, fy, l1, l2, -1);
   limb(ctx, ax, ay, kx, ky, 8.5 * wf, 6 * wf, fill);
-  limb(ctx, kx, ky, foot.fx, foot.fy - 4, 6 * wf, 5 * wf, fill);
-  ell(ctx, foot.fx + 2, foot.fy - 4, 6.5 * (1 + (1 - legK) * 0.4), 5 * (1 + (1 - legK) * 0.4));
+  limb(ctx, kx, ky, fx, fy - 4, 6 * wf, 5 * wf, fill);
+  ell(ctx, fx + 2, fy - 4, 6.5 * (1 + (1 - legK) * 0.4), 5 * (1 + (1 - legK) * 0.4));
   ctx.fillStyle = fill; ctx.fill();
   // toe hint
   const ga = ctx.globalAlpha;
@@ -1463,24 +1500,25 @@ function drawLeg(ctx, ax, ay, foot, pal, fill, near, lineCol, B, legK = 1) {
   ctx.strokeStyle = shade(lineCol, -0.1);
   ctx.lineWidth = 1.4;
   ctx.beginPath();
-  ctx.moveTo(foot.fx - 1, foot.fy - 7);
-  ctx.lineTo(foot.fx + 1, foot.fy - 3);
+  ctx.moveTo(fx - 1, fy - 7);
+  ctx.lineTo(fx + 1, fy - 3);
   ctx.stroke();
   ctx.globalAlpha = ga;
   if (pal.socks && near > 0) {
-    ell(ctx, foot.fx + 2, foot.fy - 4.5, 6.8, 5.2);
+    ell(ctx, fx + 2, fy - 4.5, 6.8, 5.2);
     ctx.fillStyle = pal.belly; ctx.fill();
   }
   if (pal.beans && near > 0) {
     // pink toe beans on the near paws (drawn over white socks)
     ctx.fillStyle = '#e89aa2';
-    for (const [bxx, byy, br] of [[foot.fx - 2.2, foot.fy - 6.2, 1.35], [foot.fx + 1.2, foot.fy - 6.8, 1.35], [foot.fx + 4.2, foot.fy - 5.8, 1.2]]) {
+    for (const [bxx, byy, br] of [[fx - 2.2, fy - 6.2, 1.35], [fx + 1.2, fy - 6.8, 1.35], [fx + 4.2, fy - 5.8, 1.2]]) {
       ell(ctx, bxx, byy, br, br * 0.85);
       ctx.fill();
     }
-    ell(ctx, foot.fx + 1, foot.fy - 2.6, 2.7, 1.8);
+    ell(ctx, fx + 1, fy - 2.6, 2.7, 1.8);
     ctx.fill();
   }
+  return { fx, fy };
 }
 
 // ---------------------------------------------------------------- tail

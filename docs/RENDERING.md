@@ -110,6 +110,23 @@ Leg render: tapered capsule (a→knee, r 8.5→6) + capsule (knee→paw, r 6→5
 a faint toe line. `pal.socks` overlays a white paw. The knee always bends backward
 (`bendDir = -1`) like a real cat's front legs.
 
+**v3.22 honest legs.** Bones are sized to the body: `legL1 + legL2 == sh[1] − standY + 1`
+for every body type, so a grounded paw sits inside the limb's real reach. Before this the
+bones were ~30% shorter than the standing height, and `drawLeg` drew the lower segment all
+the way to any unreachable paw target — walk stretched x1.52, run x1.60, the dance
+hands-up x2.76 of the bone total (the user's "upper legs gotten long" bug). Two hard
+guards now make stretching impossible:
+
+1. `drawLeg` scales the bones by `legK` (so the dance's 0.74 really draws SHORT limbs —
+   the v3.17 claim, now true) and clamps the drawn paw onto the reach circle
+   (`d ≤ (l1+l2)·0.999`), returning the clamped point so the overlay rim decorates the
+   same spot. Past the reach a leg BENDS, like a real cat's.
+2. Pose targets must respect the reach — `tests/v322.test.mjs` sweeps all states × breeds
+   × t and fails if any paw is asked more than 13px past its anchor's reach (the gallop
+   extreme of `zoomies` measures 11.4px, invisible in motion). The dance raised paws are
+   shoulder-relative (`shY − R·0.8`) and ride the body bob, so "hands up" is a bent-elbow
+   cheek-height pose, not stilts to the ears.
+
 ## 7. Tail chain
 
 ```
