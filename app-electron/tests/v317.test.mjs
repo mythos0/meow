@@ -210,9 +210,11 @@ describe('v3.17 reactions: the whole feature set is gone end-to-end', () => {
     'reactMusic', 'reactApps', 'reactTyping', 'stalkCursor', 'reactBuildStatus', 'statusFile'];
 
   test('no reaction key survives a legacy settings load', () => {
-    const s = createSettings({ read: () => JSON.stringify({ breed: 'orange_tabby', reactTyping: true, stalkCursor: true, reactMusic: true }), write: () => {} });
+    // v3.19: 'orange_tabby' (the retired v3.18 impostor) left the catalog;
+    // use the kept smokey kitten as the surviving-breed example instead.
+    const s = createSettings({ read: () => JSON.stringify({ breed: 'smokey_kitten', reactTyping: true, stalkCursor: true, reactMusic: true }), write: () => {} });
     for (const k of REACTION_KEYS) assert.ok(!(k in s.all), `${k} must be dropped by sanitize`);
-    assert.equal(s.get('breed'), 'orange_tabby', 'real data survives');
+    assert.equal(s.get('breed'), 'smokey_kitten', 'real data survives');
   });
 
   test('settings page has no Reactions nav/section and no Focus page', async () => {

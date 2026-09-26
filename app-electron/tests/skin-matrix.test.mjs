@@ -1,7 +1,7 @@
-// skin-matrix.test.mjs — v3.18 ROBUST skin coverage: every purchasable
+// skin-matrix.test.mjs — v3.18/3.19 ROBUST skin coverage: every purchasable
 // combination is rendered and pixel-verified, mirrored AND facing right,
 // in every state, with pairwise-distinct accessories. The probe page
-// (test/matrix.html) renders 3 breeds × (base + 7 hats + 4 dresses) × 2
+// (test/matrix.html) renders 3 breeds × (base + 14 hats + 10 costumes) × 2
 // directions plus every state with a full loadout vs plain — ONE page
 // load — and diffs each cell against its base in-page.
 import { test, describe, before, after } from 'node:test';
@@ -95,7 +95,7 @@ describe('skin matrix: every breed × accessory × direction (robust)', () => {
         });
       }
 
-      test(`${key}: all 7 hats are pairwise distinct`, () => {
+      test(`${key}: all ${HATS.length} hats are pairwise distinct`, () => {
         for (let i = 0; i < HATS.length; i++) {
           for (let j = i + 1; j < HATS.length; j++) {
             const d = report.pairs[`${key}:${HATS[i]}|${HATS[j]}`];

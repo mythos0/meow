@@ -29,18 +29,18 @@ describe('v3.6 feature toggles', () => {
   });
   test('legacy keys unchanged', () => {
     const s = mkStore();
-    // v3.18: the default cat IS the grey tabby again
-    assert.equal(s.get('breed'), 'grey_tabby');
+    // v3.19: the REAL ginger cat is the default again (v3.11 order restored)
+    assert.equal(s.get('breed'), 'ginger_kitten');
     assert.equal(s.get('unlimitedCoins'), true);
   });
-  test('v3.18: removed breeds/hats/dresses reset to the catalog defaults', () => {
+  test('v3.19: removed breeds/hats/dresses reset to the catalog defaults', () => {
     // a save file full of removed cats walks back onto the three-cat catalog
     const a = mkStore({ breed: 'panda', hat: 'santa', dress: 'red' });
-    assert.equal(a.get('breed'), 'grey_tabby', 'removed breed resets');
+    assert.equal(a.get('breed'), 'ginger_kitten', 'removed breed resets to the default cat');
     assert.equal(a.get('hat'), 'santa', 'a real hat survives');
     assert.equal(a.get('dress'), 'red', 'a real dress survives');
     const b = mkStore({ breed: 'siamese', hat: 'wizard', dress: 'gold' });
-    assert.equal(b.get('breed'), 'grey_tabby');
+    assert.equal(b.get('breed'), 'ginger_kitten');
     assert.equal(b.get('hat'), null, 'unknown hat resets');
     assert.equal(b.get('dress'), null, 'unknown dress resets');
   });

@@ -29,7 +29,7 @@ const grab = async q => {
     return cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
   });
 };
-for (const breed of ['grey_tabby', 'orange_tabby', 'smokey_kitten']) {
+for (const breed of ['grey_tabby', 'ginger_kitten', 'smokey_kitten']) {
   const base = await grab(`breed=${breed}`);
   const sh = await grab(`breed=${breed}&hat=shades`);
   const rows = [];

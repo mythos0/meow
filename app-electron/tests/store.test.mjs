@@ -1,7 +1,7 @@
 // store.test.mjs — settings store + economy tests
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSettings, DEFAULTS, BREED_PRICES } from '../src/settings-store.js';
+import { createSettings, DEFAULTS, BREED_PRICES, ITEM_PRICES } from '../src/settings-store.js';
 
 function memBackend() {
   let raw = null;
@@ -19,7 +19,7 @@ describe('settings-store', () => {
     assert.equal(st.get('breed'), DEFAULTS.breed);
     assert.equal(st.get('coins'), DEFAULTS.coins);
     // v3.1: unlimited-coins promo grants every item up-front (cats+hats+dresses)
-    assert.deepEqual([...st.get('owned')].sort(), [...Object.keys(BREED_PRICES), 'bow', 'crown', 'pumpkin', 'santa', 'flower', 'shades', 'tophat', 'blue', 'midnight', 'pink', 'red'].sort());
+    assert.deepEqual([...st.get('owned')].sort(), Object.keys(ITEM_PRICES).sort());
     assert.equal(st.get('unlimitedCoins'), true);
   });
 
@@ -85,7 +85,7 @@ describe('settings-store', () => {
     assert.equal(r.ok, true);
     assert.equal(st.get('coins'), 350 - 120);
     assert.ok(st.get('owned').includes('smokey_kitten'));
-    assert.equal(st.get('owned').length, 2, 'no auto-grant when promo off');
+    assert.equal(st.get('owned').length, 3, 'no auto-grant beyond the two free cats when promo off');
   });
 
   test('paid path: insufficient coins fails with deficit', () => {

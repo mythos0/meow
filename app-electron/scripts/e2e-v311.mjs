@@ -97,7 +97,7 @@ try {
   ok('renderer bridge alive', await cat.evaluate(() => !!window.__catBooted && !!window.meow));
 
   const breed = await cat.evaluate(async () => (await window.meow.getSettings()).breed);
-  ok('default cat IS the grey tabby (v3.18 catalog)', breed === 'grey_tabby', String(breed));
+  ok('default cat IS the real ginger cat (v3.19 catalog)', breed === 'ginger_kitten', String(breed));
 
   // ------------------------------------------------ 2. lane architecture
   const region = await cat.evaluate(() => window.__region());

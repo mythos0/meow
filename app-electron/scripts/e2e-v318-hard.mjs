@@ -188,15 +188,18 @@ for (let cycle = 1; cycle <= 5; cycle++) {
 }
 
 // -------------------------------------------------- 4. equip every combo LIVE
-console.log('— equipping all 48 hat × dress combos through the real IPC —');
-const HATS = [null, 'pumpkin', 'santa', 'flower', 'shades', 'tophat', 'crown', 'bow'];
-const DRESSES = [null, 'red', 'blue', 'pink', 'midnight'];
+// v3.19: lists imported from the store module itself so they can never drift.
+console.log('— equipping every hat × costume combo through the real IPC —');
+const { HAT_ITEMS, DRESS_ITEMS } = await import('../src/settings-store.js');
+const HATS = [null, ...HAT_ITEMS.map(i => i.id)];
+const DRESSES = [null, ...DRESS_ITEMS.map(i => i.id)];
+const N_COMBOS = HATS.length * DRESSES.length;
 let comboErrors = 0, comboApplied = 0, shot = 0;
 const comboFails = [];
 for (const hat of HATS) {
   for (const dress of DRESSES) {
     await cat.evaluate(({ h, d }) => window.meow.setSettings({ hat: h, dress: d }), { hat, dress });
-    await sleep(260);
+    await sleep(150);
     const pose = await cat.evaluate(() => {
       const p = window.__pose ? window.__pose() : 'NO_HOOK';
       return p;
@@ -204,13 +207,14 @@ for (const hat of HATS) {
     const alive = pose && typeof pose === 'object' && Number.isFinite(pose.x) && Number.isFinite(pose.t);
     if (alive) comboApplied++;
     else { comboErrors++; comboFails.push(`${hat}/${dress}: ${JSON.stringify(pose)}`); }
-    if ((hat === null || hat === 'tophat' || hat === 'crown') && shot < 12) {
+    if ((hat === null || hat === 'tophat' || hat === 'crown' || hat === 'witch' || hat === 'halo') && shot < 12) {
       await cat.screenshot({ path: path.join(OUT, `equip-${shot++}-${hat || 'nohat'}-${dress || 'nodress'}.png`) });
     }
   }
 }
-ok('equip: all 40 combos (8 hats × 5 dresses) applied live with zero renderer errors', comboApplied === 40 && comboErrors === 0,
-  `${comboApplied}/40 applied, ${comboErrors} failures — ${comboFails.slice(0, 8).join(' ; ')}`);
+ok(`equip: all ${N_COMBOS} combos (${HATS.length} hats × ${DRESSES.length} costumes) applied live with zero renderer errors`,
+  comboApplied === N_COMBOS && comboErrors === 0,
+  `${comboApplied}/${N_COMBOS} applied, ${comboErrors} failures — ${comboFails.slice(0, 8).join(' ; ')}`);
 ok('equip: settings page never auto-appeared during equips', !allPages().some(p => /settings\.html/.test(p.url())));
 await cat.evaluate(() => window.meow.setSettings({ hat: null, dress: null }));
 await sleep(300);

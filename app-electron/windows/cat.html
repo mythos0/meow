@@ -445,7 +445,7 @@ function startDanceParty() {
   for (let i = 0; i < 2; i++) {
     const b = new CatBrain({
       bounds: { ...wa }, groundY: brain.groundY, speed: 70,
-      breed: i === 0 ? 'orange_tabby' : 'smokey_kitten',   // v3.18: only the three store cats exist now
+      breed: i === 0 ? 'ginger_kitten' : 'smokey_kitten', // v3.19: the real ginger cat + the smokey kitten
     });
     b.x = Math.max(wa.x + 60, Math.min(wa.x + wa.width - 60, brain.x + (i === 0 ? -125 : 125)));
     b._enter('dance', 22);
@@ -476,13 +476,13 @@ function applyCompanion(on) {
   if (on && !companion && brain) {
     const b = new CatBrain({
       bounds: { ...brain.bounds }, groundY: brain.groundY, speed: 62,
-      breed: 'orange_tabby',   // v3.18: the companion is the ginger cat (only store cats exist)
+      breed: 'ginger_kitten',    // v3.19: the companion is the REAL ginger cat
     });
     b.x = Math.max(brain.bounds.x + 80, Math.min(brain.bounds.x + brain.bounds.w - 80, brain.x - 150));
     b.setScale(S.size * 0.62);
     b.setPlatforms(brain.platforms);   // v3.13: the kitten may follow onto window tops
-    companion = { brain: b, breed: 'orange_tabby', hat: currentHat, dress: currentDress };
-    xlog('companion', `companion kitten spawned at ${Math.round(b.x)}`, { breed: 'orange_tabby' });
+    companion = { brain: b, breed: 'ginger_kitten', hat: currentHat, dress: currentDress };
+    xlog('companion', `companion kitten spawned at ${Math.round(b.x)}`, { breed: 'ginger_kitten' });
   } else if (!on) companion = null;
 }
 

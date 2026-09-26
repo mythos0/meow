@@ -30,8 +30,8 @@ test('v3.12 sound toggles sanitize + persist', () => {
   assert.equal(store2.get('soundDblClickMeow'), true);   // 'yes' is not boolean → rejected
 });
 
-test('v3.18 default breed is the grey tabby on the three-cat catalog', () => {
-  assert.equal(DEFAULTS.breed, 'grey_tabby');
+test('v3.19 default breed is the REAL ginger cat on the three-cat catalog', () => {
+  assert.equal(DEFAULTS.breed, 'ginger_kitten');
   assert.ok(BREED_PRICES.smokey_kitten > 0);
 });
 

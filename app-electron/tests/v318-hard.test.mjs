@@ -204,29 +204,60 @@ describe('v3.18 hard: walking soaks — the facing flicker stays dead in hostile
 
 // ================================================================ 2. store
 describe('v3.18 hard: store hardening — old saves and hostile writes never wedge it', () => {
+  // v3.19: the real ginger cat ('ginger_kitten') is BACK in the catalog —
+  // removed from the retired list; the v3.18 impostor 'orange_tabby' joins it.
+  // ('sakura' is retired as a BREED but lives on as a v3.19 costume id — the
+  // shared id space means its "owned" entry is legitimate, so it is not in
+  // this list.)
   const REMOVED_BREEDS = ['siamese', 'calico', 'persian', 'tuxedo', 'bombay', 'russian_blue',
-    'ginger_kitten', 'ragdoll', 'bengal', 'maine_coon', 'panda', 'mochi', 'scottish_fold',
-    'snow_angora', 'somali', 'british_plush', 'choco_munchkin', 'sakura', 'cocoa_kitten',
+    'orange_tabby', 'ragdoll', 'bengal', 'maine_coon', 'panda', 'mochi', 'scottish_fold',
+    'snow_angora', 'somali', 'british_plush', 'choco_munchkin', 'cocoa_kitten',
     'milky_kitten', 'midnight_kitten'];
 
-  test('catalog is exactly the three requested cats', () => {
-    assert.deepEqual(CAT_ITEMS.map(c => c.id).sort(), ['grey_tabby', 'orange_tabby', 'smokey_kitten']);
+  test('catalog is exactly the three requested cats — with the REAL ginger cat', () => {
+    assert.deepEqual(CAT_ITEMS.map(c => c.id).sort(), ['ginger_kitten', 'grey_tabby', 'smokey_kitten']);
     assert.equal(CAT_ITEMS.find(c => c.id === 'grey_tabby').price, 0, 'grey tabby must be free');
-    assert.equal(CAT_ITEMS.find(c => c.id === 'orange_tabby').price, 0, 'ginger cat must be free');
+    assert.equal(CAT_ITEMS.find(c => c.id === 'ginger_kitten').price, 0, 'the real ginger cat must be free');
     assert.equal(CAT_ITEMS.find(c => c.id === 'smokey_kitten').price, 120);
   });
 
-  test('store sells 7 hats + 4 dresses, all ids known to the renderer', () => {
+  test('store sells 14 hats + 10 costumes, all ids known to the renderer', () => {
     assert.deepEqual([...KNOWN_HATS].sort(), [...HATS].sort());
     assert.deepEqual([...KNOWN_DRESSES].sort(), [...DRESSES].sort());
+    assert.equal(KNOWN_HATS.size, 14, 'fourteen hats');
+    assert.equal(KNOWN_DRESSES.size, 10, 'ten costumes');
     for (const id of [...KNOWN_HATS, ...KNOWN_DRESSES]) assert.ok(id in ITEM_PRICES, `${id} not priced`);
+  });
+
+  test('default breed IS the real ginger cat (v3.11 order restored)', () => {
+    const st = createSettings({ read: () => null, write: () => {} });
+    assert.equal(st.get('breed'), 'ginger_kitten');
+    assert.ok(st.get('owned').includes('ginger_kitten'), 'the ginger cat must be owned by default');
+  });
+
+  test('v3.19 migration: v3.18 victims parked on grey_tabby walk home to ginger — once', () => {
+    // first launch: the one-time flip + latch
+    const mem = { buf: JSON.stringify({ breed: 'grey_tabby', coins: 77 }) };
+    const s1 = createSettings({ read: () => mem.buf, write: s => { mem.buf = s; } });
+    assert.equal(s1.get('breed'), 'ginger_kitten', 'grey_tabby save walks back onto the ginger cat');
+    assert.equal(s1.get('coins'), 77, 'everything else survives untouched');
+    // second launch: latched — a deliberate grey-tabby pick stays
+    const s2 = createSettings({ read: () => JSON.stringify({ breed: 'grey_tabby', migrated319: true }), write: () => {} });
+    assert.equal(s2.get('breed'), 'grey_tabby', 'after the latch the user picks whatever they want');
+  });
+
+  test('v3.19 migration: smokey/custom/ginger saves are never touched by the walk-home', () => {
+    for (const breed of ['smokey_kitten', 'ginger_kitten']) {
+      const st = createSettings({ read: () => JSON.stringify({ breed }), write: () => {} });
+      assert.equal(st.get('breed'), breed, `${breed} must not be flipped`);
+    }
   });
 
   for (const legacy of REMOVED_BREEDS) {
     test(`removed breed "${legacy}" walks back onto the catalog`, () => {
       const mem = { buf: JSON.stringify({ breed: legacy, owned: [legacy, 'grey_tabby'] }) };
       const st = createSettings({ read: () => mem.buf, write: s => { mem.buf = s; } });
-      assert.equal(st.get('breed'), 'grey_tabby', `${legacy} must reset to the default cat`);
+      assert.equal(st.get('breed'), 'ginger_kitten', `${legacy} must reset to the default cat`);
       assert.ok(!st.get('owned').includes(legacy), `${legacy} must not stay owned`);
     });
   }

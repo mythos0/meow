@@ -35,10 +35,10 @@ await page.locator('#grid').screenshot({ path: path.join(outDir, 'sheet.png') })
 // individual states for detail — v3.1 set (new actions + panda + new breeds)
 const shots = [
   ['walk', 0.0, 'grey_tabby', 1], ['walk', 0.35, 'grey_tabby', 1],
-  ['run', 0.2, 'orange_tabby', 1], ['sit', 0.1, 'siamese', 1],
+  ['run', 0.2, 'ginger_kitten', 1], ['sit', 0.1, 'siamese', 1],
   ['sleep', 0.2, 'persian', 1], ['dance', 0.13, 'calico', 1],
   ['scratch', 0.08, 'tuxedo', 1], ['jump', 0.5, 'grey_tabby', 1],
-  ['happy', 0.1, 'orange_tabby', 1],
+  ['happy', 0.1, 'ginger_kitten', 1],
   // v3.2 eat: bite / chew / swallow phases
   ['eat', 0.35, 'grey_tabby', 1], ['eat', 0.9, 'grey_tabby', 1], ['eat', 1.3, 'grey_tabby', 1],
   ['eat', 1.75, 'grey_tabby', 1], ['eat', 3.1, 'grey_tabby', 1], ['eat', 4.5, 'grey_tabby', 1],

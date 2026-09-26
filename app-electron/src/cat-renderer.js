@@ -12,10 +12,17 @@ export const PALETTES = {
     earIn: '#d59aa2', nose: '#c47583', eye: '#79b356', pupil: '#1c1f24',
     tongue: '#d98a94',
   },
-  orange_tabby: {
-    name: "Ginger Cat",
-    fur: '#eaa75f', dark: '#c47f3c', belly: '#f8e3c4', stripe: '#a85a24',
-    earIn: '#e0a89e', nose: '#d07f6e', eye: '#93bb4e', pupil: '#241a10',
+  // v3.19 REGRESSION FIX: v3.18 renamed the old 'orange_tabby' (a normal-bodied
+  // striped cat) to "Ginger Cat" — but that was NOT the cat the user lived with.
+  // The REAL ginger cat has been the v3.11 default 'ginger_kitten' ever since
+  // ("the default cat IS the ginger kitten"): a tiny kitten with a big head,
+  // short legs, big eyes and this exact warm coat. Restored byte-for-byte from
+  // v3.17.0 (git history), now wearing the store name "Ginger Cat".
+  ginger_kitten: {
+    name: "Ginger Cat",      // the REAL ginger cat — the v3.11 default kitten
+    body: 'kitten',
+    fur: '#f0b268', dark: '#cf8b42', belly: '#fae8cd', stripe: '#b06226',
+    earIn: '#e2a79b', nose: '#d07f6e', eye: '#93bb4e', pupil: '#241a10',
     tongue: '#d98a94',
   },
   smokey_kitten: {
@@ -26,8 +33,8 @@ export const PALETTES = {
     tongue: '#d98a94',
   },
   // v3.18: every other built-in breed was REMOVED at the user's request —
-  // the Cat Store now carries exactly three cats (grey tabby + ginger cat
-  // free, smokey kitten unlockable) plus hats and dresses.
+  // the Cat Store now carries exactly three cats (grey tabby + the real
+  // ginger cat free, smokey kitten unlockable) plus hats and dresses.
 };
 
 // ---------------- body types (v3.1) ----------------
@@ -388,13 +395,21 @@ export function drawCat(ctx, opts) {
 // with a hem band, waist sash and a per-style pattern, fitted to any body
 // type from the B geometry (rx/ry). Drawn in BODY space (rotates with the
 // torso), UNDER the near legs.
-export const DRESSES = ['red', 'blue', 'pink', 'midnight'];
+export const DRESSES = ['red', 'blue', 'pink', 'midnight',
+  'sakura', 'sunshine', 'rainbow', 'berry', 'hero', 'pirate'];
 
 export const DRESS_STYLES = {
   red:      { base: '#d84a4a', dark: '#a83232', trim: '#f6e7c8', pattern: 'hearts' },
   blue:     { base: '#4a7fd8', dark: '#33619f', trim: '#e8f1fb', pattern: 'stripes' },
   pink:     { base: '#e88ab0', dark: '#c06288', trim: '#fdf1f6', pattern: 'dots' },
   midnight: { base: '#3a3a5c', dark: '#26263e', trim: '#8f8fc9', pattern: 'stars' },
+  // v3.19 costumes — six new outfits in the same fitted pipeline
+  sakura:   { base: '#f2b8cc', dark: '#c884a0', trim: '#fff5fa', pattern: 'blossom' },
+  sunshine: { base: '#f2c94c', dark: '#c99a2e', trim: '#fdf6de', pattern: 'sun' },
+  rainbow:  { base: '#f0ede6', dark: '#b8b4a8', trim: '#ffffff', pattern: 'rainbow' },
+  berry:    { base: '#c23a5a', dark: '#8e2440', trim: '#f6e7c8', pattern: 'seeds' },
+  hero:     { base: '#3a6ad8', dark: '#2a4a9f', trim: '#e8d44a', pattern: 'bolt' },
+  pirate:   { base: '#2e2e3a', dark: '#1c1c26', trim: '#f0ece0', pattern: 'horizontal' },
 };
 
 export function drawDress(ctx, kind, B, P) {
@@ -431,6 +446,71 @@ export function drawDress(ctx, kind, B, P) {
     for (const [px, py, pr] of [[-24, -4, 1.7], [-8, 3, 1.4], [10, -6, 1.7], [24, 2, 1.4], [-16, 10, 1.2], [4, 12, 1.2]]) {
       ctx.beginPath(); ctx.ellipse(px, py, pr, pr, 0, 0, TAU); ctx.fill();
     }
+  } else if (D.pattern === 'blossom') {
+    // v3.19 sakura: tiny five-petal cherry blossoms + drifting petals
+    for (const [px, py, s] of [[-22, -3, 1], [-2, 5, 0.85], [18, -2, 1], [8, 12, 0.7]]) {
+      ctx.save(); ctx.translate(px, py); ctx.scale(s, s);
+      for (let p = 0; p < 5; p++) {
+        const pa = (p / 5) * TAU;
+        ell(ctx, Math.cos(pa) * 2.6, Math.sin(pa) * 2.6, 1.7, 1.7);
+        ctx.fillStyle = '#fdf1f6'; ctx.fill();
+      }
+      ell(ctx, 0, 0, 1.2, 1.2); ctx.fillStyle = '#e8d44a'; ctx.fill();
+      ctx.restore();
+    }
+  } else if (D.pattern === 'sun') {
+    // v3.19 sunshine: little radiant suns
+    ctx.strokeStyle = D.trim; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+    for (const [px, py, pr] of [[-20, -2, 4.4], [14, 2, 5.4], [-2, 11, 3.2]]) {
+      ctx.beginPath(); ctx.arc(px, py, pr, 0, TAU); ctx.stroke();
+      for (let a = 0; a < 8; a++) {
+        const ra = (a / 8) * TAU;
+        ctx.beginPath();
+        ctx.moveTo(px + Math.cos(ra) * (pr + 1.6), py + Math.sin(ra) * (pr + 1.6));
+        ctx.lineTo(px + Math.cos(ra) * (pr + 4.2), py + Math.sin(ra) * (pr + 4.2));
+        ctx.stroke();
+      }
+    }
+  } else if (D.pattern === 'rainbow') {
+    // v3.19 rainbow: six soft colour bands across the skirt
+    const bands = ['#e05a5a', '#e89a4a', '#e8d44a', '#6ab86a', '#5a8fd8', '#8a6ad8'];
+    const bh = 5.4;
+    bands.forEach((c, i) => {
+      ctx.fillStyle = c; ctx.globalAlpha *= 0.85;
+      ctx.fillRect(-rx * 1.2, -12 + i * bh, rx * 2.4, bh);
+      ctx.globalAlpha /= 0.85;
+    });
+  } else if (D.pattern === 'seeds') {
+    // v3.19 berry: strawberry seed flecks
+    ctx.fillStyle = D.trim;
+    for (const [px, py] of [[-24, -6], [-15, 1], [-20, 9], [-7, -4], [-3, 7], [6, -1], [12, 8], [16, -7], [24, 3], [22, 11], [0, 13], [-12, 12]]) {
+      ctx.beginPath(); ctx.ellipse(px, py, 1.3, 2.0, 0.5, 0, TAU); ctx.fill();
+    }
+  } else if (D.pattern === 'bolt') {
+    // v3.19 hero: a lightning-bolt chest emblem + two echo bolts
+    const bolt = (bx, by, s) => {
+      ctx.beginPath();
+      ctx.moveTo(bx + 2.2 * s, by - 7 * s);
+      ctx.lineTo(bx - 2.6 * s, by + 0.6 * s);
+      ctx.lineTo(bx - 0.2 * s, by + 0.8 * s);
+      ctx.lineTo(bx - 2.2 * s, by + 7 * s);
+      ctx.lineTo(bx + 2.6 * s, by - 0.6 * s);
+      ctx.lineTo(bx + 0.2 * s, by - 0.8 * s);
+      ctx.closePath(); ctx.fill();
+    };
+    ctx.fillStyle = D.trim;
+    bolt(0, -1, 1.35);                       // the big chest bolt
+    ctx.globalAlpha *= 0.55;
+    bolt(-20, 6, 0.8); bolt(20, 4, 0.8);     // echoes
+    ctx.globalAlpha /= 0.55;
+  } else if (D.pattern === 'horizontal') {
+    // v3.19 pirate: bold Breton-sailor horizontal bands
+    ctx.fillStyle = D.trim; ctx.globalAlpha *= 0.9;
+    for (let i = -2; i <= 2; i++) ctx.fillRect(-rx * 1.2, -9 + i * 7.4, rx * 2.4, 3.4);
+    ctx.globalAlpha /= 0.9;
+    // a tiny skull dot on the chest
+    ell(ctx, 0, -4, 2.6, 2.4); ctx.fillStyle = '#f0ece0'; ctx.fill();
+    ell(ctx, -0.9, -4.4, 0.6, 0.6); ell(ctx, 0.9, -4.4, 0.6, 0.6); ctx.fillStyle = D.base; ctx.fill();
   }
   ctx.restore();
   // hem band
@@ -549,6 +629,143 @@ export function drawHat(ctx, kind, headC) {
     ctx.strokeStyle = '#b8862a'; ctx.lineWidth = 1.4; ctx.stroke();
     for (const [jx, jy, jc] of [[0, -1, '#e05a7a'], [-r * 0.36, 1.6, '#5a9fe0'], [r * 0.36, 1.6, '#5ac98a']]) {
       ell(ctx, jx, jy, 1.9, 1.9); ctx.fillStyle = jc; ctx.fill();
+    }
+    ctx.restore();
+  } else if (kind === 'witch') {
+    // v3.19 store hat: a bent-tip witch cone with a buckled band
+    ctx.save();
+    ctx.translate(0, -r * 0.62);
+    ctx.fillStyle = '#5a3a8e';
+    ell(ctx, 0, 6.5, r * 0.95, 3.2); ctx.fill();               // brim
+    ctx.beginPath();                                           // cone, tip bent right
+    ctx.moveTo(-r * 0.52, 4);
+    ctx.quadraticCurveTo(-r * 0.30, -r * 1.05, r * 0.28, -r * 1.28);
+    ctx.quadraticCurveTo(r * 0.72, -r * 1.38, r * 0.60, -r * 1.02);
+    ctx.quadraticCurveTo(r * 0.42, -r * 0.55, r * 0.52, 4);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#3a2358';                                  // band
+    ctx.fillRect(-r * 0.46, -2.2, r * 0.94, 4.6);
+    ctx.fillStyle = '#e8b83a';                                  // buckle
+    ctx.fillRect(-2.6, -1.8, 5.2, 4.2);
+    ctx.fillStyle = '#3a2358';
+    ctx.fillRect(-1.1, -0.6, 2.2, 1.8);
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';                   // sheen
+    ctx.beginPath(); ctx.moveTo(-r * 0.34, 2); ctx.quadraticCurveTo(-r * 0.22, -r * 0.5, r * 0.1, -r * 0.95);
+    ctx.quadraticCurveTo(-r * 0.1, -r * 0.4, -r * 0.16, 2); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  } else if (kind === 'party') {
+    // v3.19 store hat: a striped party cone with a pompom, tilted
+    ctx.save();
+    ctx.translate(0, -r * 0.55);
+    ctx.rotate(0.16);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.55, 4);
+    ctx.quadraticCurveTo(0, 7, r * 0.55, 4);
+    ctx.lineTo(2, -r * 1.28);
+    ctx.closePath();
+    ctx.fillStyle = '#4a9fd8'; ctx.fill();
+    ctx.save(); ctx.clip();                                     // diagonal stripes
+    ctx.strokeStyle = '#f2d04a'; ctx.lineWidth = 4.2;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo(i * 9 - 8, 8); ctx.lineTo(i * 9 + 6, -r * 1.4); ctx.stroke();
+    }
+    ctx.restore();
+    ell(ctx, 1.6, -r * 1.34, 4.4, 4.4);                         // pompom
+    ctx.fillStyle = '#e05a7a'; ctx.fill();
+    ctx.restore();
+  } else if (kind === 'chef') {
+    // v3.19 store hat: the classic puffy white toque
+    ctx.save();
+    ctx.translate(0, -r * 0.66);
+    ctx.fillStyle = '#f6f4f0';
+    for (const [px, py, pr] of [[-r * 0.34, -r * 0.52, r * 0.34], [0, -r * 0.72, r * 0.40], [r * 0.34, -r * 0.52, r * 0.34]]) {
+      ell(ctx, px, py, pr, pr); ctx.fill();
+    }
+    rr(ctx, -r * 0.52, -r * 0.52, r * 1.04, r * 0.62 + 5, 2.5); ctx.fill();  // crown body
+    ctx.strokeStyle = 'rgba(120,120,130,0.45)'; ctx.lineWidth = 1.2;
+    rr(ctx, -r * 0.52, -r * 0.52, r * 1.04, r * 0.62 + 5, 2.5); ctx.stroke();
+    ctx.fillStyle = '#dcd8d0';                                  // ribbed band
+    rr(ctx, -r * 0.54, -1.8, r * 1.08, 6.2, 2.2); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,120,130,0.35)';
+    for (const vx of [-r * 0.3, 0, r * 0.3]) {
+      ctx.beginPath(); ctx.moveTo(vx, -1.2); ctx.lineTo(vx, 4); ctx.stroke();
+    }
+    ctx.restore();
+  } else if (kind === 'cowboy') {
+    // v3.19 store hat: weathered brown wide-brim with an upturned edge
+    ctx.save();
+    ctx.translate(0, -r * 0.72);
+    ctx.fillStyle = '#9a6a3a';
+    ctx.beginPath();                                           // brim
+    ctx.moveTo(-r * 1.06, 5);
+    ctx.quadraticCurveTo(0, 10.5, r * 1.06, 5);
+    ctx.quadraticCurveTo(r * 1.18, 1.5, r * 1.02, 0.5);
+    ctx.quadraticCurveTo(0, 4.5, -r * 1.02, 0.5);
+    ctx.quadraticCurveTo(-r * 1.18, 1.5, -r * 1.06, 5);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();                                           // crown dome
+    ctx.moveTo(-r * 0.5, 2.5);
+    ctx.quadraticCurveTo(-r * 0.52, -r * 0.62, 0, -r * 0.66);
+    ctx.quadraticCurveTo(r * 0.52, -r * 0.62, r * 0.5, 2.5);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#6e4826';
+    ctx.fillRect(-r * 0.5, -2.6, r * 1.0, 4.2);                // band
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ell(ctx, -r * 0.2, -r * 0.3, r * 0.2, r * 0.24, -0.3); ctx.fill();  // sheen
+    ctx.restore();
+  } else if (kind === 'beanie') {
+    // v3.19 store hat: a knit dome with a ribbed fold and pompom
+    ctx.save();
+    ctx.translate(0, -r * 0.6);
+    ctx.fillStyle = '#4a8a6a';
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.82, 4);
+    ctx.quadraticCurveTo(-r * 0.86, -r * 0.95, 0, -r * 1.0);
+    ctx.quadraticCurveTo(r * 0.86, -r * 0.95, r * 0.82, 4);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1.6;  // knit ribs
+    for (const vx of [-r * 0.5, -r * 0.22, 0, r * 0.22, r * 0.5]) {
+      ctx.beginPath(); ctx.moveTo(vx * 0.55, -r * 0.95);
+      ctx.quadraticCurveTo(vx, -r * 0.4, vx * 1.04, 3); ctx.stroke();
+    }
+    ctx.fillStyle = '#3a6e54';                                  // folded band
+    rr(ctx, -r * 0.85, -1.6, r * 1.7, 7, 3.4); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1.3;
+    for (const vx of [-r * 0.55, -r * 0.18, r * 0.18, r * 0.55]) {
+      ctx.beginPath(); ctx.moveTo(vx, -0.8); ctx.lineTo(vx, 4.8); ctx.stroke();
+    }
+    ell(ctx, 0, -r * 1.14, 5.2, 5.2);                           // pompom
+    ctx.fillStyle = '#f2ede2'; ctx.fill();
+    ctx.restore();
+  } else if (kind === 'halo') {
+    // v3.19 store hat: a golden angel ring floating over the head
+    ctx.save();
+    ctx.translate(0, -r * 1.42);
+    ctx.rotate(-0.18);
+    ctx.strokeStyle = 'rgba(244, 208, 90, 0.35)'; ctx.lineWidth = r * 0.34;  // glow
+    ell(ctx, 0, 0, r * 0.62, r * 0.24); ctx.stroke();
+    ctx.strokeStyle = '#f4d05a'; ctx.lineWidth = 3.2;
+    ell(ctx, 0, 0, r * 0.62, r * 0.24); ctx.stroke();
+    ctx.strokeStyle = '#fff2b8'; ctx.lineWidth = 1.2;           // inner shine
+    ell(ctx, 0, 0, r * 0.52, r * 0.17); ctx.stroke();
+    ctx.restore();
+  } else if (kind === 'horns') {
+    // v3.19 store hat: little devil horns peeking between the ears
+    ctx.save();
+    ctx.fillStyle = '#c23a3a';
+    for (const s of [-1, 1]) {
+      ctx.save();
+      ctx.translate(s * r * 0.52, -r * 0.82);
+      ctx.rotate(s * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(-3.4, 2.5);
+      ctx.quadraticCurveTo(-4.2, -7.5, 0, -r * 0.55);
+      ctx.quadraticCurveTo(4.2, -7.0, 3.4, 2.5);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#8e2424';                                // shadowed base
+      ell(ctx, 0, 1.6, 3.6, 2.0); ctx.fill();
+      ctx.fillStyle = '#c23a3a';
+      ctx.restore();
     }
     ctx.restore();
   } else if (kind === 'bow') {
@@ -1896,7 +2113,10 @@ export const EMOTES = [
 ];
 
 // v3.6 seasonal hats (opt-in via Settings → "Seasonal skins")
-export const HATS = ['pumpkin', 'santa', 'flower', 'shades', 'tophat', 'crown', 'bow'];
+// v3.19: seven NEW store hats (witch/party/chef/cowboy/beanie/halo/horns)
+// join the v3.18 seven — fourteen hats total, every one drawn head-local.
+export const HATS = ['pumpkin', 'santa', 'flower', 'shades', 'tophat', 'crown', 'bow',
+  'witch', 'party', 'chef', 'cowboy', 'beanie', 'halo', 'horns'];
 export function seasonHat(month) {
   if (month === 9) return 'pumpkin';                 // October — jack-o'-lantern hours
   if (month === 11) return 'santa';                  // December — festive mode

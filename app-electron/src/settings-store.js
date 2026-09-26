@@ -3,7 +3,9 @@
 'use strict';
 
 export const DEFAULTS = {
-  breed: 'grey_tabby',      // v3.18: the default cat IS the grey tabby
+  breed: 'ginger_kitten',   // v3.19: the REAL ginger cat is back AND is the default
+                            // again (v3.11 'the default cat IS the ginger kitten') —
+                            // v3.18's impostor ('orange_tabby' renamed) is gone
   size: 1.0,            // 0.5 .. 2.0
   opacity: 1.0,         // 0.3 .. 1
   sounds: true,
@@ -18,9 +20,10 @@ export const DEFAULTS = {
   speed: 55,
   coins: 999999,        // v3.1: promo — effectively unlimited coins
   unlimitedCoins: true, // v3.1: every breed unlocks free while true
-  owned: ['grey_tabby'],  // owned breeds (auto-granted to ALL while unlimitedCoins)
+  owned: ['grey_tabby', 'ginger_kitten'],  // the two free cats (auto-granted to ALL while unlimitedCoins)
   reminders: [],          // [{id,label,at,repeat,anim,sound}]
   version: 1,
+  migrated319: false,       // v3.19 one-time ginger-restoration latch (see sanitize)
 
   // ---- v3.6 feature pack — every feature ships with an on/off toggle ----
   // v3.17: ALL system-reaction flags (reactSystemSpikes / reactLowBattery /
@@ -63,27 +66,36 @@ export const DEFAULTS = {
 const OBJECT_KEYS = new Set(['stats']);
 const ARRAY_KEYS = new Set(['noWalkZoneList', 'customSkins', 'unlocked', 'feedbackList']);
 
-// v3.18 THE STORE CATALOG — three cats, hats, dresses. Everything else was
-// removed at the user's request; the sanitize step walks old save files back
-// onto the catalog (unknown breeds/hats/dresses reset to the defaults).
+// v3.19 THE STORE CATALOG — three cats, fourteen hats, ten costumes. The
+// ginger cat is the REAL one again (the v3.11 ginger_kitten body/palette —
+// v3.18 had renamed the retired 'orange_tabby' impostor into its slot).
+// The sanitize step walks old save files back onto the catalog (unknown
+// breeds/hats/dresses reset to the defaults).
 export const CAT_ITEMS = [
-  { id: 'grey_tabby', price: 0 },      // the default cat — free, always owned
-  { id: 'orange_tabby', price: 0 },    // the ginger cat — free
+  { id: 'grey_tabby', price: 0 },      // free, always owned
+  { id: 'ginger_kitten', price: 0 },   // the REAL ginger cat — free
   { id: 'smokey_kitten', price: 120 }, // the blue-grey plush baby — unlockable
 ];
 
 // v3.18 store hats (renderer HATS — pumpkin/santa/flower/shades stay seasonal
 // extras that are also buyable; tophat/crown/bow are new).
+// v3.19: witch/party/chef/cowboy/beanie/halo/horns join them — 14 hats total.
 export const HAT_ITEMS = [
   { id: 'pumpkin', price: 40 }, { id: 'santa', price: 40 }, { id: 'flower', price: 30 },
   { id: 'shades', price: 50 }, { id: 'tophat', price: 60 }, { id: 'crown', price: 120 },
   { id: 'bow', price: 35 },
+  { id: 'witch', price: 60 }, { id: 'party', price: 45 }, { id: 'chef', price: 55 },
+  { id: 'cowboy', price: 70 }, { id: 'beanie', price: 40 }, { id: 'halo', price: 90 },
+  { id: 'horns', price: 65 },
 ];
 
 // v3.18 store dresses (renderer DRESSES / DRESS_STYLES)
+// v3.19: sakura/sunshine/rainbow/berry/hero/pirate join them — 10 total.
 export const DRESS_ITEMS = [
   { id: 'red', price: 80 }, { id: 'blue', price: 80 },
   { id: 'pink', price: 80 }, { id: 'midnight', price: 110 },
+  { id: 'sakura', price: 85 }, { id: 'sunshine', price: 85 }, { id: 'rainbow', price: 120 },
+  { id: 'berry', price: 90 }, { id: 'hero', price: 130 }, { id: 'pirate', price: 95 },
 ];
 
 const _catPrices = Object.fromEntries(CAT_ITEMS.map(i => [i.id, i.price]));
@@ -108,15 +120,20 @@ export function createSettings(backend) {
     } catch { return sanitize({}); }
   }
 
-  // v3.18: the v3.11 grey_tabby→ginger_kitten default migration is gone —
-  // grey_tabby IS the default again and ginger_kitten no longer exists.
+  // v3.18: the v3.11 grey_tabby→ginger_kitten default migration was dropped
+  // and the impostor 'orange_tabby' was renamed "Ginger Cat".
+  // v3.19: THAT WAS WRONG — the real ginger cat IS the old ginger_kitten
+  // (restored above). One-time walk-home: v3.18 reset every pre-3.18 save
+  // (breed 'ginger_kitten') to grey_tabby, so those homes now read grey_tabby;
+  // on the first v3.19 launch they walk back onto the ginger cat. The latch
+  // keeps later deliberate grey-tabby picks untouched.
 
   function sanitize(p) {
     const d = structuredClone(DEFAULTS);
     for (const k of Object.keys(d)) {
       if (!(k in p)) continue;
       if (k === 'owned') {
-        if (Array.isArray(p.owned)) d.owned = [...new Set(['grey_tabby', ...p.owned.filter(x => typeof x === 'string')])];
+        if (Array.isArray(p.owned)) d.owned = [...new Set(['grey_tabby', 'ginger_kitten', ...p.owned.filter(x => typeof x === 'string')])];
       } else if (k === 'reminders') {
         if (Array.isArray(p.reminders)) d.reminders = p.reminders.filter(r => r && typeof r.at === 'number');
       } else if (k === 'stats') {
@@ -176,6 +193,12 @@ export function createSettings(backend) {
     if (d.breed && !d.breed.startsWith('custom:') && !KNOWN_CATS.has(d.breed)) d.breed = DEFAULTS.breed;
     if (d.hat != null && !KNOWN_HATS.has(d.hat)) d.hat = null;
     if (d.dress != null && !KNOWN_DRESSES.has(d.dress)) d.dress = null;
+    // v3.19 one-time ginger restoration (see comment above): fires once per
+    // save file, then the latch keeps every later choice exactly as picked.
+    if (!p.migrated319) {
+      if (d.breed === 'grey_tabby') d.breed = 'ginger_kitten';
+      d.migrated319 = true;
+    }
     if (Array.isArray(d.owned)) {
       d.owned = d.owned.filter(x => typeof x === 'string' &&
         (x.startsWith('custom:') || x in ITEM_PRICES));

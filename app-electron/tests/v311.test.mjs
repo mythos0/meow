@@ -19,13 +19,13 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WA = { x: 0, y: 0, width: 1600, height: 1000 };
 
 // ---------------------------------------------------------------- defaults
-describe('v3.11 lane/zone/drag contract (the kitten-era defaults were superseded in v3.18)', () => {
-  test('DEFAULTS.breed is grey_tabby (v3.18 store reset)', () => {
-    assert.equal(DEFAULTS.breed, 'grey_tabby');
+describe('v3.11 lane/zone/drag contract (v3.18 reset the default; v3.19 restored ginger)', () => {
+  test('DEFAULTS.breed is ginger_kitten (v3.19: the REAL ginger cat is back)', () => {
+    assert.equal(DEFAULTS.breed, 'ginger_kitten');
   });
-  test('a fresh install boots as the grey tabby', () => {
+  test('a fresh install boots as the real ginger cat', () => {
     const s = createSettings({ read: () => null, write: () => {} });
-    assert.equal(s.get('breed'), 'grey_tabby');
+    assert.equal(s.get('breed'), 'ginger_kitten');
   });
   test('the v3.11 kitten litter is gone except smokey_kitten', () => {
     for (const b of ['cocoa_kitten', 'milky_kitten', 'midnight_kitten']) {

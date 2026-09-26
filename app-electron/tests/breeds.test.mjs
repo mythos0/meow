@@ -1,5 +1,8 @@
-// breeds.test.mjs — v3.18 store catalog: THREE cats (grey tabby, ginger cat,
-// smokey kitten), body-type integrity, distinct palettes, price coverage.
+// breeds.test.mjs — v3.19 store catalog: THREE cats (grey tabby, the REAL
+// ginger cat, smokey kitten), body-type integrity, distinct palettes, prices.
+// v3.19 REGRESSION GUARD: the ginger cat must stay the REAL one (the v3.11
+// default ginger_kitten — kitten body, big head, warm #f0b268 coat), never
+// again the renamed orange_tabby impostor v3.18 shipped.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { PALETTES, BODIES, STATES, EMOTES, CAT_BBOX, emoteAnchor, DRESSES, HATS } from '../src/cat-renderer.js';
@@ -9,10 +12,27 @@ const REQUIRED_KEYS = ['fur', 'dark', 'belly', 'nose', 'eye', 'pupil', 'earIn', 
 
 describe('breeds & bodies (v3.2)', () => {
   test('exactly THREE store cats exist (grey tabby, ginger cat, smokey kitten)', () => {
-    const expected = ['grey_tabby', 'orange_tabby', 'smokey_kitten'];
+    const expected = ['grey_tabby', 'ginger_kitten', 'smokey_kitten'];
     for (const b of expected) assert.ok(PALETTES[b], `missing breed: ${b}`);
     assert.deepEqual(Object.keys(PALETTES).sort(), [...expected].sort(),
       'the removed breeds must stay removed (user directive)');
+  });
+
+  test('v3.19 regression guard: the ginger cat is the REAL ginger kitten', () => {
+    const g = PALETTES.ginger_kitten;
+    // identity checks — the v3.11 default cat, byte-for-byte from v3.17.0
+    assert.equal(g.body, 'kitten', 'the real ginger cat is a KITTEN (big head, short legs)');
+    assert.equal(g.fur, '#f0b268');
+    assert.equal(g.dark, '#cf8b42');
+    assert.equal(g.belly, '#fae8cd');
+    assert.equal(g.stripe, '#b06226');
+    assert.equal(g.earIn, '#e2a79b');
+    assert.equal(g.nose, '#d07f6e');
+    assert.equal(g.eye, '#93bb4e');
+    assert.equal(g.pupil, '#241a10');
+    assert.equal(g.tongue, '#d98a94');
+    // the impostor must never come back under any name
+    assert.ok(!PALETTES.orange_tabby, 'the v3.18 impostor orange_tabby must stay deleted');
   });
 
   test('every palette is complete and references a valid body type', () => {
@@ -50,7 +70,13 @@ describe('breeds & bodies (v3.2)', () => {
     for (const h of ['pumpkin', 'santa', 'flower', 'shades', 'tophat', 'crown', 'bow']) {
       assert.ok(HATS.includes(h), `missing hat ${h}`);
     }
-    assert.deepEqual([...DRESSES].sort(), ['blue', 'midnight', 'pink', 'red']);
+    // v3.19: seven new hats + six new costumes
+    for (const h of ['witch', 'party', 'chef', 'cowboy', 'beanie', 'halo', 'horns']) {
+      assert.ok(HATS.includes(h), `missing v3.19 hat ${h}`);
+    }
+    assert.equal(HATS.length, 14, 'fourteen hats total');
+    assert.deepEqual([...DRESSES].sort(),
+      ['berry', 'blue', 'hero', 'midnight', 'pink', 'pirate', 'rainbow', 'red', 'sakura', 'sunshine']);
   });
 
   test('emote anchors hug every head (no more far-away icons)', () => {
@@ -74,7 +100,7 @@ describe('breeds & bodies (v3.2)', () => {
     }
     assert.ok(BREED_PRICES.smokey_kitten > BREED_PRICES.grey_tabby, 'the unlockable kitten costs coins');
     assert.equal(BREED_PRICES.grey_tabby, 0, 'the default cat is free');
-    assert.equal(BREED_PRICES.orange_tabby, 0, 'the ginger cat is free');
+    assert.equal(BREED_PRICES.ginger_kitten, 0, 'the ginger cat is free');
   });
 
   test('31 states + 16 emotes are exported for the visual tests', () => {
