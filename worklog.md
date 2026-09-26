@@ -327,3 +327,20 @@ Stage Summary:
 - v3.19.0 LIVE: https://github.com/mythos0/MeowCat/releases/tag/v3.19.0
 - The REAL ginger cat is back as the default; v3.18 victims' saves walk home automatically; wardrobe is 14 hats + 10 costumes
 - 1098+ checks green (746 unit + 347 visual incl. matrix) + e2e 85/85 runnable-pass (27+43+15)
+
+---
+Task ID: 8
+Agent: main (Super Z)
+Task: v3.21.0 — "still cat store closing, quits the cat" (fix at the root) + "add winter jackets for cat in cat store" + "test for more bugs, fix all bugs"
+
+Work Log:
+- Restored the sandbox-degraded worktree (C# era again) to origin/main v3.20.0
+- Root-caused the surviving store-close bug through live experiments: (a) --in-process-gpu folded the compositor into main — a crash there is instant, unloggable whole-app death; (b) DISCOVERED a renderer-initiated window.close() destroys the window WITHOUT the BrowserWindow 'close' event (guard never fired; webContents 'close' ignored preventDefault; beforeunload pops a dialog) — sealed by executeJavaScript-patching window.close in the page main world, reporting over renderer-close-denied IPC, journaling cat-close-blocked; proven with a page token (ORIGINAL_PAGE survives)
+- Added: uncloseable cat window (close-guard), watchdog v2 (re-SHOWS invisible-but-alive cat: cat-watchdog-show), kept all v3.20 backstops
+- Winter jackets end-to-end: drawJacket body-space pipeline (6 styles), JACKET_ITEMS economy, DEFAULTS.jacket + sanitize, cat.html currentJacket + companion + __jacket hook, settings Winter Jackets grid, validateSkinDef jacket support; tuned fit after eyeballing (raised top, shallow hem, short zipper placket)
+- Tests: v321.test (11), renderer full-raster jacket pixel tests (+8), skin-matrix 21 columns (233), skin-probe 27 sheets eyeballed, e2e-v318-hard 29/29 (7 jacket combos + hat+jacket stack live), e2e-robust 17/17 (new close-blocked contract), e2e-linux 43/43 (GPU census flipped to crash-isolated), repro-store-close 20/20 (equips hat+jacket before every close path), 749 unit total
+- Release: MeowCat-3.21.0-portable.exe identity-gated, sha256-verified upload (263648bc…), public README pushed, private main pushed + tag v3.21.0
+
+Stage Summary:
+- v3.21.0 live on mythos0/MeowCat (release id 397295290): store-close fixed at the root (5 layers), 6 winter jackets in the store, dresses stay gone
+- 749 unit + 233 visual matrix + 106 live e2e + 20 repro checks green; 6 procs at rest, 46MB main RSS
