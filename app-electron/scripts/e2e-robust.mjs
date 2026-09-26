@@ -117,28 +117,25 @@ try {
   zoomProc.kill('SIGKILL');
   rmSync('/tmp/meow-e2e-call', { recursive: true, force: true });
 
-  // ============ 1b. v3.10: the cat window self-heals without a quit ==========
-  // window.close() destroys the overlay — main must notice and resurrect it;
-  // the app process must never die.
+  // ============ 1b. v3.21: the cat window is UNCLOSEABLE from the outside ====
+  // v3.10-v3.20 healed a closed overlay by resurrecting it. v3.21 goes one
+  // step further: the close itself is BLOCKED (preventDefault) unless the
+  // user explicitly Quit — "the cat is closed" now has no window-level path
+  // at all. The SAME renderer must keep painting, no resurrection needed.
   const oldPaints = await cat.evaluate(() => window.__paintCount || 0);
-  await cat.evaluate(() => window.close()).catch(() => {});   // the evaluate may lose the target as it closes
-  let revived = null;
-  const tRev = Date.now();
-  while (Date.now() - tRev < 15000) {
-    cat = await findPage('cat.html', 4);
-    if (cat) {
-      try {
-        await cat.waitForFunction('window.__catBooted === true', null, { timeout: 8000 });
-        revived = { atMs: Date.now() - tRev, paintsFresh: await cat.evaluate(() => window.__paintCount || 0) };
-        break;
-      } catch { cat = null; }
-    }
-    await sleep(400);
-  }
+  const oldUrl = cat.url();
+  await cat.evaluate(() => window.close()).catch(() => {});
+  await sleep(3000);
+  let sameCatPainting = false;
+  try {
+    const still = await findPage('cat.html', 2);
+    sameCatPainting = !!still && still.url() === oldUrl &&
+      (await still.evaluate(() => window.__paintCount || 0)) > oldPaints;
+  } catch { sameCatPainting = false; }
   let procAlive = true;
   try { process.kill(app.pid, 0); } catch { procAlive = false; }
-  ok('live: closed cat window resurrects itself (fresh booted renderer, old paints=' + oldPaints + ')',
-    !!revived && procAlive && revived.paintsFresh > 0, JSON.stringify({ revived, procAlive }));
+  ok('live: window.close() on the cat is BLOCKED — same renderer keeps painting (old paints=' + oldPaints + ')',
+    sameCatPainting && procAlive, JSON.stringify({ sameCatPainting, procAlive }));
   const infoAfterRevive = await cat.evaluate(async () => window.meow.appInfo());
   ok('app process is still the same healthy MeowCat after the revival',
     procAlive && !!infoAfterRevive.version, JSON.stringify({ version: infoAfterRevive.version, hidden: infoAfterRevive.hidden }));

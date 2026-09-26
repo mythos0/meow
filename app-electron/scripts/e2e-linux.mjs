@@ -122,7 +122,10 @@ try {
   }
   ok('process diet: main process identity is the app (dev binary or renamed MeowCat)',
     pb.main === 1 && (pb.mainComm === 'MeowCat' || pb.mainComm === 'electron'), `comm=${pb.mainComm}`);
-  ok('process diet: no GPU process', pb.gpu === 0, String(pb.gpu));
+  // v3.21: the GPU process is BACK BY DESIGN — --in-process-gpu folded the
+  // compositor into main, and a crash there killed the whole app ("still cat
+  // store closing, quits the cat"). Out-of-process GPU = survivable crashes.
+  ok('process diet: GPU runs out-of-process (crash-isolated)', pb.gpu === 1, String(pb.gpu));
   ok('process diet: no crashpad handler process', pb.crashpad === 0, String(pb.crashpad));
   // v3.18: ONE renderer at rest — the voice-engine window is gone with the
   // whole voice feature ("remove all voice features totally")

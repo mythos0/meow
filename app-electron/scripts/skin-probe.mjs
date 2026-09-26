@@ -21,7 +21,7 @@ const PROBE_HTML = `<!DOCTYPE html>
 import { drawCat, drawParticles, PALETTES, BODIES } from '../src/cat-renderer.js';
 const q = new URLSearchParams(location.search);
 const breeds = Object.keys(PALETTES);
-const hat = q.get('hat'), dress = q.get('dress');
+const hat = q.get('hat'), dress = q.get('dress'), jacket = q.get('jacket');
 const state = q.get('state') || 'stand';
 const CELL_W = 230, CELL_H = 250, FEET_PAD = 34;
 const cv = document.getElementById('cv');
@@ -34,7 +34,7 @@ for (let y = 0; y < cv.height; y += 16)
 breeds.forEach((breed, i) => {
   const ox = i * CELL_W;
   g.fillStyle = '#333'; g.font = '12px sans-serif';
-  const label = (hat ? 'hat:' + hat : dress ? 'dress:' + dress : 'plain') + ' — ' + breed;
+  const label = (hat ? 'hat:' + hat : '') + (jacket ? ' jacket:' + jacket : '') + (dress ? ' dress:' + dress : '') + (!hat && !jacket && !dress ? 'plain' : '') + ' — ' + breed;
   g.fillText(label, ox + 8, 15);
   const pal = PALETTES[breed];
   const k = (BODIES[pal.body || 'normal'] || BODIES.normal).preview;
@@ -43,6 +43,7 @@ breeds.forEach((breed, i) => {
   const opts = { t: 0.15, state, breed, dir: 1, scale: k * 1.6, jumpP: 0.5 };
   if (hat) opts.hat = hat;
   if (dress) opts.dress = dress;
+  if (jacket) opts.jacket = jacket;
   try { drawCat(g, opts); drawParticles(g, opts); }
   catch (e) { g.fillStyle = '#c00'; g.fillText('ERROR ' + e.message, ox + 8, 60); }
   g.restore();
@@ -89,6 +90,18 @@ await shot('state=stand', 'plain-ginger-stand');
 
 for (const h of HATS) await shot('hat=' + h, 'hat-' + h);
 
+// v3.21 WINTER JACKETS — every jacket on every breed, eyeballed before release
+const JACKETS = ['puffer', 'parka', 'santa_coat', 'sweater', 'snowsuit', 'cardigan'];
+for (const j of JACKETS) await shot('jacket=' + j, 'jacket-' + j);
+
+// jacket + hat combos (the wardrobe stacks)
+await shot('jacket=puffer&hat=witch', 'combo-puffer-witch');
+await shot('jacket=santa_coat&hat=santa', 'combo-santa-santa');
+await shot('jacket=cardigan&hat=beanie&state=sit', 'combo-cardigan-beanie-sit');
+
+// v3.21 negative sheet: an unknown jacket id must paint NOTHING (plain look)
+await shot('jacket=legacy_dress_x', 'unknown-jacket-ignored');
+
 // v3.20 negative sheet: a legacy dress id must render exactly like plain
 await shot('dress=hero', 'legacy-dress-ignored');
 
@@ -98,4 +111,4 @@ await shot('hat=witch&state=sit', 'full-loadout-ginger');
 
 await browser.close();
 srv.close();
-console.log('skin-probe: ' + (3 + HATS.length + 2) + ' sheets → ' + OUT);
+console.log('skin-probe: ' + (3 + HATS.length + JACKETS.length + 4) + ' sheets → ' + OUT);

@@ -27,8 +27,20 @@ import { createExecLog } from './src/exec-log.js';
 // speech always dies with 'network'; SAPI hears nothing on many setups).
 
 // ------------------------------------------------------------------ v3.2/v3.4 memory & process diet
-app.disableHardwareAcceleration();                         // no GPU process (API)
-app.commandLine.appendSwitch('in-process-gpu');            // belt & braces
+app.disableHardwareAcceleration();                         // software rendering (API)
+// v3.21 CRITICAL FIX ("still cat store closing, quits the cat"): the old
+// 'in-process-gpu' belt-&-braces switch folded the GPU/compositor thread
+// INTO the main process. That is the ONE death class no JS gate can stop:
+// a crash in that thread (window teardown = compositor surface teardown —
+// exactly what happens every time the Cat Store closes) killed the ENTIRE
+// app instantly — no uncaughtException, no before-quit gate, no watchdog,
+// not even a line in the crash journal, and it never reproduced on Linux
+// (different graphics stack). Chromium documents --in-process-gpu as
+// exactly this trade. The GPU work now runs in its own process again: a
+// crash there is survivable, auto-respawned by Chromium, and logged via
+// the 'child-process-gone' hook below. Cost: one extra process at rest
+// (6 vs 5 — still far below the original 10) — a cheap price for the cat
+// being unkillable.
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=160');
 process.title = 'MeowCat';
@@ -337,6 +349,33 @@ function makeCatWindow() {
     },
   });
   catWin.setMenuBarVisibility(false);
+  // v3.21 backstop #4 — THE CAT WINDOW IS UNCLOSEABLE. The only legitimate
+  // destroy paths are (a) the render-process-gone revival and the watchdog,
+  // which use win.destroy() and BYPASS this event by design, and (b) the
+  // explicit user Quit (quitting=true). Every OTHER close attempt — the OS
+  // closing windows, a stray WM_CLOSE, a future regression — is blocked
+  // BEFORE the window can ever disappear, so "the cat is closed" now has no
+  // window-level path left at all.
+  catWin.on('close', e => {
+    if (!quitting) {
+      e.preventDefault();
+      logCrash('cat-close-blocked', new Error('close on the cat window with no user Quit action — blocked\n' + new Error().stack));
+    }
+  });
+  // v3.21 backstop #4b — THE RENDERER CLOSE BYPASS. A renderer-initiated
+  // window.close() DESTROYS the window WITHOUT the BrowserWindow 'close'
+  // event ever firing (proven live in v3.21 development: the close-guard
+  // above never ran, the page died, window-all-closed fired, and even the
+  // webContents 'close' event ignored preventDefault). A beforeunload gate
+  // was tested too — it pops a native confirm dialog, terrible UX. The fix:
+  // patch window.close() IN THE PAGE'S MAIN WORLD (executeJavaScript) to a
+  // denied-and-journaled no-op. The cat overlay has zero legitimate
+  // window.close() call sites; the store/settings pages keep theirs.
+  catWin.webContents.on('did-finish-load', () => {
+    catWin?.webContents.executeJavaScript(
+      `window.close = () => { try { window.meow.rendererCloseDenied(); } catch {} }; true;`
+    ).catch(() => { /* died mid-patch — the close-guard + resurrection chain still holds */ });
+  });
   catWin.loadFile(path.join(__dirname, 'windows', 'cat.html'));
   xlog('main', 'window', `cat overlay created at ${regionOrigin.x},${regionOrigin.y} ${region.w}x${region.h}`);
   catWin.once('ready-to-show', () => {
@@ -536,9 +575,23 @@ function startBackgroundJobs() {
   // synchronously, so a double-create is impossible.
   watchdogTimer = setInterval(() => {
     if (quitting) return;
-    if (catWin && !catWin.isDestroyed()) return;
-    logCrash('cat-watchdog', new Error('cat window gone outside the resurrection path — re-creating'));
-    createCatWindow();
+    if (!catWin || catWin.isDestroyed()) {
+      logCrash('cat-watchdog', new Error('cat window gone outside the resurrection path — re-creating'));
+      createCatWindow();
+      return;
+    }
+    // v3.21 backstop #5 — VISIBILITY sweep. A cat window that EXISTS but is
+    // invisible is exactly what the user reports as "the cat is closed".
+    // The v3.20 watchdog only caught the destroyed case; an invisible-but-
+    // alive window (a lost DWM kick re-show, a show() that never landed)
+    // sat there forever. Now it is re-shown within 2s.
+    if (!hiddenByUser && typeof catWin.isVisible === 'function' && !catWin.isVisible()) {
+      logCrash('cat-watchdog-show', new Error('cat window alive but invisible — re-showing'));
+      try {
+        catWin.show();
+        sendToCat('cat-visible', true);
+      } catch { /* gone — next sweep recreates */ }
+    }
   }, 2000);
   watchdogTimer.unref?.();
 }
@@ -1082,6 +1135,14 @@ ipcMain.on('exec-log:push', (_e, entry) => {
     const e = execLog.push(entry);
     if (e) broadcastExecLog(e);
   } catch { /* never break the renderer */ }
+});
+// v3.21: the cat page's patched window.close() reports here — the attempt is
+// journaled (forensics for "the cat disappeared" reports) and IGNORED.
+ipcMain.on('renderer-close-denied', e => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (w && w === catWin) {
+    logCrash('cat-close-blocked', new Error('renderer called window.close() on the cat window — denied by the main-world patch'));
+  }
 });
 ipcMain.handle('exec-log:get', () => ({
   entries: execLog.all(),

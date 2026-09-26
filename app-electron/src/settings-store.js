@@ -46,6 +46,7 @@ export const DEFAULTS = {
   // customization & community
   seasonalSkins: false,      // pumpkin hat in October, santa hat in December...
   hat: null,                 // the store hat the user equipped (id from HATS)
+  jacket: null,              // v3.21: the store winter jacket the user equipped (id from JACKETS)
                              // v3.20: the store `dress` setting is GONE — old saves
                              // carrying `dress` are dropped by sanitize automatically
                              // (not in DEFAULTS → never copied back).
@@ -96,12 +97,27 @@ export const HAT_ITEMS = [
   { id: 'horns', price: 65 },
 ];
 
+// v3.21 WINTER JACKETS — back at the user's request ("add winter jackets for
+// cat in cat store"). Six procedural coats drawn in body space by
+// drawJacket() (renderer). Same economy as hats: buy once, own forever,
+// equip/unequip via the jacket setting. Unknown ids are dropped by sanitize.
+export const JACKET_ITEMS = [
+  { id: 'puffer', price: 80 },      // red quilted puffer
+  { id: 'parka', price: 90 },       // blue fur-trimmed parka
+  { id: 'santa_coat', price: 100 }, // festive coat, belt + fur hem
+  { id: 'sweater', price: 60 },     // cream cable-knit
+  { id: 'snowsuit', price: 85 },    // teal powder suit, reflector stripe
+  { id: 'cardigan', price: 70 },    // warm buttoned cardigan
+];
+
 const _catPrices = Object.fromEntries(CAT_ITEMS.map(i => [i.id, i.price]));
 const _hatPrices = Object.fromEntries(HAT_ITEMS.map(i => [i.id, i.price]));
+const _jacketPrices = Object.fromEntries(JACKET_ITEMS.map(i => [i.id, i.price]));
 export const BREED_PRICES = _catPrices;                                   // back-compat name
-export const ITEM_PRICES = { ..._catPrices, ..._hatPrices };
+export const ITEM_PRICES = { ..._catPrices, ..._hatPrices, ..._jacketPrices };
 export const KNOWN_CATS = new Set(CAT_ITEMS.map(i => i.id));
 export const KNOWN_HATS = new Set(HAT_ITEMS.map(i => i.id));
+export const KNOWN_JACKETS = new Set(JACKET_ITEMS.map(i => i.id));
 
 export function createSettings(backend) {
   // backend: { read(): string|null, write(str) }
@@ -174,11 +190,12 @@ export function createSettings(backend) {
         if (typeof p.coins === 'number' && Number.isFinite(p.coins) && p.coins >= 0) {
           d.coins = Math.min(9_999_999, Math.floor(p.coins));
         }
-      } else if (k === 'hat') {
+      } else if (k === 'hat' || k === 'jacket') {
         // v3.18: nullable string setting — a null DEFAULT cannot ride the
         // generic typeof branch (typeof null === 'object')
         // v3.20: the `dress` twin is gone with the feature; old saves carrying
         // `dress` never reach this loop (not in DEFAULTS) — dropped silently.
+        // v3.21: `jacket` rides the exact same nullable-string contract.
         d[k] = (typeof p[k] === 'string' && p[k]) ? p[k] : null;
       } else if (OBJECT_KEYS.has(k)) {
         if (p[k] && typeof p[k] === 'object' && !Array.isArray(p[k])) d[k] = p[k];
@@ -191,6 +208,7 @@ export function createSettings(backend) {
     // v3.20: a persisted `dress` id is simply dropped (no dress schema at all).
     if (d.breed && !d.breed.startsWith('custom:') && !KNOWN_CATS.has(d.breed)) d.breed = DEFAULTS.breed;
     if (d.hat != null && !KNOWN_HATS.has(d.hat)) d.hat = null;
+    if (d.jacket != null && !KNOWN_JACKETS.has(d.jacket)) d.jacket = null;   // v3.21
     // v3.19 one-time ginger restoration (see comment above): fires once per
     // save file, then the latch keeps every later choice exactly as picked.
     if (!p.migrated319) {

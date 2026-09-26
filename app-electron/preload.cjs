@@ -48,6 +48,9 @@ contextBridge.exposeInMainWorld('meow', {
   // v3.18: the voice bridge API is gone with the voice feature. The
   // music-state test seam stays for the meow-gate e2e checks.
   voiceTestMusic: on => ipcRenderer.invoke('voice:test-music', on),    // MEOWCAT_TEST only: force the music-playing state
+  // v3.21: the cat page's window.close() is patched to a no-op in the main
+  // world; every denied attempt lands here so the attempt is journaled.
+  rendererCloseDenied: () => ipcRenderer.send('renderer-close-denied'),
   on: (channel, fn) => {
     const allowed = [
       'do-action', 'reminder-fired', 'settings-changed', 'workarea-changed',

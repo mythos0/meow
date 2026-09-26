@@ -78,14 +78,19 @@ try {
   ok('settings window opened', !!settings);
   await sleep(800);
 
-  // ---- exercise the store: buy + equip a hat and a dress ----
+  // ---- exercise the store the way the user does: equip hat + jacket, then close ----
   const coins = await settings.evaluate(async () => {
     // jump to the store page like a user click would
     document.querySelector('.item[data-page="store"]')?.click();
     await new Promise(r => setTimeout(r, 300));
+    // v3.21: dress the cat (hat + jacket) through the REAL settings IPC before closing
+    await window.meow.setSettings({ hat: 'witch', jacket: 'puffer' });
     return window.meow.getCoins();
   });
   ok('store page reachable', typeof coins === 'number', 'coins=' + coins);
+  const worn = await cat.evaluate(() => ({ hat: window.__hat ? window.__hat() : null, jacket: window.__jacket ? window.__jacket() : null }));
+  ok('cat is wearing the witch hat + puffer jacket equipped in the store',
+    worn.hat === 'witch' && worn.jacket === 'puffer', JSON.stringify(worn));
 
   // ---- close path 1: the Close button (IPC close-window → closeAll) ----
   await settings.evaluate(() => window.meow.closeWindow('settings')).catch(e => console.log('  (invoke lost as window dies: ' + e.message.split('\n')[0] + ')'));

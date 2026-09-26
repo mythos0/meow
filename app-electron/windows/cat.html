@@ -25,7 +25,7 @@
 <div id="bubble"></div>
 <div id="badge"></div>
 <script type="module">
-import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAnchor, CAT_BBOX, registerSkin, HATS } from '../src/cat-renderer.js';
+import { drawCat, drawParticles, drawEmote, drawLaser, drawButterfly, emoteAnchor, CAT_BBOX, registerSkin, HATS, JACKETS } from '../src/cat-renderer.js';
 import { CatBrain } from '../src/cat-brain.js';
 import { computeRegionSize, initialOrigin, slideIfNeeded, companionLeash, chaseStep, clampOrigin, CHASE_V, DRAG_CHASE_V, dragChaseTarget, dragWindowTarget, laneHopTarget, unionWorkAreas } from '../src/region.js';
 import { unlockedPerks } from '../src/achievements.js';
@@ -47,6 +47,7 @@ let bubbleTimer = null;
 let frozen = false;           // v3.6: photo mode
 let flashUntil = 0;           // v3.6: photo flash
 let currentHat = null;        // v3.6: seasonal / skin hat
+let currentJacket = null;     // v3.21: store winter jacket
                               // v3.20: the store dress wiring is gone with the dresses.
 // v3.5 toys — v3.13: the butterfly is a pure state machine (src/butterfly.js)
 // that always spawns relative to the CURRENT lane, so it shows on EVERY
@@ -395,6 +396,11 @@ function applyHat() {
   if (S.hat && HATS.includes(S.hat)) hat = S.hat;
   currentHat = hat;
   if (companion) companion.hat = hat;
+  // v3.21: winter jacket — the store pick wins over a custom skin's default
+  let jacket = sk && sk.def && sk.def.jacket ? sk.def.jacket : null;
+  if (S.jacket && JACKETS.includes(S.jacket)) jacket = S.jacket;
+  currentJacket = jacket;
+  if (companion) companion.jacket = jacket;
 }
 
 // v3.17: the v3.6 system-reaction handlers (stress, build verdicts, battery
@@ -475,7 +481,7 @@ function applyCompanion(on) {
     b.x = Math.max(brain.bounds.x + 80, Math.min(brain.bounds.x + brain.bounds.w - 80, brain.x - 150));
     b.setScale(S.size * 0.62);
     b.setPlatforms(brain.platforms);   // v3.13: the kitten may follow onto window tops
-    companion = { brain: b, breed: 'ginger_kitten', hat: currentHat };
+    companion = { brain: b, breed: 'ginger_kitten', hat: currentHat, jacket: currentJacket };
     xlog('companion', `companion kitten spawned at ${Math.round(b.x)}`, { breed: 'ginger_kitten' });
   } else if (!on) companion = null;
 }
@@ -617,7 +623,7 @@ function applySettings(kv) {
     if (companion) companion.brain.setScale(kv.size * 0.62);
     syncRegion();
   }
-  if (kv.seasonalSkins !== undefined || kv.customSkins !== undefined || kv.hat !== undefined) {
+  if (kv.seasonalSkins !== undefined || kv.customSkins !== undefined || kv.hat !== undefined || kv.jacket !== undefined) {
     registerCustomSkins(S.customSkins);
     applyHat();
   }
@@ -1238,6 +1244,7 @@ function paint() {
   const opts = {
     t: p.t, state: p.state, dir: p.dir, breed: S.breed,
     scale: S.size, alpha: S.opacity, jumpP: p.jumpP, hat: currentHat,
+    jacket: currentJacket,
     stateT: p.stateT, stateDur: p.stateDur,
   };
   drawCat(ctx, opts);
@@ -1258,7 +1265,7 @@ function paint() {
     const cp = companion.brain.pose;
     ctx.save();
     ctx.translate(cp.x - O.x, cp.y - O.y);
-    drawCat(ctx, { t: cp.t, state: cp.state, dir: cp.dir, breed: companion.breed, scale: S.size * 0.62, alpha: S.opacity, jumpP: cp.jumpP, hat: companion.hat, stateT: cp.stateT, stateDur: cp.stateDur });
+    drawCat(ctx, { t: cp.t, state: cp.state, dir: cp.dir, breed: companion.breed, scale: S.size * 0.62, alpha: S.opacity, jumpP: cp.jumpP, hat: companion.hat, jacket: companion.jacket, stateT: cp.stateT, stateDur: cp.stateDur });
     drawParticles(ctx, { t: cp.t, state: cp.state, breed: companion.breed, scale: S.size * 0.62 });
     ctx.restore();
   }
@@ -1341,6 +1348,7 @@ window.__companionBrain = () => companion && companion.brain;
 window.__forceCompanionCd = v => { companionCd = v; };
 window.__partyCats = () => partyCats && partyCats.length;
 window.__hat = () => currentHat;
+window.__jacket = () => currentJacket;   // v3.21 e2e hook
 window.__perks = () => perks;
 window.__setPerks = p => { perks = { ...perks, ...p }; };
 window.__photoMode = () => photoMode();

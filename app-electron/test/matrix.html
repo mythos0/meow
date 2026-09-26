@@ -18,12 +18,13 @@
 // contact-sheet PNGs for eyeballing.
 // Cell geometry: the standing cat spans ~180×165 at scale 1 (CAT_BBOX),
 // so cells are 200×210 with the feet at y=CELL_H-30 — no cross-cell bleed.
-import { drawCat, PALETTES, HATS, STATES } from '../src/cat-renderer.js';
+import { drawCat, PALETTES, HATS, STATES, JACKETS } from '../src/cat-renderer.js';
 
 const CELL_W = 200, CELL_H = 210, FEET_PAD = 30, LABEL_H = 14;
 const breeds = Object.keys(PALETTES);           // grey_tabby, ginger_kitten, smokey_kitten
-// v3.20: dresses are gone — the accessory columns are base + the 14 hats.
-const accs = ['—', ...HATS];                    // 1 + 14 = 15 columns
+// v3.20: dresses are gone. v3.21: the columns are base + 14 hats + 6 winter
+// jackets — the FULL purchasable wardrobe in one grid.
+const accs = ['—', ...HATS, ...JACKETS];        // 1 + 14 + 6 = 21 columns
 const dirs = [1, -1];
 const cols = accs.length;
 
@@ -62,6 +63,7 @@ for (const dir of dirs) {
       const ox = c * CELL_W;
       const opts = { t: 0.15, state: 'stand', breed, dir, scale: 1, jumpP: 0.5 };
       if (HATS.includes(acc)) opts.hat = acc;
+      else if (JACKETS.includes(acc)) opts.jacket = acc;
       g.fillStyle = '#555'; g.font = '10px sans-serif';
       g.fillText((dir === 1 ? 'R ' : 'L ') + breed + (c === 0 ? '' : ' ' + acc), ox + 4, oy - 3);
       drawCell(g, ox, oy, opts);
@@ -86,7 +88,7 @@ breeds.forEach((breed, i) => {
     for (const plain of [1, 0]) {          // dressed first, then its plain twin
       const ox = (c * 2 + (plain ? 1 : 0)) * CELL_W;
       const opts = { t: 0.3, state: st, breed, dir: 1, scale: 1, jumpP: 0.5 };
-      if (!plain) { opts.hat = HAT_FULL; }
+      if (!plain) { opts.hat = HAT_FULL; opts.jacket = 'puffer'; }   // v3.21: full loadout = hat + jacket
       g2.fillStyle = '#555'; g2.font = '9px sans-serif';
       if (plain) g2.fillText(st, ox + 4, oy - 3);
       drawCell(g2, ox, oy, opts);
@@ -146,6 +148,12 @@ for (const dir of dirs) {
       const ca = cells.find(c => c.breed === breed && c.dir === dir && c.acc === HATS[a]);
       const cb = cells.find(c => c.breed === breed && c.dir === dir && c.acc === HATS[b]);
       report.pairs[key + ':' + HATS[a] + '|' + HATS[b]] = diffCount(cellStats(g, ca.ox, ca.oy), cellStats(g, cb.ox, cb.oy));
+    }
+    // v3.21: the six jackets must be pairwise distinct too
+    for (let a = 0; a < JACKETS.length; a++) for (let b = a + 1; b < JACKETS.length; b++) {
+      const ca = cells.find(c => c.breed === breed && c.dir === dir && c.acc === JACKETS[a]);
+      const cb = cells.find(c => c.breed === breed && c.dir === dir && c.acc === JACKETS[b]);
+      report.pairs[key + ':' + JACKETS[a] + '|' + JACKETS[b]] = diffCount(cellStats(g, ca.ox, ca.oy), cellStats(g, cb.ox, cb.oy));
     }
   }
 }

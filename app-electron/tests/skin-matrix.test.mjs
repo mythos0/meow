@@ -11,7 +11,7 @@ import http from 'http';
 import { readFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { PALETTES, HATS, STATES } from '../src/cat-renderer.js';
+import { PALETTES, HATS, JACKETS, STATES } from '../src/cat-renderer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -94,13 +94,35 @@ describe('skin matrix: every breed × accessory × direction (robust)', () => {
           }
         }
       });
+
+      // ---- v3.21: the six winter jackets ----
+      for (const jacket of JACKETS) {
+        test(`${key} + ${jacket} jacket repaints the torso and stays visible`, () => {
+          const a = report.cells[key].accs[jacket];
+          assert.ok(a.opaque > 4000, `cat vanished under ${jacket}: ${a.opaque}px`);
+          assert.ok(a.diff > 150, `${jacket}: barely repaints anything (${a.diff}px)`);
+          assert.ok(a.bodyDiff > 80, `${jacket}: no torso-region change (${a.bodyDiff}px)`);
+          // a coat must NOT extend the silhouette upward (that is hat territory)
+          const b = report.cells[key].base;
+          assert.ok(a.minY >= b.minY - 2, `${jacket} must not grow the cat upward (minY ${a.minY} vs base ${b.minY})`);
+        });
+      }
+
+      test(`${key}: all ${JACKETS.length} jackets are pairwise distinct`, () => {
+        for (let i = 0; i < JACKETS.length; i++) {
+          for (let j = i + 1; j < JACKETS.length; j++) {
+            const d = report.pairs[`${key}:${JACKETS[i]}|${JACKETS[j]}`];
+            assert.ok(d > 30, `${JACKETS[i]} vs ${JACKETS[j]} look identical (${d}px diff)`);
+          }
+        }
+      });
     }
   }
 
   // ---- full loadout in EVERY state ----
   for (const breed of breeds) {
     for (const st of STATES) {
-      test(`${breed} in "${st}" renders with hat+Dress and they still paint`, () => {
+      test(`${breed} in "${st}" renders with hat+jacket and they still paint`, () => {
         const s = report.states[breed][st];
         assert.ok(s.opaquePlain > 800, `${st}: plain cat too small (${s.opaquePlain}px)`);
         assert.ok(s.opaqueDressed > 800, `${st}: dressed cat too small (${s.opaqueDressed}px)`);
@@ -110,7 +132,7 @@ describe('skin matrix: every breed × accessory × direction (robust)', () => {
   }
 
   // ---- bogus accessory guard (unknown ids must be ignored, not crash) ----
-  test('unknown hat/dress ids are rejected without breaking the render', async () => {
+  test('unknown hat/dress/jacket ids are rejected without breaking the render', async () => {
     const page = await browser.newPage();
     const grab = async q => {
       await page.goto(`http://127.0.0.1:${port}/test/harness.html?state=stand&t=0.15&bg=alpha&${q}`);
@@ -126,11 +148,13 @@ describe('skin matrix: every breed × accessory × direction (robust)', () => {
     const plain = await grab('');
     const bogusHat = await grab('hat=bogus');
     const bogusDress = await grab('dress=bogus');
-    const bogusBoth = await grab('hat=bogus&dress=bogus');
+    const bogusJacket = await grab('jacket=bogus');
+    const bogusAll = await grab('hat=bogus&dress=bogus&jacket=bogus');
     await page.close();
     assert.ok(plain > 4000, 'plain render too small');
     assert.equal(bogusHat, plain, 'bogus hat must not paint anything');
     assert.equal(bogusDress, plain, 'bogus dress must not paint anything');
-    assert.equal(bogusBoth, plain, 'bogus pair must not paint anything');
+    assert.equal(bogusJacket, plain, 'bogus jacket must not paint anything');
+    assert.equal(bogusAll, plain, 'bogus trio must not paint anything');
   });
 });

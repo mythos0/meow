@@ -207,6 +207,8 @@
         <div class="breeds" id="breeds"></div>
         <div class="hint" style="margin:14px 0 6px;font-weight:600">Hats</div>
         <div class="breeds" id="hats"></div>
+        <div class="hint" style="margin:14px 0 6px;font-weight:600">Winter Jackets</div>
+        <div class="breeds" id="jackets"></div>
       </div>
 
       <div class="fl-card">
@@ -417,7 +419,7 @@
 
 <script type="module">
 import { drawCat, PALETTES, BODIES, registerSkin } from '../src/cat-renderer.js';
-import { BREED_PRICES as prices, HAT_ITEMS } from '../src/settings-store.js';
+import { BREED_PRICES as prices, HAT_ITEMS, JACKET_ITEMS } from '../src/settings-store.js';
 import { ACHIEVEMENTS, affectionProgress } from '../src/achievements.js';
 
 const $ = id => document.getElementById(id);
@@ -577,7 +579,31 @@ function renderStore() {
     }));
   }
 
-  // --- dresses (v3.20: REMOVED — the wardrobe is hats-only) ---
+  // --- winter jackets (v3.21: back at the user's request) ---
+  const jacketGrid = $('jackets');
+  jacketGrid.innerHTML = '';
+  jacketGrid.appendChild(itemCard({
+    id: '_none', name: 'No jacket',
+    ownedNow: true, selected: !S.jacket, price: 0,
+    preview: cv => drawPreview(cv, S.breed || 'grey_tabby'),
+    onPick: async () => { await save({ jacket: null }); S = await refresh(); },
+  }));
+  for (const j of JACKET_ITEMS) {
+    const on = S.jacket === j.id;
+    jacketGrid.appendChild(itemCard({
+      id: j.id, name: j.id,
+      ownedNow: owned.includes(j.id) || unlimited,
+      selected: on, price: j.price,
+      preview: cv => drawPreview(cv, S.breed || 'grey_tabby', { jacket: j.id, hat: S.hat || null }),
+      onPick: async () => {
+        if (!(await buyAndOwn(j.id, j.price))) return;
+        await save({ jacket: on ? null : j.id });
+        S = await refresh();
+      },
+    }));
+  }
+
+  // --- dresses (v3.20: REMOVED at the user's request — the wardrobe stays dress-free) ---
 }
 
 // ---------------- skin import ----------------

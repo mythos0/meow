@@ -190,8 +190,9 @@ for (let cycle = 1; cycle <= 5; cycle++) {
 // -------------------------------------------------- 4. equip every combo LIVE
 // v3.19: lists imported from the store module itself so they can never drift.
 // v3.20: dresses are gone — the combos are the 14 hats + the bare face.
+// v3.21: the 6 winter jackets join the live equips (plus a hat+jacket stack).
 console.log('— equipping every hat (plus bare) through the real IPC —');
-const { HAT_ITEMS } = await import('../src/settings-store.js');
+const { HAT_ITEMS, JACKET_ITEMS } = await import('../src/settings-store.js');
 const HATS = [null, ...HAT_ITEMS.map(i => i.id)];
 const N_COMBOS = HATS.length;
 let comboErrors = 0, comboApplied = 0, shot = 0;
@@ -215,6 +216,33 @@ ok(`equip: all ${N_COMBOS} hat combos applied live with zero renderer errors`,
   `${comboApplied}/${N_COMBOS} applied, ${comboErrors} failures — ${comboFails.slice(0, 8).join(' ; ')}`);
 ok('equip: settings page never auto-appeared during equips', !allPages().some(p => /settings\.html/.test(p.url())));
 await cat.evaluate(() => window.meow.setSettings({ hat: null }));
+await sleep(300);
+
+// ---- v3.21: every winter jacket + one hat+jacket stack, LIVE ----
+console.log('— equipping every winter jacket through the real IPC —');
+const JACKETS_LIVE = [...JACKET_ITEMS.map(i => i.id), null];
+const N_JCOMBOS = JACKETS_LIVE.length;
+let jApplied = 0, jErrors = 0;
+const jFails = [];
+for (const jk of JACKETS_LIVE) {
+  await cat.evaluate(j => window.meow.setSettings({ jacket: j }), jk);
+  await sleep(150);
+  const pose = await cat.evaluate(() => (window.__pose ? window.__pose() : 'NO_HOOK'));
+  const alive = pose && typeof pose === 'object' && Number.isFinite(pose.x) && Number.isFinite(pose.t);
+  if (alive) jApplied++;
+  else { jErrors++; jFails.push(`${jk || 'nojacket'}: ${JSON.stringify(pose)}`); }
+}
+ok(`equip: all ${N_JCOMBOS} jacket combos applied live with zero renderer errors`,
+  jApplied === N_JCOMBOS && jErrors === 0,
+  `${jApplied}/${N_JCOMBOS} applied, ${jErrors} failures — ${jFails.slice(0, 8).join(' ; ')}`);
+// hat + jacket STACK through the real IPC, verified by the renderer hook
+await cat.evaluate(() => window.meow.setSettings({ hat: 'witch', jacket: 'puffer' }));
+await sleep(400);
+const stack = await cat.evaluate(() => ({ hat: window.__hat ? window.__hat() : 'NO_HOOK', jacket: window.__jacket ? window.__jacket() : 'NO_HOOK', pose: window.__pose ? window.__pose() : null }));
+ok('equip: hat+jacket STACK live (witch + puffer both active in the renderer)',
+  stack.hat === 'witch' && stack.jacket === 'puffer' && stack.pose && Number.isFinite(stack.pose.x),
+  JSON.stringify(stack));
+await cat.evaluate(() => window.meow.setSettings({ hat: null, jacket: null }));
 await sleep(300);
 
 // -------------------------------------------------- 5. meow burst

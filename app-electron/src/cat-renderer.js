@@ -333,8 +333,12 @@ export function drawCat(ctx, opts) {
   }
   ctx.restore(); // clip
 
-// v3.20: store DRESSES are GONE at the user's request — the torso draw chain
-// is hats-only again (no garment code anywhere in the renderer).
+// v3.21: WINTER JACKETS are back in the Cat Store at the user's request
+// ("add winter jackets for cat in cat store") — a body-space garment drawn
+// inside the torso transform so it rotates/squashes with the cat, UNDER the
+// near legs (which stay in front, like a real coat over legs). Unknown ids
+// paint NOTHING (same hard gate as hats).
+  if (opts.jacket && JACKETS.includes(opts.jacket)) drawJacket(ctx, opts.jacket, B, P);
 
   // rim light top
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';
@@ -650,6 +654,111 @@ export function drawHat(ctx, kind, headC) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------- winter jackets
+// v3.21: the Cat Store winter jackets ("add winter jackets for cat in cat
+// store"). Procedural coat drawn in BODY space — it rides the torso transform
+// (rotate/squash/bob for free), sits UNDER the near legs, and is fitted to
+// any body type from B (rx/ry). Six styles, every one a different silhouette:
+// quilted puffer, fur-trimmed parka, santa coat, cable-knit sweater, powder
+// snow suit, buttoned cardigan.
+export const JACKETS = ['puffer', 'parka', 'santa_coat', 'sweater', 'snowsuit', 'cardigan'];
+
+export const JACKET_STYLES = {
+  puffer:     { base: '#d8503c', dark: '#a83226', trim: '#f2b199', style: 'quilt' },
+  parka:      { base: '#3a6a9f', dark: '#274a72', trim: '#e8e3d4', style: 'fur' },
+  santa_coat: { base: '#c23a3a', dark: '#8e2424', trim: '#f6f2e8', style: 'santa' },
+  sweater:    { base: '#e0cba8', dark: '#b89e74', trim: '#8e6f4a', style: 'knit' },
+  snowsuit:   { base: '#3a9f9a', dark: '#27726e', trim: '#f2f7f6', style: 'snow' },
+  cardigan:   { base: '#9a6a45', dark: '#6e482c', trim: '#e8d8b8', style: 'buttons' },
+};
+
+export function drawJacket(ctx, kind, B, P) {
+  const J = JACKET_STYLES[kind] || JACKET_STYLES.puffer;
+  const rx = B.rx, ry = B.ry;
+  const top = -8 - ry * 0.92;    // right under the chin / shoulder line
+  const hem = -8 + ry * 0.70;    // above the paws, over the haunch
+  // ---- shell: rounded coat body hugging the torso
+  ctx.beginPath();
+  ctx.moveTo(-rx * 0.66, top + 3);
+  ctx.quadraticCurveTo(-rx * 0.98, (top + hem) / 2, -rx * 0.86, hem);
+  ctx.quadraticCurveTo(0, hem + ry * 0.10, rx * 0.86, hem);   // shallow hem bulge — must NOT dangle between the legs
+  ctx.quadraticCurveTo(rx * 0.98, (top + hem) / 2, rx * 0.66, top + 3);
+  ctx.quadraticCurveTo(0, top - ry * 0.16, -rx * 0.66, top + 3);
+  ctx.closePath();
+  ctx.fillStyle = J.base; ctx.fill();
+  ctx.strokeStyle = J.dark; ctx.lineWidth = 1.4; ctx.stroke();
+  // ---- per-style details, clipped to the shell
+  ctx.save();
+  ctx.clip();
+  if (J.style === 'quilt') {
+    ctx.strokeStyle = J.dark; ctx.lineWidth = 1.6; ctx.globalAlpha *= 0.85;
+    for (let y = top + 6; y < hem; y += 6.5) {
+      ctx.beginPath(); ctx.moveTo(-rx, y); ctx.quadraticCurveTo(0, y + 2.4, rx, y); ctx.stroke();
+    }
+    ctx.globalAlpha /= 0.85;
+  } else if (J.style === 'fur') {
+    ctx.fillStyle = J.trim;
+    for (let i = 0; i < 14; i++) {
+      const fx = -rx * 0.8 + (i / 13) * rx * 1.6;
+      ell(ctx, fx, hem + 2.2, 3.4, 3.0); ctx.fill();
+      ell(ctx, fx + 1.2, top + 1.5, 2.6, 2.2); ctx.fill();
+    }
+    ctx.strokeStyle = J.trim; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    for (const sx of [-rx * 0.16, rx * 0.34]) {
+      ctx.beginPath(); ctx.moveTo(sx, top + 5); ctx.lineTo(sx + 1.4, top + 13); ctx.stroke();
+    }
+  } else if (J.style === 'santa') {
+    ctx.fillStyle = J.trim;
+    ctx.fillRect(-rx, hem - 4, rx * 2, 8);
+    ctx.fillStyle = '#2a2a2e';
+    ctx.fillRect(-rx, (top + hem) / 2 + 2, rx * 2, 5.5);
+    ctx.fillStyle = '#e8c44a';
+    rr(ctx, rx * 0.12, (top + hem) / 2 + 0.6, 7, 8.4, 1.4); ctx.fill();
+  } else if (J.style === 'knit') {
+    ctx.strokeStyle = J.trim; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+    for (const cx of [-rx * 0.34, -rx * 0.02, rx * 0.3]) {
+      ctx.beginPath();
+      for (let y = top + 4; y <= hem - 3; y += 2) {
+        const xo = Math.sin(y * 0.9) * 2.6;
+        if (y === top + 4) ctx.moveTo(cx + xo, y); else ctx.lineTo(cx + xo, y);
+      }
+      ctx.stroke();
+    }
+    for (let y = hem - 5; y < hem; y += 3) {
+      ctx.beginPath(); ctx.moveTo(-rx, y); ctx.lineTo(rx, y); ctx.stroke();
+    }
+  } else if (J.style === 'snow') {
+    ctx.fillStyle = shade(J.dark, -0.06);
+    ctx.fillRect(-rx, top - 2, rx * 2, (hem - top) * 0.34);
+    ctx.fillStyle = J.trim; ctx.globalAlpha *= 0.92;
+    ctx.fillRect(-rx, (top + hem) / 2 - 1.6, rx * 2, 3.2);
+    ctx.globalAlpha /= 0.92;
+  } else if (J.style === 'buttons') {
+    ctx.fillStyle = J.trim;
+    for (let y = top + 8; y < hem - 2; y += 7) {
+      ell(ctx, rx * 0.26, y, 2.0, 2.0); ctx.fill();
+    }
+    ctx.strokeStyle = J.dark; ctx.lineWidth = 1.6;
+    for (const px of [-rx * 0.40, rx * 0.44]) {
+      ctx.beginPath(); ctx.moveTo(px, hem - 9); ctx.lineTo(px + 7, hem - 5.4); ctx.stroke();
+    }
+  }
+  ctx.restore();
+  // ---- rolled collar, proud of the shell (outside the clip)
+  ell(ctx, rx * 0.42, top + 2.5, rx * 0.30, ry * 0.20, -0.18);
+  ctx.fillStyle = (J.style === 'fur' || J.style === 'santa') ? J.trim : shade(J.base, 0.14);
+  ctx.fill();
+  ctx.strokeStyle = J.dark; ctx.lineWidth = 1.1; ctx.stroke();
+  // ---- zipper placket for the technical coats — SHORT (a long line reads
+  // as a dangly strap at desktop-pet sizes; ~35% of the coat is enough)
+  if (J.style === 'quilt' || J.style === 'snow') {
+    const zEnd = top + (hem - top) * 0.35;
+    ctx.strokeStyle = J.trim; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(rx * 0.30, top + 6); ctx.lineTo(rx * 0.27, zEnd); ctx.stroke();
+    rr(ctx, rx * 0.225, zEnd - 0.6, 3.0, 4.2, 1); ctx.fillStyle = J.trim; ctx.fill();
+  }
+}
+
 // ---------------------------------------------------------------- custom skins
 // v3.6 community skins: a plain JSON file describing colors (and optionally a
 // body type + pattern) on top of any built-in breed. registerSkin() folds the
@@ -670,6 +779,7 @@ export function validateSkinDef(def) {
   }
   if (def.pattern && !['none', 'spots'].includes(def.pattern)) return 'unknown pattern';
   if (def.hat && !HATS.includes(def.hat)) return 'unknown hat';
+  if (def.jacket && !JACKETS.includes(def.jacket)) return 'unknown jacket';
   return null;
 }
 

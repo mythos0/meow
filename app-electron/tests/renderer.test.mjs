@@ -179,6 +179,70 @@ describe('cat-renderer visual', () => {
     assert.equal(changed, 0, `dress "red" must be ignored (${changed}px changed)`);
   });
 
+  // ---- v3.21 WINTER JACKETS: every jacket repaints the torso band, and an
+  // unknown id paints NOTHING (the same hard gate hats have) ----
+  // exact full-raster grab (the compacted barePx list cannot address pixels)
+  const raster = async q => {
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${port}/test/harness.html?${q}`);
+    await page.waitForFunction('window.__ready === true');
+    const d = await page.evaluate(() => {
+      const cv = document.getElementById('cv');
+      return { w: cv.width, h: cv.height, rgba: Array.from(cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data) };
+    });
+    await page.close();
+    return d;
+  };
+  const diffRows = (A, B) => {           // → {changed, minY, maxY}
+    let changed = 0, minY = 1e9, maxY = -1;
+    for (let y = 0; y < Math.min(A.h, B.h); y++) {
+      for (let x = 0; x < A.w; x++) {
+        const i = (y * A.w + x) * 4;
+        if (Math.abs(A.rgba[i] - B.rgba[i]) > 24 ||
+            Math.abs(A.rgba[i + 1] - B.rgba[i + 1]) > 24 ||
+            Math.abs(A.rgba[i + 2] - B.rgba[i + 2]) > 24) {
+          changed++;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    return { changed, minY, maxY };
+  };
+
+  test('unknown jacket ids paint NOTHING (full-raster)', async () => {
+    const A = await raster('state=sit&t=0.2&bg=alpha');
+    const B = await raster('state=sit&t=0.2&bg=alpha&jacket=legacy_dress_x');
+    const d = diffRows(A, B);
+    assert.equal(d.changed, 0, `unknown jacket must be ignored (${d.changed}px changed)`);
+  });
+
+  for (const jacket of ['puffer', 'parka', 'santa_coat', 'sweater', 'snowsuit', 'cardigan']) {
+    test(`jacket "${jacket}" repaints the torso band`, async () => {
+      const A = await raster('state=sit&t=0.2&bg=alpha');
+      const B = await raster(`state=sit&t=0.2&bg=alpha&jacket=${jacket}`);
+      const d = diffRows(A, B);
+      const bare = await barePx('state=sit&t=0.2&bg=alpha');
+      const span = bare.bbox[3] - bare.bbox[1];
+      assert.ok(d.changed > 400, `jacket "${jacket}" should repaint the torso visibly (${d.changed}px)`);
+      assert.ok(d.minY > bare.bbox[1] + span * 0.30,
+        `jacket "${jacket}" must NOT paint up at the head (first change row ${d.minY}, body top ${bare.bbox[1]})`);
+      assert.ok(d.maxY < bare.bbox[3] - 2,
+        `jacket "${jacket}" must not reach the ground/paws (last change row ${d.maxY}, bottom ${bare.bbox[3]})`);
+    });
+  }
+
+  test('hat + jacket stack (wardrobe layers, not either/or)', async () => {
+    const A = await raster('state=sit&t=0.2&bg=alpha');
+    const B = await raster('state=sit&t=0.2&bg=alpha&hat=witch&jacket=puffer');
+    const d = diffRows(A, B);
+    const bare = await barePx('state=sit&t=0.2&bg=alpha');
+    const span = bare.bbox[3] - bare.bbox[1];
+    assert.ok(d.changed > 700, `hat+jacket should paint both regions (${d.changed}px)`);
+    assert.ok(d.minY <= bare.bbox[1] + span * 0.45, 'the hat still paints the head');
+    assert.ok(d.maxY >= bare.bbox[1] + span * 0.5, 'the jacket still paints the torso');
+  });
+
   // ---- v3.18 store hats: each hat paints a visible footprint on the head ----
   for (const hat of ['tophat', 'crown', 'bow']) {
     test(`hat "${hat}" paints the head region`, async () => {
