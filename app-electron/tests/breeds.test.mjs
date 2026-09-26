@@ -5,7 +5,7 @@
 // again the renamed orange_tabby impostor v3.18 shipped.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { PALETTES, BODIES, STATES, EMOTES, CAT_BBOX, emoteAnchor, DRESSES, HATS } from '../src/cat-renderer.js';
+import { PALETTES, BODIES, STATES, EMOTES, CAT_BBOX, emoteAnchor, HATS } from '../src/cat-renderer.js';
 import { BREED_PRICES } from '../src/settings-store.js';
 
 const REQUIRED_KEYS = ['fur', 'dark', 'belly', 'nose', 'eye', 'pupil', 'earIn', 'tongue'];
@@ -66,17 +66,15 @@ describe('breeds & bodies (v3.2)', () => {
     assert.ok(BODIES.munchkin.legL1 + BODIES.munchkin.legL2 < BODIES.normal.legL1 + BODIES.normal.legL2, 'munchkin legs shortest');
   });
 
-  test('store hats and dresses exist for the Cat Store', () => {
+  test('store hats exist for the Cat Store (dresses are GONE — v3.20)', () => {
     for (const h of ['pumpkin', 'santa', 'flower', 'shades', 'tophat', 'crown', 'bow']) {
       assert.ok(HATS.includes(h), `missing hat ${h}`);
     }
-    // v3.19: seven new hats + six new costumes
+    // v3.19: seven new hats
     for (const h of ['witch', 'party', 'chef', 'cowboy', 'beanie', 'halo', 'horns']) {
       assert.ok(HATS.includes(h), `missing v3.19 hat ${h}`);
     }
     assert.equal(HATS.length, 14, 'fourteen hats total');
-    assert.deepEqual([...DRESSES].sort(),
-      ['berry', 'blue', 'hero', 'midnight', 'pink', 'pirate', 'rainbow', 'red', 'sakura', 'sunshine']);
   });
 
   test('emote anchors hug every head (no more far-away icons)', () => {

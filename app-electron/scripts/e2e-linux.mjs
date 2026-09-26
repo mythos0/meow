@@ -219,14 +219,14 @@ try {
     const useSet = set2 || set;
     if (!set2) throw new Error('settings page did not come back after destroy');
     await useSet.waitForTimeout(500);
-    // v3.18 store: 3 cats + 7 hats + 4 dresses (+ No-hat / No-dress slots)
+    // v3.20 store: 3 cats + 14 hats (+ the No-hat slot) — dresses are gone
     const cardCount = await useSet.evaluate(() => document.querySelectorAll('.breed').length);
     const hasAllBase = await useSet.evaluate(() => {
       const nms = [...document.querySelectorAll('.breed .nm')].map(n => n.textContent);
-      return ['Grey Tabby', 'Ginger Cat', 'Smokey Kitten', 'tophat', 'crown', 'red dress'].every(n => nms.includes(n));
+      return ['Grey Tabby', 'Ginger Cat', 'Smokey Kitten', 'tophat', 'crown', 'horns'].every(n => nms.includes(n));
     });
-    ok('store shows 3 cats + hats + dresses (15+ cards, catalog covered)',
-      cardCount >= 15 && hasAllBase, `${cardCount} cards, catalog covered: ${hasAllBase}`);
+    ok('store shows 3 cats + hats, no dresses (18+ cards, catalog covered)',
+      cardCount >= 18 && hasAllBase, `${cardCount} cards, catalog covered: ${hasAllBase}`);
     const unlimited = await useSet.evaluate(() => !document.querySelector('.breed.locked'));
     ok('unlimited coins: no locked items', unlimited);
     const storeUi = await useSet.evaluate(() => !!document.querySelector('.coins-pill'));

@@ -79,7 +79,8 @@ async function shot(query, name) {
 
 const HATS = ['pumpkin', 'santa', 'flower', 'shades', 'tophat', 'crown', 'bow',
   'witch', 'party', 'chef', 'cowboy', 'beanie', 'halo', 'horns'];
-const DRESSES = ['red', 'blue', 'pink', 'midnight', 'sakura', 'sunshine', 'rainbow', 'berry', 'hero', 'pirate'];
+// v3.20: dresses/costumes are REMOVED — the probe covers hats only, plus a
+// legacy-dress sheet proving the renderer paints NOTHING for an old id.
 
 // the restored REAL ginger cat, plain, in a few states
 await shot('state=sit', 'plain-ginger-sit');
@@ -87,12 +88,14 @@ await shot('state=walk', 'plain-ginger-walk');
 await shot('state=stand', 'plain-ginger-stand');
 
 for (const h of HATS) await shot('hat=' + h, 'hat-' + h);
-for (const d of DRESSES) await shot('dress=' + d, 'dress-' + d);
 
-// one full-loadout sheet: ginger cat + witch + hero (headline combo)
+// v3.20 negative sheet: a legacy dress id must render exactly like plain
+await shot('dress=hero', 'legacy-dress-ignored');
+
+// one full-loadout sheet: ginger cat + witch hat (headline combo)
 await page.setViewportSize({ width: 760, height: 300 });
-await shot('hat=witch&dress=hero&state=sit', 'full-loadout-ginger');
+await shot('hat=witch&state=sit', 'full-loadout-ginger');
 
 await browser.close();
 srv.close();
-console.log('skin-probe: ' + (3 + HATS.length + DRESSES.length + 1) + ' sheets → ' + OUT);
+console.log('skin-probe: ' + (3 + HATS.length + 2) + ' sheets → ' + OUT);

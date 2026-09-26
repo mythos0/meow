@@ -7,7 +7,7 @@ import http from 'http';
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { STATES, PALETTES, EMOTES, DRESSES } from '../src/cat-renderer.js';
+import { STATES, PALETTES, EMOTES } from '../src/cat-renderer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -145,7 +145,9 @@ describe('cat-renderer visual', () => {
     });
   }
 
-  // ---- v3.18 store dress: every style repaints a big chunk of the torso ----
+  // ---- v3.20: dresses are GONE — a legacy dress id must paint NOTHING ----
+  // (the renderer keeps silently ignoring opts.dress so old links/requests
+  // never render a garment again)
   const barePx = async (q) => {
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${port}/test/harness.html?${q}`);
@@ -164,19 +166,18 @@ describe('cat-renderer visual', () => {
     await page.close();
     return data;
   };
-  for (const dress of DRESSES) {
-    test(`dress "${dress}" visibly covers the torso`, async () => {
-      const bare = await barePx('state=sit&t=0.2&bg=alpha');
-      const dressed = await barePx(`state=sit&t=0.2&bg=alpha&dress=${dress}`);
-      let changed = 0;
-      for (let i = 0; i < Math.min(bare.px.length, dressed.px.length); i += 3) {
-        if (Math.abs(bare.px[i] - dressed.px[i]) > 24 ||
-            Math.abs(bare.px[i + 1] - dressed.px[i + 1]) > 24 ||
-            Math.abs(bare.px[i + 2] - dressed.px[i + 2]) > 24) changed++;
-      }
-      assert.ok(changed > 700, `dress "${dress}" should repaint the torso (${changed}px changed vs bare)`);
-    });
-  }
+  test('legacy dress ids paint NOTHING (v3.20 dresses removed)', async () => {
+    const bare = await barePx('state=sit&t=0.2&bg=alpha');
+    const dressed = await barePx('state=sit&t=0.2&bg=alpha&dress=red');
+    assert.equal(bare.px.length, dressed.px.length, 'same silhouette (no garment pixels)');
+    let changed = 0;
+    for (let i = 0; i < Math.min(bare.px.length, dressed.px.length); i += 3) {
+      if (Math.abs(bare.px[i] - dressed.px[i]) > 24 ||
+          Math.abs(bare.px[i + 1] - dressed.px[i + 1]) > 24 ||
+          Math.abs(bare.px[i + 2] - dressed.px[i + 2]) > 24) changed++;
+    }
+    assert.equal(changed, 0, `dress "red" must be ignored (${changed}px changed)`);
+  });
 
   // ---- v3.18 store hats: each hat paints a visible footprint on the head ----
   for (const hat of ['tophat', 'crown', 'bow']) {

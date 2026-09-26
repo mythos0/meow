@@ -34,7 +34,8 @@ export const PALETTES = {
   },
   // v3.18: every other built-in breed was REMOVED at the user's request —
   // the Cat Store now carries exactly three cats (grey tabby + the real
-  // ginger cat free, smokey kitten unlockable) plus hats and dresses.
+  // ginger cat free, smokey kitten unlockable) plus hats.
+  // v3.20: dresses/costumes removed too at the user's request — hats only.
 };
 
 // ---------------- body types (v3.1) ----------------
@@ -332,10 +333,8 @@ export function drawCat(ctx, opts) {
   }
   ctx.restore(); // clip
 
-  // v3.18: a store DRESS covers the torso — drawn inside the body transform
-  // so it rotates/squashes with the cat, before the near legs (which stay in
-  // front of the skirt, like a real dress over legs).
-  if (opts.dress && DRESSES.includes(opts.dress)) drawDress(ctx, opts.dress, B, P);   // v3.18 hard: unknown ids ignored (used to fall back to red)
+// v3.20: store DRESSES are GONE at the user's request — the torso draw chain
+// is hats-only again (no garment code anywhere in the renderer).
 
   // rim light top
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';
@@ -390,146 +389,7 @@ export function drawCat(ctx, opts) {
   ctx.restore();
 }
 
-// ---------------------------------------------------------------- dresses
-// v3.18: the Cat Store dresses. Procedural garment: bodice + A-line skirt
-// with a hem band, waist sash and a per-style pattern, fitted to any body
-// type from the B geometry (rx/ry). Drawn in BODY space (rotates with the
-// torso), UNDER the near legs.
-export const DRESSES = ['red', 'blue', 'pink', 'midnight',
-  'sakura', 'sunshine', 'rainbow', 'berry', 'hero', 'pirate'];
-
-export const DRESS_STYLES = {
-  red:      { base: '#d84a4a', dark: '#a83232', trim: '#f6e7c8', pattern: 'hearts' },
-  blue:     { base: '#4a7fd8', dark: '#33619f', trim: '#e8f1fb', pattern: 'stripes' },
-  pink:     { base: '#e88ab0', dark: '#c06288', trim: '#fdf1f6', pattern: 'dots' },
-  midnight: { base: '#3a3a5c', dark: '#26263e', trim: '#8f8fc9', pattern: 'stars' },
-  // v3.19 costumes — six new outfits in the same fitted pipeline
-  sakura:   { base: '#f2b8cc', dark: '#c884a0', trim: '#fff5fa', pattern: 'blossom' },
-  sunshine: { base: '#f2c94c', dark: '#c99a2e', trim: '#fdf6de', pattern: 'sun' },
-  rainbow:  { base: '#f0ede6', dark: '#b8b4a8', trim: '#ffffff', pattern: 'rainbow' },
-  berry:    { base: '#c23a5a', dark: '#8e2440', trim: '#f6e7c8', pattern: 'seeds' },
-  hero:     { base: '#3a6ad8', dark: '#2a4a9f', trim: '#e8d44a', pattern: 'bolt' },
-  pirate:   { base: '#2e2e3a', dark: '#1c1c26', trim: '#f0ece0', pattern: 'horizontal' },
-};
-
-export function drawDress(ctx, kind, B, P) {
-  const D = DRESS_STYLES[kind] || DRESS_STYLES.red;
-  const rx = B.rx, ry = B.ry;
-  // skirt: A-line flare from the waist over the haunch, hem above the feet
-  ctx.beginPath();
-  ctx.moveTo(-rx * 0.88, -14);
-  ctx.quadraticCurveTo(-rx * 1.16, 0, -rx * 0.98, 13);
-  ctx.quadraticCurveTo(0, 18, rx * 0.98, 13);            // scalloped-ish hem
-  ctx.quadraticCurveTo(rx * 1.16, 0, rx * 0.88, -14);
-  ctx.closePath();
-  ctx.fillStyle = D.base; ctx.fill();
-  ctx.strokeStyle = D.dark; ctx.lineWidth = 1.4; ctx.stroke();
-  // pattern clipped to the skirt
-  ctx.save();
-  ctx.clip();
-  if (D.pattern === 'dots') {
-    ctx.fillStyle = D.trim;
-    for (const [px, py, pr] of [[-22, -2, 2.6], [-6, 4, 2.6], [12, -4, 2.6], [26, 4, 2.6], [-14, 9, 2.2], [6, 11, 2.2]]) {
-      ctx.beginPath(); ctx.ellipse(px, py, pr, pr, 0, 0, TAU); ctx.fill();
-    }
-  } else if (D.pattern === 'stripes') {
-    ctx.strokeStyle = D.trim; ctx.lineWidth = 2.4; ctx.globalAlpha *= 0.75;
-    for (let i = -3; i <= 3; i++) {
-      ctx.beginPath(); ctx.moveTo(i * 11, -14); ctx.lineTo(i * 13, 14); ctx.stroke();
-    }
-    ctx.globalAlpha /= 0.75;
-  } else if (D.pattern === 'hearts') {
-    ctx.fillStyle = D.trim; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
-    for (const [px, py] of [[-20, 0], [0, 5], [20, -1]]) ctx.fillText('\u2665', px, py);
-  } else if (D.pattern === 'stars') {
-    ctx.fillStyle = D.trim;
-    for (const [px, py, pr] of [[-24, -4, 1.7], [-8, 3, 1.4], [10, -6, 1.7], [24, 2, 1.4], [-16, 10, 1.2], [4, 12, 1.2]]) {
-      ctx.beginPath(); ctx.ellipse(px, py, pr, pr, 0, 0, TAU); ctx.fill();
-    }
-  } else if (D.pattern === 'blossom') {
-    // v3.19 sakura: tiny five-petal cherry blossoms + drifting petals
-    for (const [px, py, s] of [[-22, -3, 1], [-2, 5, 0.85], [18, -2, 1], [8, 12, 0.7]]) {
-      ctx.save(); ctx.translate(px, py); ctx.scale(s, s);
-      for (let p = 0; p < 5; p++) {
-        const pa = (p / 5) * TAU;
-        ell(ctx, Math.cos(pa) * 2.6, Math.sin(pa) * 2.6, 1.7, 1.7);
-        ctx.fillStyle = '#fdf1f6'; ctx.fill();
-      }
-      ell(ctx, 0, 0, 1.2, 1.2); ctx.fillStyle = '#e8d44a'; ctx.fill();
-      ctx.restore();
-    }
-  } else if (D.pattern === 'sun') {
-    // v3.19 sunshine: little radiant suns
-    ctx.strokeStyle = D.trim; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
-    for (const [px, py, pr] of [[-20, -2, 4.4], [14, 2, 5.4], [-2, 11, 3.2]]) {
-      ctx.beginPath(); ctx.arc(px, py, pr, 0, TAU); ctx.stroke();
-      for (let a = 0; a < 8; a++) {
-        const ra = (a / 8) * TAU;
-        ctx.beginPath();
-        ctx.moveTo(px + Math.cos(ra) * (pr + 1.6), py + Math.sin(ra) * (pr + 1.6));
-        ctx.lineTo(px + Math.cos(ra) * (pr + 4.2), py + Math.sin(ra) * (pr + 4.2));
-        ctx.stroke();
-      }
-    }
-  } else if (D.pattern === 'rainbow') {
-    // v3.19 rainbow: six soft colour bands across the skirt
-    const bands = ['#e05a5a', '#e89a4a', '#e8d44a', '#6ab86a', '#5a8fd8', '#8a6ad8'];
-    const bh = 5.4;
-    bands.forEach((c, i) => {
-      ctx.fillStyle = c; ctx.globalAlpha *= 0.85;
-      ctx.fillRect(-rx * 1.2, -12 + i * bh, rx * 2.4, bh);
-      ctx.globalAlpha /= 0.85;
-    });
-  } else if (D.pattern === 'seeds') {
-    // v3.19 berry: strawberry seed flecks
-    ctx.fillStyle = D.trim;
-    for (const [px, py] of [[-24, -6], [-15, 1], [-20, 9], [-7, -4], [-3, 7], [6, -1], [12, 8], [16, -7], [24, 3], [22, 11], [0, 13], [-12, 12]]) {
-      ctx.beginPath(); ctx.ellipse(px, py, 1.3, 2.0, 0.5, 0, TAU); ctx.fill();
-    }
-  } else if (D.pattern === 'bolt') {
-    // v3.19 hero: a lightning-bolt chest emblem + two echo bolts
-    const bolt = (bx, by, s) => {
-      ctx.beginPath();
-      ctx.moveTo(bx + 2.2 * s, by - 7 * s);
-      ctx.lineTo(bx - 2.6 * s, by + 0.6 * s);
-      ctx.lineTo(bx - 0.2 * s, by + 0.8 * s);
-      ctx.lineTo(bx - 2.2 * s, by + 7 * s);
-      ctx.lineTo(bx + 2.6 * s, by - 0.6 * s);
-      ctx.lineTo(bx + 0.2 * s, by - 0.8 * s);
-      ctx.closePath(); ctx.fill();
-    };
-    ctx.fillStyle = D.trim;
-    bolt(0, -1, 1.35);                       // the big chest bolt
-    ctx.globalAlpha *= 0.55;
-    bolt(-20, 6, 0.8); bolt(20, 4, 0.8);     // echoes
-    ctx.globalAlpha /= 0.55;
-  } else if (D.pattern === 'horizontal') {
-    // v3.19 pirate: bold Breton-sailor horizontal bands
-    ctx.fillStyle = D.trim; ctx.globalAlpha *= 0.9;
-    for (let i = -2; i <= 2; i++) ctx.fillRect(-rx * 1.2, -9 + i * 7.4, rx * 2.4, 3.4);
-    ctx.globalAlpha /= 0.9;
-    // a tiny skull dot on the chest
-    ell(ctx, 0, -4, 2.6, 2.4); ctx.fillStyle = '#f0ece0'; ctx.fill();
-    ell(ctx, -0.9, -4.4, 0.6, 0.6); ell(ctx, 0.9, -4.4, 0.6, 0.6); ctx.fillStyle = D.base; ctx.fill();
-  }
-  ctx.restore();
-  // hem band
-  ctx.beginPath();
-  ctx.moveTo(-rx * 0.98, 11);
-  ctx.quadraticCurveTo(0, 16, rx * 0.98, 11);
-  ctx.strokeStyle = D.trim; ctx.lineWidth = 2.6; ctx.stroke();
-  // waist sash + bow knot
-  ctx.beginPath();
-  ctx.moveTo(-rx * 0.9, -12);
-  ctx.quadraticCurveTo(0, -6, rx * 0.9, -12);
-  ctx.strokeStyle = D.dark; ctx.lineWidth = 4.4; ctx.stroke();
-  ell(ctx, 0, -10, 4.6, 3.4, -0.3);
-  ctx.fillStyle = D.trim; ctx.fill();
-  // shoulder straps
-  ctx.strokeStyle = D.base; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(rx * 0.28, -ry - 6); ctx.lineTo(rx * 0.44, -14); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-rx * 0.18, -ry - 4); ctx.lineTo(-rx * 0.30, -14); ctx.stroke();
-}
+// ---------------------------------------------------------------- hats
 
 // ---------------------------------------------------------------- hats
 // v3.6 seasonal accessories. Drawn around the head center (headC = {x,y,r,rot}).

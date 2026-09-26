@@ -16,8 +16,8 @@ import { readFileSync, readdirSync, existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { CatBrain } from '../src/cat-brain.js';
-import { createSettings, CAT_ITEMS, ITEM_PRICES, KNOWN_CATS, KNOWN_HATS, KNOWN_DRESSES } from '../src/settings-store.js';
-import { poseForState, PALETTES, BODIES, STATES, HATS, DRESSES } from '../src/cat-renderer.js';
+import { createSettings, CAT_ITEMS, ITEM_PRICES, KNOWN_CATS, KNOWN_HATS } from '../src/settings-store.js';
+import { poseForState, PALETTES, BODIES, STATES, HATS } from '../src/cat-renderer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -221,12 +221,14 @@ describe('v3.18 hard: store hardening — old saves and hostile writes never wed
     assert.equal(CAT_ITEMS.find(c => c.id === 'smokey_kitten').price, 120);
   });
 
-  test('store sells 14 hats + 10 costumes, all ids known to the renderer', () => {
+  test('store sells 14 hats, all ids known to the renderer (v3.20: no costumes)', () => {
     assert.deepEqual([...KNOWN_HATS].sort(), [...HATS].sort());
-    assert.deepEqual([...KNOWN_DRESSES].sort(), [...DRESSES].sort());
     assert.equal(KNOWN_HATS.size, 14, 'fourteen hats');
-    assert.equal(KNOWN_DRESSES.size, 10, 'ten costumes');
-    for (const id of [...KNOWN_HATS, ...KNOWN_DRESSES]) assert.ok(id in ITEM_PRICES, `${id} not priced`);
+    for (const id of [...KNOWN_HATS]) assert.ok(id in ITEM_PRICES, `${id} not priced`);
+    // v3.20: every dress/costume id must be OUT of the economy entirely
+    for (const gone of ['red', 'blue', 'pink', 'midnight', 'sakura', 'sunshine', 'rainbow', 'berry', 'hero', 'pirate']) {
+      assert.ok(!(gone in ITEM_PRICES), `dress "${gone}" must not be purchasable anymore`);
+    }
   });
 
   test('default breed IS the real ginger cat (v3.11 order restored)', () => {
@@ -262,15 +264,15 @@ describe('v3.18 hard: store hardening — old saves and hostile writes never wed
     });
   }
 
-  test('hostile hat/dress values reset to null (never crash the renderer)', () => {
+  test('hostile hat values reset to null; legacy dress keys are dropped (never crash the renderer)', () => {
     for (const bad of ['beret', 'gold', 123, true, {}, '']) {
       const st = createSettings({ read: () => JSON.stringify({ hat: bad, dress: bad }), write: () => {} });
       assert.equal(st.get('hat'), null, `hat ${JSON.stringify(bad)} must reset`);
-      assert.equal(st.get('dress'), null, `dress ${JSON.stringify(bad)} must reset`);
+      assert.equal('dress' in st.all, false, `dress key ${JSON.stringify(bad)} must be dropped`);
     }
     const ok = createSettings({ read: () => JSON.stringify({ hat: 'crown', dress: 'midnight' }), write: () => {} });
     assert.equal(ok.get('hat'), 'crown');
-    assert.equal(ok.get('dress'), 'midnight');
+    assert.equal('dress' in ok.all, false, 'even a valid legacy dress id is dropped wholesale');
   });
 
   test('coins: NaN / Infinity / strings / negatives / overflow all rejected or capped', () => {
@@ -297,7 +299,6 @@ describe('v3.18 hard: store hardening — old saves and hostile writes never wed
     const s2 = createSettings({ read: () => snap1, write: () => {} });
     assert.equal(JSON.stringify(s2.all), snap1, 'second sanitize changed the data');
   });
-
   test('economy paths: unknown / broke / already-owned / unlimited', () => {
     // the v3.1 promo defaults to unlimitedCoins — disable it to test scarcity
     const st = createSettings({ read: () => JSON.stringify({ coins: 50, unlimitedCoins: false }), write: () => {} });
@@ -356,8 +357,7 @@ describe('v3.18 hard: every state × breed pose — four limbs max, zero NaN', (
     });
   }
 
-  test('hats and dresses stay within declared bbox geometry (no NaN in style objects)', () => {
-    for (const d of DRESSES) assert.ok(d.length > 2);
+  test('hats stay within declared bbox geometry (no NaN in style objects); no dress symbols remain', () => {
     for (const h of HATS) assert.ok(h.length > 2);
   });
 });

@@ -33,16 +33,17 @@ describe('v3.6 feature toggles', () => {
     assert.equal(s.get('breed'), 'ginger_kitten');
     assert.equal(s.get('unlimitedCoins'), true);
   });
-  test('v3.19: removed breeds/hats/dresses reset to the catalog defaults', () => {
+  test('v3.20: removed breeds/hats reset to catalog defaults; dresses are dropped', () => {
     // a save file full of removed cats walks back onto the three-cat catalog
     const a = mkStore({ breed: 'panda', hat: 'santa', dress: 'red' });
     assert.equal(a.get('breed'), 'ginger_kitten', 'removed breed resets to the default cat');
     assert.equal(a.get('hat'), 'santa', 'a real hat survives');
-    assert.equal(a.get('dress'), 'red', 'a real dress survives');
+    assert.equal('dress' in a.all, false, 'the legacy dress key is dropped entirely');
+    assert.equal(a.get('owned').includes('red'), false, 'owned dress ids fall out of owned');
     const b = mkStore({ breed: 'siamese', hat: 'wizard', dress: 'gold' });
     assert.equal(b.get('breed'), 'ginger_kitten');
     assert.equal(b.get('hat'), null, 'unknown hat resets');
-    assert.equal(b.get('dress'), null, 'unknown dress resets');
+    assert.equal('dress' in b.all, false, 'unknown dress is dropped too');
   });
   test('v3.17: removed reaction keys are dropped from legacy saves', () => {
     const s = mkStore({ reactTyping: true, stalkCursor: true, statusFile: 'x', reactMusic: true, voiceCommands: true });

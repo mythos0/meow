@@ -207,8 +207,6 @@
         <div class="breeds" id="breeds"></div>
         <div class="hint" style="margin:14px 0 6px;font-weight:600">Hats</div>
         <div class="breeds" id="hats"></div>
-        <div class="hint" style="margin:14px 0 6px;font-weight:600">Dresses</div>
-        <div class="breeds" id="dresses"></div>
       </div>
 
       <div class="fl-card">
@@ -390,7 +388,7 @@
           <button class="chip" id="lnkIssues">🐛 Report an issue</button>
         </div>
         <div class="hint" style="margin-top:8px;">
-          Runtime: Electron <span id="verElectron"></span> · Canvas 2D renderer · 3 cats · hats & dresses · 30+ actions · 16 emotes<br>
+          Runtime: Electron <span id="verElectron"></span> · Canvas 2D renderer · 3 cats · hats · 30+ actions · 16 emotes<br>
           Sounds recorded from real cats. MIT License © 2026 mythos0.
         </div>
       </div>
@@ -419,13 +417,14 @@
 
 <script type="module">
 import { drawCat, PALETTES, BODIES, registerSkin } from '../src/cat-renderer.js';
-import { BREED_PRICES as prices, HAT_ITEMS, DRESS_ITEMS } from '../src/settings-store.js';
+import { BREED_PRICES as prices, HAT_ITEMS } from '../src/settings-store.js';
 import { ACHIEVEMENTS, affectionProgress } from '../src/achievements.js';
 
 const $ = id => document.getElementById(id);
 let S = null;
 
-// v3.18: the store carries exactly three cats + hats + dresses — NEW_BREEDS tags gone.
+// v3.18: the store carries exactly three cats + hats — NEW_BREEDS tags gone.
+// v3.20: dresses/costumes removed at the user's request — hats are the wardrobe.
 
 function toast(msg, ok = true) {
   const t = $('toast');
@@ -578,29 +577,7 @@ function renderStore() {
     }));
   }
 
-  // --- dresses ---
-  const dressGrid = $('dresses');
-  dressGrid.innerHTML = '';
-  dressGrid.appendChild(itemCard({
-    id: '_none', name: 'No dress',
-    ownedNow: true, selected: !S.dress, price: 0,
-    preview: cv => drawPreview(cv, S.breed || 'grey_tabby'),
-    onPick: async () => { await save({ dress: null }); S = await refresh(); },
-  }));
-  for (const dr of DRESS_ITEMS) {
-    const on = S.dress === dr.id;
-    dressGrid.appendChild(itemCard({
-      id: dr.id, name: dr.id + ' dress',
-      ownedNow: owned.includes(dr.id) || unlimited,
-      selected: on, price: dr.price,
-      preview: cv => drawPreview(cv, S.breed || 'grey_tabby', { dress: dr.id }),
-      onPick: async () => {
-        if (!(await buyAndOwn(dr.id, dr.price))) return;
-        await save({ dress: on ? null : dr.id });
-        S = await refresh();
-      },
-    }));
-  }
+  // --- dresses (v3.20: REMOVED — the wardrobe is hats-only) ---
 }
 
 // ---------------- skin import ----------------

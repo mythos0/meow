@@ -166,6 +166,7 @@ let scanner = null;
 let schedTimer = null;
 let coinTimer = null;
 let quitTimer = null;
+let watchdogTimer = null;   // v3.20: cat-window liveness sweep
 let quitting = false;   // true ONLY after the user pressed Quit (or a duplicate launcher defers)
 
 // v3.12: teardown shared by the real quit path (before-quit with quitting=true).
@@ -181,6 +182,7 @@ function onExplicitShutdown() {
   if (schedTimer) clearInterval(schedTimer);
   if (coinTimer) clearInterval(coinTimer);
   if (quitTimer) clearInterval(quitTimer);
+  if (watchdogTimer) clearInterval(watchdogTimer);
   dragStop();   // v3.12: no drag poller outlives the app
 }
 
@@ -345,6 +347,21 @@ function makeCatWindow() {
     // sync with reality (it boots assuming "visible").
     sendToCat('cat-visible', !hiddenByUser);
   });
+  // v3.20 backstop #1: v3.14 proved transparent windows sometimes NEVER emit
+  // ready-to-show (the zone overlay got a fallback timer for exactly this).
+  // The cat window is ALSO transparent and show:false — if the event is lost
+  // (observed on Windows around heavy GPU/compositor churn), the cat window
+  // exists but is never shown, which the user sees as "the cat is closed".
+  // This timer guarantees the show happens.
+  setTimeout(() => {
+    try {
+      if (catWin && !catWin.isDestroyed() && !catWin.isVisible() && !hiddenByUser) {
+        logCrash('cat-show-fallback', new Error('ready-to-show never fired — showing the cat window via the fallback timer'));
+        catWin.show();
+        sendToCat('cat-visible', !hiddenByUser);
+      }
+    } catch { /* gone */ }
+  }, 1500);
 
   // v3.10: the cat's process must NEVER stop on its own. If the overlay window
   // is closed or its renderer dies without an explicit Quit, it comes back.
@@ -506,6 +523,24 @@ function startBackgroundJobs() {
     }
   }, 1000);
   quitTimer.unref?.();
+
+  // v3.20 backstop #3 — THE CAT WATCHDOG. The 'closed'→250ms resurrection
+  // and the render-process-gone revival are the only two paths that bring
+  // the cat window back. If ANY of them ever fails to fire (a lost timer,
+  // a quit-gate race, a window destroyed between checks — the user's
+  // "cat is closed if i close the cat store"), the app would sit alive but
+  // catless forever. A 2s sweep that re-creates the cat window whenever it
+  // is gone and the app is not quitting closes that gap no matter what
+  // killed the window. Harmless overlap with the 250ms resurrection: the
+  // timer body re-checks !catWin and makeCatWindow assigns catWin
+  // synchronously, so a double-create is impossible.
+  watchdogTimer = setInterval(() => {
+    if (quitting) return;
+    if (catWin && !catWin.isDestroyed()) return;
+    logCrash('cat-watchdog', new Error('cat window gone outside the resurrection path — re-creating'));
+    createCatWindow();
+  }, 2000);
+  watchdogTimer.unref?.();
 }
 
 // ---------------------------------------------------------------- auto-start
@@ -952,7 +987,16 @@ ipcMain.handle('close-window', (_e, name) => {
   // v3.18 process diet: closing Settings DESTROYS the window instead of
   // keeping a hidden renderer warm — one less process the moment the user
   // closes it (reopening costs ~150ms, the pool recreates on demand).
-  try { fastWins.closeAll(); } catch { /* ignore */ }
+  // v3.20 MAJOR-BUG FIX ("cat is closed if i close the cat store"): this
+  // handler used to call fastWins.closeAll() — an indiscriminate teardown
+  // that answered ANY renderer's close request by closing EVERY pooled
+  // window, and it sat on the same IPC channel the Cat Store's Close button
+  // uses. It now closes ONLY the window that asked, and there is no code
+  // path from a settings close to the cat window (three further backstops
+  // below: the ready-to-show fallback, the cat watchdog, and the
+  // window-all-closed resurrection).
+  const wanted = name === 'reminders' ? 'settings' : String(name || 'settings');
+  try { fastWins.close(wanted); } catch { /* ignore */ }
 });
 
 ipcMain.handle('app-info', () => ({
@@ -1328,7 +1372,11 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   // v3.12: the cat's window never truly "stays" closed — the closed handler
   // resurrects it within 250ms. If this ever fires, it is diagnostics-worthy:
-  // when quitting, exit cleanly; otherwise log and keep living.
+  // when quitting, exit cleanly; otherwise log AND resurrect on the spot
+  // (v3.20 backstop #2 — a zero-window instant must never outlive this event).
   if (quitting) app.quit();
-  else logCrash('window-all-closed', new Error('all windows closed with no user Quit action — cat keeps living'));
+  else {
+    logCrash('window-all-closed', new Error('all windows closed with no user Quit action — cat keeps living'));
+    if (!catWin) createCatWindow();
+  }
 });

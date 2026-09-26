@@ -41,6 +41,11 @@ export function createFastWindows({ factory } = {}) {
       // v3.18 process diet: intercept the close and DESTROY — a hidden warm
       // renderer is a whole process + ~45MB the user explicitly asked to
       // reclaim. The pool recreates the window on demand (~150ms).
+      // v3.20 Windows hardening: the old interceptor re-called w.close()
+      // SYNCHRONOUSLY inside the 'close' event — on win32 that re-entrant
+      // native close is flaky (the window is mid-destroy) and can wedge the
+      // whole app's window chain. The re-close is now deferred off the event
+      // tick, the canonical Electron pattern for close-inside-close.
       w.__allowClose = false;
       try {
         w.on('close', e => {
@@ -48,7 +53,10 @@ export function createFastWindows({ factory } = {}) {
             e.preventDefault();
             w.__allowClose = true;
             pool.delete(name);
-            try { w.close(); } catch { /* already dying */ }
+            setTimeout(() => {
+              try { if (!(typeof w.isDestroyed === 'function' && w.isDestroyed())) w.close(); }
+              catch { /* already dying */ }
+            }, 0);
           }
         });
         w.on('closed', () => { if (pool.get(name) === w) pool.delete(name); });
@@ -89,6 +97,20 @@ export function createFastWindows({ factory } = {}) {
         w.__allowClose = true;
         try { w.close(); } catch { /* ignore */ }
       }
+    },
+    // v3.20: close ONE named pool window. The 'close-window' IPC used to call
+    // closeAll() for ANY renderer's close request — an indiscriminate teardown
+    // path with no place in a single-window-per-name app. Closing the Cat
+    // Store must never reach any other window.
+    close(name) {
+      const w = pool.get(name);
+      if (!w) return false;
+      pool.delete(name);   // the window is going away — the pool drops it now
+      clearTimeout(w.__idleTimer);
+      if (typeof w.isDestroyed === 'function' && w.isDestroyed()) return false;
+      w.__allowClose = true;
+      try { w.close(); } catch { /* ignore */ }
+      return true;
     },
     isAlive(name) {
       const w = pool.get(name);

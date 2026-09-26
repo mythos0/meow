@@ -18,11 +18,12 @@
 // contact-sheet PNGs for eyeballing.
 // Cell geometry: the standing cat spans ~180×165 at scale 1 (CAT_BBOX),
 // so cells are 200×210 with the feet at y=CELL_H-30 — no cross-cell bleed.
-import { drawCat, PALETTES, HATS, DRESSES, STATES } from '../src/cat-renderer.js';
+import { drawCat, PALETTES, HATS, STATES } from '../src/cat-renderer.js';
 
 const CELL_W = 200, CELL_H = 210, FEET_PAD = 30, LABEL_H = 14;
 const breeds = Object.keys(PALETTES);           // grey_tabby, ginger_kitten, smokey_kitten
-const accs = ['—', ...HATS, ...DRESSES];        // 1 + 7 + 4 = 12 columns
+// v3.20: dresses are gone — the accessory columns are base + the 14 hats.
+const accs = ['—', ...HATS];                    // 1 + 14 = 15 columns
 const dirs = [1, -1];
 const cols = accs.length;
 
@@ -39,7 +40,7 @@ function drawCell(g, ox, oy, opts) {
   g.save();
   g.translate(ox + CELL_W / 2, oy + CELL_H - FEET_PAD);
   try { drawCat(g, opts); }
-  catch (e) { errors.push([opts.breed, opts.hat || '', opts.dress || '', opts.state].join('/') + ': ' + (e && e.message || e)); }
+  catch (e) { errors.push([opts.breed, opts.hat || '', opts.state].join('/') + ': ' + (e && e.message || e)); }
   g.restore();
 }
 
@@ -61,7 +62,6 @@ for (const dir of dirs) {
       const ox = c * CELL_W;
       const opts = { t: 0.15, state: 'stand', breed, dir, scale: 1, jumpP: 0.5 };
       if (HATS.includes(acc)) opts.hat = acc;
-      if (DRESSES.includes(acc)) opts.dress = acc;
       g.fillStyle = '#555'; g.font = '10px sans-serif';
       g.fillText((dir === 1 ? 'R ' : 'L ') + breed + (c === 0 ? '' : ' ' + acc), ox + 4, oy - 3);
       drawCell(g, ox, oy, opts);
@@ -71,8 +71,8 @@ for (const dir of dirs) {
   }
 }
 
-// ---------------- states grid (sx): dressed | plain pairs ----------------
-const HAT_FULL = 'tophat', DRESS_FULL = 'midnight';
+// ---------------- states grid (sx): hatted | plain pairs ----------------
+const HAT_FULL = 'tophat';
 const sx = document.getElementById('sx');
 sx.width = STATES.length * 2 * CELL_W;
 sx.height = breeds.length * (CELL_H + LABEL_H);
@@ -86,7 +86,7 @@ breeds.forEach((breed, i) => {
     for (const plain of [1, 0]) {          // dressed first, then its plain twin
       const ox = (c * 2 + (plain ? 1 : 0)) * CELL_W;
       const opts = { t: 0.3, state: st, breed, dir: 1, scale: 1, jumpP: 0.5 };
-      if (!plain) { opts.hat = HAT_FULL; opts.dress = DRESS_FULL; }
+      if (!plain) { opts.hat = HAT_FULL; }
       g2.fillStyle = '#555'; g2.font = '9px sans-serif';
       if (plain) g2.fillText(st, ox + 4, oy - 3);
       drawCell(g2, ox, oy, opts);

@@ -18,7 +18,7 @@ describe('settings-store', () => {
     const st = createSettings(memBackend());
     assert.equal(st.get('breed'), DEFAULTS.breed);
     assert.equal(st.get('coins'), DEFAULTS.coins);
-    // v3.1: unlimited-coins promo grants every item up-front (cats+hats+dresses)
+    // v3.1: unlimited-coins promo grants every item up-front (cats+hats)
     assert.deepEqual([...st.get('owned')].sort(), Object.keys(ITEM_PRICES).sort());
     assert.equal(st.get('unlimitedCoins'), true);
   });

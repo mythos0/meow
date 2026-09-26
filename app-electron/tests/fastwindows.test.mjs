@@ -47,13 +47,31 @@ describe('fast-windows pool', () => {
     assert.ok(ms < 25, `show() after warm took ${ms.toFixed(2)}ms`);
   });
 
-  test('close event DESTROYS the window (v3.18 process diet)', () => {
+  test('close event DESTROYS the window (v3.18 process diet, v3.20 deferred re-close)', async () => {
     const fw = createFastWindows({ factory: { settings: () => fakeWin('settings') } });
     const w = fw.show('settings');
     w.close();                       // user closes the window
     assert.equal(w._destroyed, false, 'the interceptor swallowed the first close request…');
     assert.equal(w.closed >= 1, true, '…and issued a real close');
     assert.equal(fw.isAlive('settings'), false, 'the pool drops the window — one less process');
+    await new Promise(r => setTimeout(r, 10));   // v3.20: the re-close is DEFERRED
+    assert.ok(w.closed >= 2, 'the deferred follow-up close completes the destroy');
+  });
+
+  test('v3.20: close(name) closes ONLY the named window', () => {
+    const made = [];
+    const fw = createFastWindows({
+      factory: {
+        settings: () => { const w = fakeWin('settings'); made.push(w); return w; },
+      },
+    });
+    const s = fw.show('settings');
+    const r1 = fw.close('settings');
+    assert.equal(r1, true, 'an alive pooled window was closed');
+    assert.ok(s.closed >= 1, 'settings got its close');
+    assert.equal(fw.close('settings'), false, 'closing again finds nothing in the pool');
+    assert.equal(fw.close('bogus'), false, 'an unknown name closes NOTHING and does not throw');
+    assert.equal(made.length, 1, 'no new window was created by a bogus close');
   });
 
   test('hide(name) hides an alive window and ignores destroyed ones', () => {

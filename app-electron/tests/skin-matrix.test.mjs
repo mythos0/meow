@@ -1,9 +1,9 @@
-// skin-matrix.test.mjs — v3.18/3.19 ROBUST skin coverage: every purchasable
-// combination is rendered and pixel-verified, mirrored AND facing right,
-// in every state, with pairwise-distinct accessories. The probe page
-// (test/matrix.html) renders 3 breeds × (base + 14 hats + 10 costumes) × 2
-// directions plus every state with a full loadout vs plain — ONE page
-// load — and diffs each cell against its base in-page.
+// skin-matrix.test.mjs — v3.18/3.19 ROBUST skin coverage, v3.20 hats-only:
+// every purchasable combination is rendered and pixel-verified, mirrored AND
+// facing right, in every state, with pairwise-distinct accessories. The probe
+// page (test/matrix.html) renders 3 breeds × (base + 14 hats) × 2 directions
+// plus every state with a full hat vs plain — ONE page load — and diffs each
+// cell against its base in-page.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -11,7 +11,7 @@ import http from 'http';
 import { readFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { PALETTES, HATS, DRESSES, STATES } from '../src/cat-renderer.js';
+import { PALETTES, HATS, STATES } from '../src/cat-renderer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -83,15 +83,6 @@ describe('skin matrix: every breed × accessory × direction (robust)', () => {
             assert.ok(a.topDiff > 60, `${hat}: no head-region change (${a.topDiff}px)`);
             assert.ok(a.minY <= b.minY, `${hat} must sit on top of the head (minY ${a.minY} vs base ${b.minY})`);
           }
-        });
-      }
-
-      for (const dress of DRESSES) {
-        test(`${key} + ${dress} dress repaints the body`, () => {
-          const a = report.cells[key].accs[dress];
-          assert.ok(a.opaque > 4000, `cat vanished under ${dress}: ${a.opaque}px`);
-          assert.ok(a.diff > 250, `${dress}: barely repaints anything (${a.diff}px)`);
-          assert.ok(a.bodyDiff > 120, `${dress}: no body-region change (${a.bodyDiff}px)`);
         });
       }
 

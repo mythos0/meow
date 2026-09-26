@@ -45,8 +45,10 @@ export const DEFAULTS = {
   dancePartyIdle: true,      // long idle -> mini dance party (screensaver mode)
   // customization & community
   seasonalSkins: false,      // pumpkin hat in October, santa hat in December...
-  hat: null,                 // v3.18: the store hat the user equipped (id from HATS)
-  dress: null,               // v3.18: the store dress the user equipped (id from DRESSES)
+  hat: null,                 // the store hat the user equipped (id from HATS)
+                             // v3.20: the store `dress` setting is GONE — old saves
+                             // carrying `dress` are dropped by sanitize automatically
+                             // (not in DEFAULTS → never copied back).
   achievements: true,        // unlockables tied to interaction
   communitySkins: true,      // allow importing JSON skins (Cat Store)
   // quality-of-life
@@ -66,11 +68,13 @@ export const DEFAULTS = {
 const OBJECT_KEYS = new Set(['stats']);
 const ARRAY_KEYS = new Set(['noWalkZoneList', 'customSkins', 'unlocked', 'feedbackList']);
 
-// v3.19 THE STORE CATALOG — three cats, fourteen hats, ten costumes. The
-// ginger cat is the REAL one again (the v3.11 ginger_kitten body/palette —
-// v3.18 had renamed the retired 'orange_tabby' impostor into its slot).
+// v3.19 THE STORE CATALOG — three cats, fourteen hats. The ginger cat is the
+// REAL one again (the v3.11 ginger_kitten body/palette — v3.18 had renamed
+// the retired 'orange_tabby' impostor into its slot).
+// v3.20: DRESSES/COSTUMES REMOVED at the user's request ("remove all cat
+// dress and winter jacket dresses properly") — the wardrobe is hats-only.
 // The sanitize step walks old save files back onto the catalog (unknown
-// breeds/hats/dresses reset to the defaults).
+// breeds/hats reset to the defaults; the legacy `dress` key is dropped).
 export const CAT_ITEMS = [
   { id: 'grey_tabby', price: 0 },      // free, always owned
   { id: 'ginger_kitten', price: 0 },   // the REAL ginger cat — free
@@ -80,6 +84,9 @@ export const CAT_ITEMS = [
 // v3.18 store hats (renderer HATS — pumpkin/santa/flower/shades stay seasonal
 // extras that are also buyable; tophat/crown/bow are new).
 // v3.19: witch/party/chef/cowboy/beanie/halo/horns join them — 14 hats total.
+// v3.20: the old DRESS_ITEMS list (red/blue/pink/midnight + the v3.19
+// sakura/sunshine/rainbow/berry/hero/pirate costumes) is deleted; owned dress
+// ids fall out of `owned` via the ITEM_PRICES filter in sanitize.
 export const HAT_ITEMS = [
   { id: 'pumpkin', price: 40 }, { id: 'santa', price: 40 }, { id: 'flower', price: 30 },
   { id: 'shades', price: 50 }, { id: 'tophat', price: 60 }, { id: 'crown', price: 120 },
@@ -89,23 +96,12 @@ export const HAT_ITEMS = [
   { id: 'horns', price: 65 },
 ];
 
-// v3.18 store dresses (renderer DRESSES / DRESS_STYLES)
-// v3.19: sakura/sunshine/rainbow/berry/hero/pirate join them — 10 total.
-export const DRESS_ITEMS = [
-  { id: 'red', price: 80 }, { id: 'blue', price: 80 },
-  { id: 'pink', price: 80 }, { id: 'midnight', price: 110 },
-  { id: 'sakura', price: 85 }, { id: 'sunshine', price: 85 }, { id: 'rainbow', price: 120 },
-  { id: 'berry', price: 90 }, { id: 'hero', price: 130 }, { id: 'pirate', price: 95 },
-];
-
 const _catPrices = Object.fromEntries(CAT_ITEMS.map(i => [i.id, i.price]));
 const _hatPrices = Object.fromEntries(HAT_ITEMS.map(i => [i.id, i.price]));
-const _dressPrices = Object.fromEntries(DRESS_ITEMS.map(i => [i.id, i.price]));
 export const BREED_PRICES = _catPrices;                                   // back-compat name
-export const ITEM_PRICES = { ..._catPrices, ..._hatPrices, ..._dressPrices };
+export const ITEM_PRICES = { ..._catPrices, ..._hatPrices };
 export const KNOWN_CATS = new Set(CAT_ITEMS.map(i => i.id));
 export const KNOWN_HATS = new Set(HAT_ITEMS.map(i => i.id));
-export const KNOWN_DRESSES = new Set(DRESS_ITEMS.map(i => i.id));
 
 export function createSettings(backend) {
   // backend: { read(): string|null, write(str) }
@@ -178,9 +174,11 @@ export function createSettings(backend) {
         if (typeof p.coins === 'number' && Number.isFinite(p.coins) && p.coins >= 0) {
           d.coins = Math.min(9_999_999, Math.floor(p.coins));
         }
-      } else if (k === 'hat' || k === 'dress') {
-        // v3.18: nullable string settings — a null DEFAULT cannot ride the
+      } else if (k === 'hat') {
+        // v3.18: nullable string setting — a null DEFAULT cannot ride the
         // generic typeof branch (typeof null === 'object')
+        // v3.20: the `dress` twin is gone with the feature; old saves carrying
+        // `dress` never reach this loop (not in DEFAULTS) — dropped silently.
         d[k] = (typeof p[k] === 'string' && p[k]) ? p[k] : null;
       } else if (OBJECT_KEYS.has(k)) {
         if (p[k] && typeof p[k] === 'object' && !Array.isArray(p[k])) d[k] = p[k];
@@ -188,11 +186,11 @@ export function createSettings(backend) {
         if (Array.isArray(p[k])) d[k] = p[k];
       } else if (typeof d[k] === typeof p[k]) d[k] = p[k];
     }
-    // v3.18: walk the catalog — a breed/hat/dress that no longer exists
+    // v3.18: walk the catalog — a breed/hat that no longer exists
     // (removed cats, or a save file touched by hand) resets to the default.
+    // v3.20: a persisted `dress` id is simply dropped (no dress schema at all).
     if (d.breed && !d.breed.startsWith('custom:') && !KNOWN_CATS.has(d.breed)) d.breed = DEFAULTS.breed;
     if (d.hat != null && !KNOWN_HATS.has(d.hat)) d.hat = null;
-    if (d.dress != null && !KNOWN_DRESSES.has(d.dress)) d.dress = null;
     // v3.19 one-time ginger restoration (see comment above): fires once per
     // save file, then the latch keeps every later choice exactly as picked.
     if (!p.migrated319) {
@@ -246,8 +244,10 @@ export function createSettings(backend) {
       if (data.unlimitedCoins) return true;
       return (ITEM_PRICES[item] ?? Infinity) <= data.coins;
     },
-    // v3.18: buys ANY catalog item — a cat, a hat or a dress (the id space
+    // v3.18: buys ANY catalog item — a cat or a hat (the id space
     // is shared; the store page sends whatever card was clicked).
+    // v3.20: dresses are gone — owned dress ids from old saves are filtered
+    // out of `owned` in sanitize (they are not in ITEM_PRICES anymore).
     buyItem(item) {
       if (!(item in ITEM_PRICES)) return { ok: false, reason: 'unknown' };
       if (data.owned.includes(item)) return { ok: true, alreadyOwned: true, coins: data.coins };
